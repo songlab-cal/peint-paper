@@ -1,0 +1,4 @@
+[submodule "historian"]
+	path = historian
+	url = https://github.com/evoldoers/historian.git
+	ignore = dirty
