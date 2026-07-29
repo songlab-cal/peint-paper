@@ -1,5 +1,4 @@
 import os
-import json
 from typing import List
 
 import numpy as np
@@ -16,7 +15,6 @@ from paper.historian import (
     prepare_simulated_vs_real_historian,
     add_dummy_nodes,
     run_historian,
-    historian_count_events,
     remove_dummy_nodes_from_historian_output,
     get_all_evolutionary_counts_from_historian_output,
 )
@@ -123,48 +121,50 @@ if __name__ == "__main__":
         num_processes=num_processes,
     )
 
-    #6. Count events in the simulated sequences
-    simulation_counts_dir = historian_count_events(
+    #6. Count evolutionary events with the pure-Python counter (parent<->child over the
+    #   recon tree), instead of `historian count`, which aborts on prepared trees whose
+    #   root is unnamed. The Python counter skips missing/unnamed nodes gracefully.
+    simulated_evolutionary_counts = get_all_evolutionary_counts_from_historian_output(
         sequences_dir=non_dummy_sequences_dir['output_sequences_dir'],
         tree_dir=prepared_sequences_dirs['output_simulated_tree_dir'],
         families=sim_families,
         num_processes=num_processes,
-        historian_path='historian',
     )
-    print(f"Simulation counts directory: {simulation_counts_dir}")
-
-    real_counts_dir = historian_count_events(
+    real_evolutionary_counts = get_all_evolutionary_counts_from_historian_output(
         sequences_dir=real_historian_output_dirs['output_sequences_dir'],
         tree_dir=prepared_sequences_dirs['output_real_tree_dir'],
         families=sim_families,
         num_processes=num_processes,
-        historian_path='historian',
     )
-    print(f"Real counts directory: {real_counts_dir}")
 
     ### PLOT
     print("Plotting the results...")
+
+    def _indel_counts(events_dir, family):
+        """Historian-style indel counts from the per-branch event CSV: ins/del = number of
+        indel events (gap opens); insExt/delExt = extensions = sum(length - 1)."""
+        path = os.path.join(events_dir, f"{family}.txt")
+        if not os.path.exists(path):
+            return None
+        df = pd.read_csv(path)
+        counts = {'ins': 0, 'del': 0, 'insExt': 0, 'delExt': 0}
+        for event_type, base in (('insertion', 'ins'), ('deletion', 'del')):
+            rows = df[df['event_type'] == event_type]
+            n = len(rows)
+            counts[base] = int(n)
+            counts[base + 'Ext'] = int(rows['length'].sum() - n) if n else 0
+        return {'indel': counts}
+
     sim_counts = {}
     real_counts = {}
+    for fam in sim_families:
+        sc = _indel_counts(simulated_evolutionary_counts['output_events_dir'], fam)
+        rc = _indel_counts(real_evolutionary_counts['output_events_dir'], fam)
+        if sc is not None:
+            sim_counts[f"{fam}.txt"] = sc
+        if rc is not None:
+            real_counts[f"{fam}.txt"] = rc
 
-    for f in os.listdir(simulation_counts_dir['output_counts_dir']):
-        if f.endswith('.txt'):
-            try:
-                with open(os.path.join(simulation_counts_dir['output_counts_dir'], f), 'r') as file:
-                    data = json.load(file)
-                    sim_counts[f] = data
-            except json.JSONDecodeError:
-                print(f"Error decoding JSON from {f}")
-
-    for f in os.listdir(real_counts_dir['output_counts_dir']):
-        if f.endswith('.txt'):
-            try:
-                with open(os.path.join(real_counts_dir['output_counts_dir'], f), 'r') as file:
-                    data = json.load(file)
-                    real_counts[f] = data
-            except json.JSONDecodeError:
-                print(f"Error decoding JSON from {f}")
-    
     sim_indels = []
     real_indels = []
     sim_indel_ext = []
