@@ -30,7 +30,10 @@ SIM_ROOT = Path(os.environ.get(
 
 # --- Derived locations (extend as figures are migrated) ---
 INPUT_A3M_DIR = DATA_ROOT / "input_data" / "a3m"
-RESULTS_DIR = DATA_ROOT / "local_data" / "results_revision1"
+RESULTS_DIR = Path(os.environ.get(
+    "PEINT_PAPER_RESULTS_DIR",
+    str(DATA_ROOT / "local_data" / "results_revision1"),
+))
 
 EMPIRICAL_MSA_DIR = SIM_ROOT / "empirical_msas"
 TREE_DIR = SIM_ROOT / "trees"
@@ -38,6 +41,29 @@ ROOT_SEQ_DIR = SIM_ROOT / "root_sequences"
 
 # Small, in-repo assets.
 RATE_MATRIX_DIR = REPO_ROOT / "data" / "rate_matrices"
+
+# --- Figure 3 (PCP mutation counts / Historian indels) specifics ---
+SIM_FAMILIES_FILE = Path(os.environ.get(
+    "PEINT_PAPER_SIM_FAMILIES_FILE",
+    str(DATA_ROOT / "local_data" / "sim_families_out_lg_s256_ok.txt"),
+))
+SIMULATIONS_DIR = RESULTS_DIR / "simulations"
+LEAF_DISTANCES_DIR = RESULTS_DIR / "leaf_distances"
+
+# Where generated figures are written.
+FIGURES_DIR = Path(os.environ.get("PEINT_PAPER_FIGURES_DIR", str(REPO_ROOT / "figures" / "output")))
+
+# indels-only inputs. The "real" FastTree trees + subsampled pfam MSAs were cherryml
+# cache artifacts on the original machine and are NOT materialized here; the heldout
+# family list is likewise absent. These default to the closest present dirs but should
+# be confirmed / pointed at the real data (override via the env vars below).
+SIMULATED_MSA_DIR = SIM_ROOT / "simulated_msas"
+REAL_TREE_DIR = Path(os.environ.get("PEINT_PAPER_REAL_TREE_DIR", str(TREE_DIR)))
+REAL_MSA_DIR = Path(os.environ.get("PEINT_PAPER_REAL_MSA_DIR", str(EMPIRICAL_MSA_DIR)))
+HELDOUT_FAMILIES_FILE = Path(os.environ.get(
+    "PEINT_PAPER_HELDOUT_FAMILIES_FILE",
+    str(DATA_ROOT / "local_data" / "final_sim_held_out_family.txt"),
+))
 
 
 def require(path) -> Path:

@@ -13,3 +13,6 @@ slurm_out/
 
 # OS
 .DS_Store
+
+# Generated figures
+figures/output/
