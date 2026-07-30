@@ -53,6 +53,11 @@ LEAF_DISTANCES_DIR = RESULTS_DIR / "leaf_distances"
 # Where generated figures are written.
 FIGURES_DIR = Path(os.environ.get("PEINT_PAPER_FIGURES_DIR", str(REPO_ROOT / "figures" / "output")))
 
+# --- Figure 3 (conservation) specifics ---
+# Real + PEINT sequences realigned into the reference frame via `mafft --add`.
+MAFFT_ADD_DIR = RESULTS_DIR / "mafft_add"
+CONSERVATION_DIR = RESULTS_DIR / "conservation"
+
 # indels-only inputs. The "real" FastTree trees + subsampled pfam MSAs were cherryml
 # cache artifacts on the original machine and are NOT materialized here; the heldout
 # family list is likewise absent. These default to the closest present dirs but should
