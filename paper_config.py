@@ -9,10 +9,27 @@ Import as ``import paper_config as cfg`` from the repo root (scripts are run wit
 ``python -m benchmarks.<name>`` from the repo root, so the root is on sys.path).
 """
 
+import importlib.util
 import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
+
+
+def _peint_repo_root() -> Path:
+    """Root of the installed ``peint`` checkout, which ships the model checkpoints.
+
+    Resolved from the installed ``protevo`` package rather than assuming a sibling
+    directory, so it works wherever ``pip install -e`` pointed. Uses ``find_spec`` to
+    avoid importing (and thus loading torch) at config-import time.
+    """
+    spec = importlib.util.find_spec("protevo")
+    if spec is None or not spec.origin:
+        raise ImportError(
+            "Cannot locate the installed 'protevo' package. Install peint first: "
+            "pip install -e /path/to/peint"
+        )
+    return Path(spec.origin).resolve().parent.parent
 
 # Root holding the current results + a3m inputs (e.g. results_revision1, input_data/a3m).
 DATA_ROOT = Path(os.environ.get(
@@ -52,6 +69,48 @@ LEAF_DISTANCES_DIR = RESULTS_DIR / "leaf_distances"
 
 # Where generated figures are written.
 FIGURES_DIR = Path(os.environ.get("PEINT_PAPER_FIGURES_DIR", str(REPO_ROOT / "figures" / "output")))
+
+# --- Figure 2 (simulation / time estimation) specifics ---
+# Both Figure 2 panels use the checkpoint shipped with the peint repo
+# (model_checkpoints/peint.ckpt, documented there for generation and time estimation).
+# The paper's time-estimation panel originally used a separate time-embedding checkpoint
+# from later experiments; the released model supersedes it.
+PEINT_CHECKPOINT = Path(os.environ.get(
+    "PEINT_PAPER_CHECKPOINT",
+    str(_peint_repo_root() / "model_checkpoints" / "peint.ckpt"),
+))
+
+# Transitions (x, y, t triples) behind the time-estimation panel.
+# PROVISIONAL: this default is the 192-leaf subset that was used to keep runtimes down,
+# not the full 1024-leaf set. Point PEINT_PAPER_TRANSITIONS_DIR at the full set before
+# generating the final figure.
+TRANSITIONS_DIR = Path(os.environ.get(
+    "PEINT_PAPER_TRANSITIONS_DIR",
+    "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l",
+))
+NONTRAIN_FAMILIES_FILE = Path(os.environ.get(
+    "PEINT_PAPER_NONTRAIN_FAMILIES_FILE",
+    str(DATA_ROOT / "local_data" / "14k5_nontrain_fam.json"),
+))
+
+# Per-site rates (4-category) for the LG arm of the simulation panel, one <family>.txt per
+# family. Originally produced by cherryml's treewise train/test split
+# (``train_site_rates_4cat_dir``); shipped as data rather than recomputed here.
+SITE_RATES_DIR = Path(os.environ.get(
+    "PEINT_PAPER_SITE_RATES_DIR",
+    str(REPO_ROOT / "local_data" / "output_site_rates_dir"),
+))
+
+# --- Structure prediction (Figure 2 pLDDT + the TM-score benchmarks) ---
+# AlphaFold weights for AF2Rank and the TM-align binary for its TM-score terms are both
+# fetched by scripts/fetch_af2rank_assets.sh into the repo. Override the env vars to point
+# at copies you already have.
+AF2_WEIGHTS_DIR = Path(os.environ.get(
+    "PEINT_PAPER_AF2_WEIGHTS_DIR", str(REPO_ROOT / "data" / "af2_params")
+))
+TMALIGN_PATH = Path(os.environ.get(
+    "PEINT_PAPER_TMALIGN_PATH", str(REPO_ROOT / "bin" / "TMalign")
+))
 
 # --- Figure 3 (conservation) specifics ---
 # Real + PEINT sequences realigned into the reference frame via `mafft --add`.

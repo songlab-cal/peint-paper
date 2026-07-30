@@ -17,5 +17,10 @@ slurm_out/
 # Generated figures
 figures/output/
 
-# Temporary reference caches for validation (delete when done)
+# Large data inputs staged locally (e.g. site rates). Distributed separately
+# (Zenodo), never committed.
 local_data/
+
+# Fetched assets: AlphaFold weights + TM-align binary (scripts/fetch_af2rank_assets.sh)
+data/af2_params/
+bin/
