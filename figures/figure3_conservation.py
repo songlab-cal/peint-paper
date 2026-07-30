@@ -203,8 +203,16 @@ def collect_family_jsd(
     return pd.DataFrame.from_dict(rows, orient="index")
 
 
-def plot_jsd_boxplot(jsd_df: pd.DataFrame, output_dir: str) -> None:
-    """Distribution of per-family mean JSD, one box per model."""
+def plot_jsd_boxplot(
+    jsd_df: pd.DataFrame,
+    output_dir: str,
+    filename_stem: str = "figure3_conservation_jsd_boxplot",
+) -> None:
+    """Distribution of per-family mean JSD, one box per model.
+
+    ``filename_stem`` lets callers write several slices of the same plot; the
+    generate_all_results driver uses it for the all / in-family / held-out breakdown.
+    """
     palette = sns.color_palette()
     colors = {
         "WAG": palette[0],
@@ -246,14 +254,8 @@ def plot_jsd_boxplot(jsd_df: pd.DataFrame, output_dir: str) -> None:
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
 
     os.makedirs(output_dir, exist_ok=True)
-    fig.savefig(
-        os.path.join(output_dir, "figure3_conservation_jsd_boxplot.pdf"), bbox_inches="tight"
-    )
-    fig.savefig(
-        os.path.join(output_dir, "figure3_conservation_jsd_boxplot.png"),
-        bbox_inches="tight",
-        dpi=300,
-    )
+    fig.savefig(os.path.join(output_dir, f"{filename_stem}.pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(output_dir, f"{filename_stem}.png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 

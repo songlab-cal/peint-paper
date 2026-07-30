@@ -46,7 +46,11 @@ SIM_ROOT = Path(os.environ.get(
 ))
 
 # --- Derived locations (extend as figures are migrated) ---
-INPUT_A3M_DIR = DATA_ROOT / "input_data" / "a3m"
+# The a3m alignments (and the ground-truth PDBs below) come from the trRosetta training
+# set: https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz (~30 GB, fetch manually).
+INPUT_A3M_DIR = Path(os.environ.get(
+    "PEINT_PAPER_INPUT_A3M_DIR", str(DATA_ROOT / "input_data" / "a3m")
+))
 RESULTS_DIR = Path(os.environ.get(
     "PEINT_PAPER_RESULTS_DIR",
     str(DATA_ROOT / "local_data" / "results_revision1"),
@@ -110,6 +114,28 @@ AF2_WEIGHTS_DIR = Path(os.environ.get(
 ))
 TMALIGN_PATH = Path(os.environ.get(
     "PEINT_PAPER_TMALIGN_PATH", str(REPO_ROOT / "bin" / "TMalign")
+))
+
+# Experimental structures the TM-score / contact benchmarks compare against
+# (one <family>.pdb per family). These come from the trRosetta training set, which also
+# supplies INPUT_A3M_DIR above:
+#     https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz   (~30 GB)
+# Download and extract it yourself, then point the two env vars at its pdb/ and a3m/
+# subdirectories. Deliberately not fetched by any script here given the size.
+GROUND_TRUTH_STRUCTURE_DIR = Path(os.environ.get(
+    "PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR", "/scratch/users/matthew_liu/input_data/pdb"
+))
+
+# --- 3Di annotation (ProstT5) ---
+# Both fetched by scripts/fetch_3di_weights.sh. PROSTT5_CACHE_DIR is a HuggingFace cache
+# directory for the encoder; PROSTT5_CNN_CHECKPOINT is the CNN head that maps embeddings
+# to 3Di states.
+PROSTT5_CACHE_DIR = Path(os.environ.get(
+    "PEINT_PAPER_PROSTT5_CACHE_DIR", str(REPO_ROOT / "data" / "prostt5")
+))
+PROSTT5_CNN_CHECKPOINT = Path(os.environ.get(
+    "PEINT_PAPER_PROSTT5_CNN_CHECKPOINT",
+    str(REPO_ROOT / "data" / "prostt5" / "cnn_chkpnt" / "model.pt"),
 ))
 
 # --- Figure 3 (conservation) specifics ---

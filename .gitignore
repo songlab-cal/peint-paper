@@ -24,3 +24,6 @@ local_data/
 # Fetched assets: AlphaFold weights + TM-align binary (scripts/fetch_af2rank_assets.sh)
 data/af2_params/
 bin/
+
+# Fetched model weights (scripts/fetch_3di_weights.sh)
+data/prostt5/
