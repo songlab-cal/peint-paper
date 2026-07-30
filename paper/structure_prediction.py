@@ -27,7 +27,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
-from Bio.PDB import PDBParser
 
 from protevo import caching as protevo_caching
 from protevo.utils import read_msa, write_msa
@@ -35,14 +34,6 @@ from protevo.utils import read_msa, write_msa
 import paper_config as cfg
 
 OMEGAFOLD_PATH = "omegafold"  # installed into the environment, resolved on PATH
-
-THREE_TO_ONE = {
-    "ALA": "A", "CYS": "C", "ASP": "D", "GLU": "E", "PHE": "F",
-    "GLY": "G", "HIS": "H", "ILE": "I", "LYS": "K", "LEU": "L",
-    "MET": "M", "ASN": "N", "PRO": "P", "GLN": "Q", "ARG": "R",
-    "SER": "S", "THR": "T", "VAL": "V", "TRP": "W", "TYR": "Y",
-}
-
 
 def parse_tm_align(output: bytes) -> dict:
     """Pull TM-score and RMSD out of TM-align stdout (chain 1 is the reference)."""
@@ -203,25 +194,6 @@ def _copy_dict(d):
     return copy_dict(d)
 
 
-def generate_contact_map(pdb_path, threshold: float = 8.0):
-    """CB-CB (CA for glycine) contact map and residue list for a PDB."""
-    structure = PDBParser().get_structure("protein", pdb_path)
-    atoms, residues = [], []
-
-    for atom in structure.get_atoms():
-        resname = atom.get_parent().get_resname()
-        if (resname == "GLY" and atom.get_name() == "CA") or atom.get_name() == "CB":
-            atoms.append(atom)
-            residues.append(resname)
-
-    coords = np.array([atom.get_coord() for atom in atoms])
-    distances = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=-1)
-    contact_map = (distances <= threshold).astype(int)
-    np.fill_diagonal(contact_map, 0)
-
-    return contact_map, residues
-
-
 def create_valid_output_for_caching(result_dir):
     """Write the SUCCESS marker the caching layer looks for."""
     out_path = os.path.join(result_dir, "result.txt")
@@ -231,11 +203,7 @@ def create_valid_output_for_caching(result_dir):
 
 
 @protevo_caching.cached_computation(
-    output_dirs=[
-        "output_structures_dir",
-        "output_contacts_dir",
-        "output_sequences_dir",
-    ],
+    output_dirs=["output_structures_dir"],
     exclude_args_if_default=["input_filename", "keep_prefix"],
     write_extra_log_files=True,
 )
@@ -245,10 +213,8 @@ def generate_omegafold_predictions(
     input_filename: Optional[str] = None,
     keep_prefix: Optional[str] = "seq",
     output_structures_dir=None,
-    output_contacts_dir=None,
-    output_sequences_dir=None,
 ):
-    """Fold a family's sequences with OmegaFold, writing structures, contacts and sequences.
+    """Fold a family's sequences with OmegaFold, writing one PDB per sequence.
 
     ``keep_prefix`` restricts folding to records whose id starts with it — ``"seq"`` keeps the
     empirical sequences and drops internal nodes. Pass ``None`` to fold every record, which the
@@ -283,29 +249,10 @@ def generate_omegafold_predictions(
         os.chmod(os.path.join(output_structures_dir, file), mode=444)
     create_valid_output_for_caching(output_structures_dir)
 
-    for seqid in msa:
-        contact_map, residues = generate_contact_map(
-            os.path.join(output_structures_dir, seqid + ".pdb")
-        )
-
-        output_contacts_path = os.path.join(output_contacts_dir, seqid + ".txt")
-        with open(output_contacts_path, "w") as f:
-            np.savetxt(f, contact_map, fmt="%d")
-        os.chmod(output_contacts_path, mode=444)
-
-        output_sequences_path = os.path.join(output_sequences_dir, seqid + ".txt")
-        with open(output_sequences_path, "w") as f:
-            f.write("".join(THREE_TO_ONE[res] for res in residues))
-        os.chmod(output_sequences_path, mode=444)
-
-    create_valid_output_for_caching(output_contacts_dir)
-    create_valid_output_for_caching(output_sequences_dir)
-
 
 @protevo_caching.cached_computation(
     output_dirs=[
         "output_structures_dir",
-        "output_contacts_dir",
         "output_scores_dir",
         "output_sites_dir",
     ],
@@ -329,7 +276,6 @@ def generate_af2_predictions(
     recycles: int = 3,
     iterations: int = 1,
     output_structures_dir: Optional[str] = None,
-    output_contacts_dir: Optional[str] = None,
     output_scores_dir: Optional[str] = None,
     output_sites_dir: Optional[str] = None,
 ):
@@ -390,16 +336,6 @@ def generate_af2_predictions(
         [{"seq_id": label, **score} for label, score in zip(labels, scores)]
     )
     scores_df.to_csv(os.path.join(output_scores_dir, "result.txt"), index=False)
-
-    for label in filtered_msa:
-        contact_map, _ = generate_contact_map(
-            os.path.join(output_structures_dir, label + ".txt")
-        )
-        output_contacts_path = os.path.join(output_contacts_dir, label + ".txt")
-        with open(output_contacts_path, "w") as f:
-            np.savetxt(f, contact_map, fmt="%d")
-        os.chmod(output_contacts_path, mode=444)
-    create_valid_output_for_caching(output_contacts_dir)
 
     # JSON: the downstream TM-score analysis reads this back with json.load.
     output_sites_path = os.path.join(output_sites_dir, "result.txt")

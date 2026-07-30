@@ -7,16 +7,16 @@ Produces the results the paper's figures are built from. The pipeline is:
    ``mafft --add`` to place the PEINT sequences in that same frame.
 3. Simulate the classical baselines with AliSim on that alignment (WAG, LG, LG4X,
    LG+C60, LG+S256; ``inference`` and ``prior_anchored`` modes).
-4. Optionally predict structures, then score: TM-score, contact maps, conservation
-   (JSD), 3Di states, pLDDT.
+4. Optionally predict structures, then score: TM-score, conservation (JSD), 3Di
+   states, pLDDT.
 
 **Structure prediction comes in two flavours and the paper uses both.** ``--use_af2``
 selects AF2Rank (threads each sequence onto the experimental structure, and yields extra
 scores: pLDDT, PAE, RMSD, composite); omitting it selects OmegaFold (folds each sequence
 de novo, yielding pLDDT only). The choice propagates: results land under a ``results_af2``
 or ``results`` subdirectory, and the pLDDT panels come from different functions. AF2Rank
-additionally emits a "sites" file recording which alignment columns survived, so the
-contact analysis restricts to those columns on that path only.
+additionally emits a "sites" file recording which alignment columns survived; nothing
+currently consumes it, but it is kept as a record of that filtering.
 
 Divergence on conserved sites is Jensen-Shannon, computed by ``paper.jsd`` — the single
 JSD implementation shared with the conservation figure. The original called a function
@@ -60,13 +60,8 @@ from paper.sequence import generate_conservation_plots, generate_3di_certainty_p
 from paper.splits import generate_tree_split
 from paper.structure import (
     compute_tm_scores_against_ground_truth,
-    count_contacts,
     generate_af2_score_plots,
-    generate_predicted_contacts,
     plot_af2_scores_by_model,
-    plot_contact_maps,
-    plot_contact_precision_recall_by_model,
-    plot_contacts_precision_recall,
     plot_omegafold_plddt,
     plot_omegafold_plddt_by_model,
     plot_tm_score_boxplot,
@@ -233,10 +228,10 @@ def _subsample_selection(args, family, tree_split):
 def predict_structures(args, families, aligned_dirs, sequence_types):
     """Run the selected structure predictor over every family and model.
 
-    Returns four per-family/per-model path maps. ``sites`` and ``scores`` are AF2Rank-only
+    Returns three per-family/per-model path maps. ``sites`` and ``scores`` are AF2Rank-only
     (OmegaFold produces neither), so they stay None on the OmegaFold path.
     """
-    structures, contacts, sites, af2_scores = ({f: {} for f in families} for _ in range(4))
+    structures, sites, af2_scores = ({f: {} for f in families} for _ in range(3))
 
     for family in families:
         empirical_msa = read_msa(os.path.join(aligned_dirs[REAL], family + ".txt"))
@@ -270,7 +265,6 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
                     model_mode="alphafold",
                     family=family,
                     output_structures_dir=f"{out_path}/structures",
-                    output_contacts_dir=f"{out_path}/contacts",
                     output_scores_dir=f"{out_path}/scores",
                     output_sites_dir=f"{out_path}/sites",
                 )
@@ -280,16 +274,13 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
                     sequences_dir=seq_dir,
                     family=family,
                     output_structures_dir=f"{out_path}/structures",
-                    output_contacts_dir=f"{out_path}/contacts",
-                    output_sequences_dir=f"{out_path}/sequences",
                 )
 
             structures[family][model] = predicted["output_structures_dir"]
-            contacts[family][model] = predicted["output_contacts_dir"]
             sites[family][model] = predicted.get("output_sites_dir")
             af2_scores[family][model] = predicted.get("output_scores_dir")
 
-    return structures, contacts, sites, af2_scores
+    return structures, sites, af2_scores
 
 
 def main(args):
@@ -359,10 +350,9 @@ def main(args):
         output_dir=args.out_path,
     )
 
-    needs_structures = args.include_contact_maps or args.include_tmscore or args.include_plddt
-    if needs_structures:
-        predicted_structure_paths, predicted_contacts_paths, filtered_sites_paths, af2_scores_paths = (
-            predict_structures(args, families, aligned_dirs, sequence_types)
+    if args.include_tmscore or args.include_plddt:
+        predicted_structure_paths, filtered_sites_paths, af2_scores_paths = predict_structures(
+            args, families, aligned_dirs, sequence_types
         )
 
     if args.include_3di:
@@ -375,7 +365,7 @@ def main(args):
         )
 
     all_jsd, all_jsd_3di = {}, {}
-    all_tm_scores, all_pr_scores = {}, {}
+    all_tm_scores = {}
     all_af2_scores, all_omegafold_plddts = {}, {}
 
     results_output_path = os.path.join(args.out_path, "results_af2" if args.use_af2 else "results")
@@ -399,60 +389,6 @@ def main(args):
             plot_tm_score_histogram(scores=tm_scores_by_model, family=family, output_path=viz_path)
             plot_tm_score_boxplot(scores=tm_scores_by_model, family=family, output_path=viz_path)
             all_tm_scores[family] = tm_scores_by_model.groupby("Model")["TM-score"].mean().to_dict()
-
-        if args.include_contact_maps:
-            predicted_contacts_data, predicted_nontrivial_contacts_data, nongap_counts_data = {}, {}, {}
-
-            for model in sequence_types:
-                split = "B" if model == REAL_OTHER_SPLIT else "A"
-                msa_dir = aligned_dirs[REAL] if model == REAL_OTHER_SPLIT else aligned_dirs[model]
-                msa = read_msa(os.path.join(msa_dir, family + ".txt"))
-
-                if args.subsample_msa_size != -1 and len(msa) > args.subsample_msa_size:
-                    msa_dir = f"{args.out_path}/subsampled_msas/{model}"
-
-                contacts, nontrivial, count_nongap = generate_predicted_contacts(
-                    contacts_dir=predicted_contacts_paths[family][model],
-                    msa_dir=msa_dir,
-                    family=family,
-                    tree_split=tree_split,
-                    split=split,
-                    filtered_sites_path=filtered_sites_paths[family][model],
-                    include_internals=False,
-                )
-                predicted_contacts_data[model] = contacts
-                predicted_nontrivial_contacts_data[model] = nontrivial
-                nongap_counts_data[model] = count_nongap
-
-            experimental_contacts, experimental_nontrivial_contacts = count_contacts(
-                pdb_path=os.path.join(cfg.GROUND_TRUTH_STRUCTURE_DIR, family + ".pdb"),
-                msa_dir=aligned_dirs[REAL],
-                family=family,
-            )
-
-            for threshold in args.contact_thresholds:
-                plot_contact_maps(
-                    predicted_contacts=predicted_contacts_data,
-                    predicted_nontrivial_contacts=predicted_nontrivial_contacts_data,
-                    experimental_contacts=experimental_contacts,
-                    experimental_nontrivial_contacts=experimental_nontrivial_contacts,
-                    count_nongap=nongap_counts_data,
-                    threshold=threshold,
-                    output_path=viz_path,
-                    recall_only=args.contacts_recall_only,
-                )
-
-            all_pr_scores[family] = plot_contacts_precision_recall(
-                predicted_contacts=predicted_contacts_data,
-                predicted_nontrivial_contacts=predicted_nontrivial_contacts_data,
-                experimental_contacts=experimental_contacts,
-                experimental_nontrivial_contacts=experimental_nontrivial_contacts,
-                count_nongap=nongap_counts_data,
-                thresholds=args.contact_thresholds,
-                family=family,
-                output_path=viz_path,
-                recall_only=args.contacts_recall_only,
-            )
 
         if args.include_conservation:
             generate_conservation_plots(
@@ -521,13 +457,6 @@ def main(args):
             output_path=os.path.join(results_output_path, "tmscore"),
         )
 
-    if args.include_contact_maps:
-        print("Generating contact map precision/recall plots aggregated across all families")
-        plot_contact_precision_recall_by_model(
-            pr_scores=all_pr_scores,
-            training_fams_map=training_fams_map,
-            output_path=os.path.join(results_output_path, "pr_scores"),
-        )
 
     if args.include_conservation:
         print("Generating conservation JSD plots aggregated across all families")
@@ -583,7 +512,6 @@ if __name__ == "__main__":
 
     # Benchmark flags
     parser.add_argument("--include_conservation", action="store_true", help="Include conservation benchmark")
-    parser.add_argument("--include_contact_maps", action="store_true", help="Include contact map benchmark")
     parser.add_argument("--include_tmscore", action="store_true", help="Include TM-score benchmark")
     parser.add_argument("--include_3di", action="store_true", help="Include 3Di benchmark")
     parser.add_argument("--include_plddt", action="store_true", help="Include pLDDT benchmark")
@@ -624,15 +552,6 @@ if __name__ == "__main__":
         help="ProstT5 HuggingFace cache directory",
     )
     parser.add_argument("--conservation_threshold", type=float, default=0.7, help="Conservation site threshold")
-    parser.add_argument(
-        "--contact_thresholds", type=float, nargs="+",
-        default=[round(x, 1) for x in [0.2 * i for i in range(1, 5)]],
-        help="List of contact thresholds (default: 0.2 0.4 0.6 0.8)",
-    )
-    parser.add_argument(
-        "--contacts_recall_only", action="store_true",
-        help="Contact maps are recall only compared to reference structure",
-    )
     parser.add_argument("--num_processes", type=int, default=1, help="Number of parallel processes to use")
     parser.add_argument(
         "--alisim_models", nargs="+", default=["WAG", "LG"],
