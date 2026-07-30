@@ -196,6 +196,55 @@ def run_mafft_add(
         list(tqdm.tqdm(map(_map_func_run_mafft_add, map_args), total=len(map_args)))
 
 
+def _map_func_clean_msa(args):
+    data_dir, families, chars_to_exclude, output_msa_dir = args
+
+    for family in families:
+        msa = read_msa(os.path.join(data_dir, family + ".txt"))
+        msa = {
+            seq_id: "".join(c for c in seq if c not in chars_to_exclude)
+            for seq_id, seq in msa.items()
+        }
+        write_msa(msa, os.path.join(output_msa_dir, family + ".txt"))
+        secure_parallel_output(output_msa_dir, family)
+
+
+@protevo_caching.cached_parallel_computation(
+    parallel_arg="families",
+    output_dirs=["output_msa_dir"],
+    exclude_args=["num_processes"],
+)
+def clean_msa(
+    data_dir: str,
+    families: List[str],
+    chars_to_exclude: Tuple[str] = ('-'),
+    num_processes: int = 1,
+    output_msa_dir: Optional[str] = None,
+):
+    """Strip unwanted characters (gaps, ambiguous codes) from each family's MSA.
+
+    Used to turn an alignment back into raw sequences before re-aligning with MAFFT.
+    """
+    if len(chars_to_exclude) == 0:
+        raise ValueError(f"chars_to_exclude must be nonempty! Received {chars_to_exclude}")
+
+    map_args = [
+        [
+            data_dir,
+            get_process_args(process_rank, num_processes, families),
+            chars_to_exclude,
+            output_msa_dir,
+        ]
+        for process_rank in range(num_processes)
+    ]
+
+    if num_processes > 1:
+        with multiprocessing.Pool(num_processes) as pool:
+            list(tqdm.tqdm(pool.imap(_map_func_clean_msa, map_args), total=len(map_args)))
+    else:
+        list(tqdm.tqdm(map(_map_func_clean_msa, map_args), total=len(map_args)))
+
+
 def sanitize_sequences(sequences: Dict[str, str]) -> Dict[str, str]:
     """Remove ambiguous characters from an MSA / fasta (maps ambiguous codes, drops non-AA)."""
     cleaned_sequences = {}

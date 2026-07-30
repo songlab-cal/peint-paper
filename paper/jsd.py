@@ -23,15 +23,13 @@ from scipy.spatial.distance import jensenshannon
 
 from protevo.utils import amino_acids, gap_character, read_msa
 
-from paper.splits import SPLIT_A, SPLIT_B, filter_msa_based_on_split
+from paper.splits import REAL, REAL_OTHER_SPLIT, SPLIT_A, SPLIT_B, filter_msa_based_on_split
 
 # Rows of every frequency table: the 20 residues plus the gap. 3Di states reuse this
 # alphabet, which is why the same code serves both vocabularies.
 VOCAB: Tuple[str, ...] = tuple(amino_acids) + (gap_character,)
 RESIDUES: Tuple[str, ...] = tuple(amino_acids)
 
-REAL = "Real"
-REAL_OTHER_SPLIT = "Real (other split)"
 
 
 def msa_path(msa_dir, family: str, foldseek_states: bool = False) -> str:

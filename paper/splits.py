@@ -14,6 +14,12 @@ from protevo.io import read_tree
 SPLIT_A = "A"
 SPLIT_B = "B"
 
+# Model keys for the empirical data. "Real" is split A; "Real (other split)" is the same
+# empirical data restricted to split B, used as the baseline any model is measured against.
+# Defined here so the JSD, sequence and structure modules cannot drift apart on the spelling.
+REAL = "Real"
+REAL_OTHER_SPLIT = "Real (other split)"
+
 
 def generate_tree_split(tree_dir: str, family: str) -> Dict[str, List[str]]:
     """Split a family's tree on its most balanced edge, returning leaf names per side.
