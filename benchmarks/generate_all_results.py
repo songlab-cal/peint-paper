@@ -84,6 +84,21 @@ def _seq_type_key(model: str, mode: str) -> str:
     return model if mode == "inference" else f"{model} ({mode})"
 
 
+def _frame_suffix(use_af2: bool) -> str:
+    """Output-dir suffix distinguishing the two alignment frames.
+
+    AF2Rank runs ``mafft --add --keeplength`` (everything stays in the seq1 reference
+    frame); OmegaFold does not. The two frames' alignments — and everything derived from
+    them (the AliSim classical sims, 3Di states, subsampled MSAs) — differ, so their
+    output dirs must not collide. Because the cache decides hits from output-dir contents
+    alone, a shared dir would let the second run silently reuse the first frame's
+    alignment. The default (OmegaFold) frame keeps the original unsuffixed paths for cache
+    back-compat; the keeplength (AF2Rank) frame gets a distinct suffix. Frame-invariant
+    outputs (``mafft``, the PEINT sims) are deliberately left unsuffixed and shared.
+    """
+    return "_keeplength" if use_af2 else ""
+
+
 def process_alignment_pipeline(
     empirical_sequences_dir,
     peint_progressive_dir,
@@ -106,6 +121,10 @@ def process_alignment_pipeline(
     ``keep_length`` must be True on the AF2Rank path: AF2 cannot represent insertions
     relative to the reference structure, so the alignment must not grow new columns.
     """
+    # Frame-dependent outputs (mafft_add + AliSim classical sims) are suffixed so the two
+    # frames never share a dir; mafft (empirical align) and the PEINT sims are frame-invariant.
+    frame_suffix = _frame_suffix(keep_length)
+
     cleaned_emp_dir = clean_msa(
         data_dir=empirical_sequences_dir,
         families=families,
@@ -135,9 +154,9 @@ def process_alignment_pipeline(
         families=families,
         num_processes=num_processes,
         extra_command_line_args=["--keeplength"] if keep_length else None,
-        output_all_sequences_msa_dir=f"{output_dir}/mafft_add/all_sequences",
-        output_new_sequences_msa_dir=f"{output_dir}/mafft_add/new_sequences",
-        output_old_sequences_msa_dir=f"{output_dir}/mafft_add/old_sequences",
+        output_all_sequences_msa_dir=f"{output_dir}/mafft_add{frame_suffix}/all_sequences",
+        output_new_sequences_msa_dir=f"{output_dir}/mafft_add{frame_suffix}/new_sequences",
+        output_old_sequences_msa_dir=f"{output_dir}/mafft_add{frame_suffix}/old_sequences",
     )
     aligned_emp_path = mafft_add_dirs["output_old_sequences_msa_dir"]
     base_path = os.path.dirname(aligned_emp_path)
@@ -162,7 +181,7 @@ def process_alignment_pipeline(
             model_slug = model.lower().replace("+", "_")
             path_slug = model_slug if mode == "inference" else f"{model_slug}_{mode}"
 
-            model_path = os.path.join(output_dir, f"simulations/{path_slug}") if output_dir else None
+            model_path = os.path.join(output_dir, f"simulations/{path_slug}{frame_suffix}") if output_dir else None
             aligned_alisim_paths[_seq_type_key(model, mode)] = simulate_alisim_evolution(
                 tree_dir=tree_dir,
                 msa_dir=aligned_emp_path,
@@ -184,8 +203,12 @@ def process_alignment_pipeline(
     }
 
 
-def process_3di_pipeline(aligned_data_dirs, families, model_checkpoint_path, num_processes, output_dir):
-    """Annotate every model's aligned sequences with 3Di structural states."""
+def process_3di_pipeline(aligned_data_dirs, families, model_checkpoint_path, num_processes, output_dir, frame_suffix=""):
+    """Annotate every model's aligned sequences with 3Di structural states.
+
+    ``frame_suffix`` keeps the AF2 (keeplength) frame's 3Di annotations in their own dir,
+    since they are computed from the frame-specific aligned sequences.
+    """
     return {
         model: generate_3di_annotations(
             input_dir=data_dir,
@@ -194,8 +217,8 @@ def process_3di_pipeline(aligned_data_dirs, families, model_checkpoint_path, num
             num_processes=num_processes,
             input_is_aligned=True,
             include_internals=False,
-            output_3di_dir=f"{output_dir}/3di/{model}/sequences",
-            output_probabilities_dir=f"{output_dir}/3di/{model}/probabilities",
+            output_3di_dir=f"{output_dir}/3di{frame_suffix}/{model}/sequences",
+            output_probabilities_dir=f"{output_dir}/3di{frame_suffix}/{model}/probabilities",
         )
         for model, data_dir in aligned_data_dirs.items()
     }
@@ -250,7 +273,7 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
 
             if subsample and len(msa) > args.subsample_msa_size:
                 keep = subsampled_b if model == REAL_OTHER_SPLIT else subsampled_a
-                seq_dir = f"{args.out_path}/subsampled_msas/{model}"
+                seq_dir = f"{args.out_path}/subsampled_msas{_frame_suffix(args.use_af2)}/{model}"
                 os.makedirs(seq_dir, exist_ok=True)
                 subsampled_path = os.path.join(seq_dir, family + ".txt")
                 if not os.path.exists(subsampled_path):
@@ -362,6 +385,7 @@ def main(args):
             model_checkpoint_path=args.prostt5_checkpoint_path,
             num_processes=args.num_processes,
             output_dir=args.out_path,
+            frame_suffix=_frame_suffix(args.use_af2),
         )
 
     all_jsd, all_jsd_3di = {}, {}
