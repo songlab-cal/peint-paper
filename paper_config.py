@@ -155,6 +155,29 @@ HELDOUT_FAMILIES_FILE = Path(os.environ.get(
     str(DATA_ROOT / "local_data" / "final_sim_held_out_family.txt"),
 ))
 
+# --- Generalization analysis (reviewer response) ---
+# Tests whether simulation quality holds on protein classes ABSENT from training. The
+# eval families are already held out at the PDB level; here we further split them by
+# whether their Pfam family / CATH superfamily was ever seen in the 14,498 training
+# families. Fetched annotation sources (SIFTS Pfam + CATH, Pfam clans, Pfam-A HMMs) and
+# the built family->labels cache are populated idempotently by ``paper.generalization``.
+#
+# The train / held-out family lists. The held-out list is the simulation eval set; it is
+# the JSON form of HELDOUT_FAMILIES_FILE (same 553 families), kept separate because the
+# JSON also carries the canonical ordering used elsewhere.
+TRAIN_FAMILIES_FILE = Path(os.environ.get(
+    "PEINT_PAPER_TRAIN_FAMILIES_FILE", str(DATA_ROOT / "local_data" / "14k5_fam.json")
+))
+EVAL_FAMILIES_FILE = Path(os.environ.get(
+    "PEINT_PAPER_EVAL_FAMILIES_FILE", str(DATA_ROOT / "local_data" / "14k5_nontrain_fam.json")
+))
+ANNOTATION_DIR = Path(os.environ.get(
+    "PEINT_PAPER_ANNOTATION_DIR", str(DATA_ROOT / "local_data" / "generalization" / "annotations")
+))
+GENERALIZATION_DIR = Path(os.environ.get(
+    "PEINT_PAPER_GENERALIZATION_DIR", str(FIGURES_DIR / "generalization")
+))
+
 
 def require(path) -> Path:
     """Return ``path`` if it exists, else raise a clear error (fail-fast, no fallback)."""
