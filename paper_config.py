@@ -179,6 +179,15 @@ GENERALIZATION_DIR = Path(os.environ.get(
 ))
 
 
+# --- lm-design energy (ESM-MCMC proposer experiment) ---
+# The literal lm-design accept/reject energy needs the linear distogram-projection weights and
+# background n-gram stats, both fetched by scripts/fetch_lmdesign_assets.sh into data/lm_design/.
+# The vendored model code lives in-repo under paper/vendor/lm_design/ (MIT, see its NOTICE.md).
+LMDESIGN_DIR = Path(os.environ.get("PEINT_PAPER_LMDESIGN_DIR", str(REPO_ROOT / "data" / "lm_design")))
+LMDESIGN_WEIGHTS = LMDESIGN_DIR / "linear_projection_model.pt"
+LMDESIGN_NGRAM_DIR = LMDESIGN_DIR / "ngram_stats"
+
+
 def require(path) -> Path:
     """Return ``path`` if it exists, else raise a clear error (fail-fast, no fallback)."""
     p = Path(path)

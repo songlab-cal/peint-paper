@@ -27,3 +27,6 @@ bin/
 
 # Fetched model weights (scripts/fetch_3di_weights.sh)
 data/prostt5/
+
+# Fetched lm-design assets (scripts/fetch_lmdesign_assets.sh)
+data/lm_design/
