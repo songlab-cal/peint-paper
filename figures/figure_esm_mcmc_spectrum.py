@@ -1,15 +1,19 @@
 """Figure: the evolution<->design spectrum of ESM2-MCMC simulation, endpoint quality, and cost.
 
-Three panels (reviewer response — situating PEINT vs protein-LM MCMC simulators):
+Four panels (reviewer response — situating PEINT vs protein-LM MCMC simulators):
 
 (a) **Spectrum.** Sweeping the length-independent LM weight lambda of an lm-design-style energy
     (LM + structure + n-gram) traces one monotonic curve from evolutionary fidelity (high lambda,
     strong ESM2 pseudolikelihood filter, Bitbol-like) to inverse-folding/design (low lambda). As
     lambda falls, acceptance rises but conservation (JSD) collapses toward random.
-(b) **Endpoints.** Per-family JSD-to-real by model: the evolutionary MCMC (Bitbol) and PEINT match
-    Real and beat the classical simulators; the design-energy endpoint (lm-design) is the worst
-    (near-random sequences wash out conservation).
-(c) **Cost.** Generation wall-clock (7 families) — PEINT (one-shot autoregressive) is far cheaper
+(b) **Endpoint conservation.** Per-family JSD-to-real by model: the evolutionary MCMC (Bitbol) and
+    PEINT match Real and beat the classical simulators; the design-energy endpoint (lm-design) is
+    the worst (near-random sequences wash out conservation).
+(c) **Endpoint structure.** Per-family ESM-IF Approach-1 likelihood on the GT structure by model
+    (higher = more compatible): Bitbol/PEINT track Real, and lm-design is worst here too — its
+    T=1 divergence-targeted walk never actually optimises the structure (unlike lm-design's own
+    annealing-to-a-mode design use).
+(d) **Cost.** Generation wall-clock (7 families) — PEINT (one-shot autoregressive) is far cheaper
     than either MCMC; the evolutionary MCMC (Bitbol, low acceptance) is the slowest.
 
 Reads the benchmark outputs under figures/output/esm_mcmc/ (regenerate with
@@ -60,12 +64,24 @@ def load_jsd_by_model() -> dict:
     return vals
 
 
+def load_esmif_by_model() -> dict:
+    """Per-family ESM-IF Approach-1 LL per model over the common (non-1bf2) families."""
+    lmd = pd.read_csv(BASE / "lmdesign" / "eval" / "esmif_a1.csv", index_col=0)   # family x model (wide)
+    fams = sorted(lmd.index)
+    vals = {m: lmd.loc[fams, m].dropna().to_numpy() for m in lmd.columns}          # names already clean
+    bit = pd.read_csv(BASE / "eval" / "esmif_a1_comparison.csv", index_col=0)      # has ESM-MCMC (Bitbol)
+    common = [f for f in fams if f in bit.index]
+    vals["Bitbol"] = bit.loc[common, "ESM-MCMC"].dropna().to_numpy()
+    return vals
+
+
 def main():
     _set_publication_style()
     sweep = pd.read_csv(BASE / "lmdesign" / "sweep" / "sweep.csv").sort_values("lambda", ascending=False)
     vals = load_jsd_by_model()
+    esmif = load_esmif_by_model()
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 3.4))
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(15.5, 3.4))
 
     # --- (a) spectrum: lambda vs acceptance (left) and JSD (right) ---
     x = np.arange(len(sweep))
@@ -104,17 +120,30 @@ def main():
     ax2.legend(handles=[Patch(color="#55A868", label="evolutionary"), Patch(color="0.6", label="classical"),
                         Patch(color="#C44E52", label="design")], fontsize=6.5, frameon=False, loc="upper left")
 
-    # --- (c) runtime ---
+    # --- (c) endpoints: ESM-IF likelihood on the GT structure (bar = median, error bars = family IQR) ---
+    eorder = [m for m in EVOLUTIONARY + CLASSICAL + DESIGN if m in esmif]
+    emed = np.array([np.median(esmif[m]) for m in eorder])
+    ep25 = np.array([np.percentile(esmif[m], 25) for m in eorder])
+    ep75 = np.array([np.percentile(esmif[m], 75) for m in eorder])
+    ax3.bar(range(len(eorder)), emed, color=[colors[m] for m in eorder], width=0.72,
+            yerr=[emed - ep25, ep75 - emed], capsize=2, error_kw={"lw": 0.7, "ecolor": "0.25"})
+    ax3.axhline(np.median(esmif["Real"]), ls="--", lw=0.8, color="#55A868")
+    ax3.set_xticks(range(len(eorder)))
+    ax3.set_xticklabels(eorder, rotation=40, ha="right", fontsize=7.5)
+    ax3.set_ylabel("ESM-IF log-likelihood  (higher = better)", fontsize=9)
+    ax3.set_title("(c) endpoint structure", fontsize=10)
+
+    # --- (d) runtime ---
     meth = ["PEINT", "lm-design", "Bitbol"]
     rc = {"PEINT": "#55A868", "lm-design": "#C44E52", "Bitbol": "#4C72B0"}
-    bars = ax3.bar(range(len(meth)), [RUNTIME_MIN[m] for m in meth], color=[rc[m] for m in meth], width=0.62)
+    bars = ax4.bar(range(len(meth)), [RUNTIME_MIN[m] for m in meth], color=[rc[m] for m in meth], width=0.62)
     for b, m in zip(bars, meth):
-        ax3.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{RUNTIME_MIN[m]:.0f}m",
+        ax4.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{RUNTIME_MIN[m]:.0f}m",
                  ha="center", va="bottom", fontsize=7.5)
-    ax3.set_xticks(range(len(meth))); ax3.set_xticklabels(meth, fontsize=8)
-    ax3.set_ylabel("generation time (min, 7 families)", fontsize=9)
-    ax3.set_title("(c) cost", fontsize=10)
-    ax3.set_ylim(0, max(RUNTIME_MIN.values()) * 1.18)
+    ax4.set_xticks(range(len(meth))); ax4.set_xticklabels(meth, fontsize=8)
+    ax4.set_ylabel("generation time (min, 7 families)", fontsize=9)
+    ax4.set_title("(d) cost", fontsize=10)
+    ax4.set_ylim(0, max(RUNTIME_MIN.values()) * 1.18)
 
     fig.tight_layout()
     for ext in ("pdf", "png"):
