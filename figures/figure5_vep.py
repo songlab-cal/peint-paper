@@ -10,8 +10,6 @@ import json
 from pathlib import Path
 
 from protevo.vep._vep_utils import (
-    VEP_DATA_DIR,
-    MAIN_DIR,
     PROTEINGYM_DIR,
     _format_time_dir_suffix,
     _discover_time_dirs,
@@ -28,10 +26,15 @@ style configuration across modules. Use `_set_publication_style()` to
 apply Illustrator-friendly, publication-ready defaults before plotting.
 """
 
-# Figures are organized by type under `protevo/vep/figures/<category>/`.
-# Use `_fig_path(category, filename)` to resolve a save path; it ensures the
-# category subdir exists so a fresh (gitignored) checkout works without setup.
-FIG_DIR = MAIN_DIR / "protevo/vep/figures"
+# Figures and their input data both live inside the peint-paper repo (anchored via
+# __file__), git-committed, so nothing is written to the model (protevo) repo:
+#   * figures                -> peint-paper/figures/<category>/
+#   * per-run scored results -> peint-paper/local_data/vep/test_lls/production/<run>/spearman_results.csv
+# The ProteinGym family reference (transition pairs) is still read from the model
+# repo's ProteinGym3, which PEINT is meant to be used in conjunction with.
+PAPER_ROOT = Path(__file__).resolve().parents[1]
+FIG_DIR = PAPER_ROOT / "figures"
+VEP_RESULTS_DIR = PAPER_ROOT / "local_data" / "vep" / "test_lls" / "production"
 
 
 def _fig_path(category, filename):
@@ -114,7 +117,7 @@ def _make_spearman_plot(
     alpha: float = 0.8,
     save_spearman_path: str | None = None,
 ):
-    output_dir = VEP_DATA_DIR / "test_lls" / "production"
+    output_dir = VEP_RESULTS_DIR
     if save_spearman_path is None:
         save_spearman_path = output_dir / "spearman_results.csv"
     # Load all families
@@ -309,7 +312,7 @@ def _make_esm_vs_peint_plot(
     if len(run_names) != 2:
         raise ValueError("run_names must contain exactly two models (ESM and PEINT)")
 
-    output_dir = VEP_DATA_DIR / "test_lls" / "production"
+    output_dir = VEP_RESULTS_DIR
 
     # Load all families
     transition_dir = (
@@ -523,7 +526,7 @@ def _make_per_family_spearman_plot(
         Optional mapping from run_names keys to display names for the plot.
         If None, uses the keys from run_names directly.
     output_dir : Path | None
-        Root directory containing the results. Defaults to VEP_DATA_DIR / "test_lls" / "production".
+        Root directory containing the results. Defaults to VEP_RESULTS_DIR.
     assay_type : str
         Filter results to only include this assay type. Default is "OrganismalFitness".
     sort_by_model : str
@@ -545,7 +548,7 @@ def _make_per_family_spearman_plot(
     """
 
     if output_dir is None:
-        output_dir = VEP_DATA_DIR / "test_lls" / "production"
+        output_dir = VEP_RESULTS_DIR
 
     if model_names is None:
         model_names = {k: k for k in run_names.keys()}
@@ -771,7 +774,7 @@ def _make_per_family_spearman_time_plot(
         [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].
     output_dir : Path | None
         Root directory containing the per-time sub-directories. Defaults to
-        VEP_DATA_DIR / "test_lls" / "production".
+        VEP_RESULTS_DIR.
     assay_type : str
         Filter results to only include this assay type. Default is
         "OrganismalFitness".
@@ -798,7 +801,7 @@ def _make_per_family_spearman_time_plot(
     times = sorted(times)
 
     if output_dir is None:
-        output_dir = VEP_DATA_DIR / "test_lls" / "production"
+        output_dir = VEP_RESULTS_DIR
 
     # Load per-time per-family results
     df_time_all = []
@@ -1022,7 +1025,7 @@ def _make_per_family_spearman_time_plot_best_vs_default(
         Default time to plot for all families. Default is 1.0.
     output_dir : Path | None
         Root directory containing the per-time sub-directories. Defaults to
-        VEP_DATA_DIR / "test_lls" / "production".
+        VEP_RESULTS_DIR.
     assay_type : str
         Filter results to only include this assay type. Default is
         "OrganismalFitness".
@@ -1041,7 +1044,7 @@ def _make_per_family_spearman_time_plot_best_vs_default(
         If provided, save the plot to this path (PNG) and a PDF twin.
     """
     if output_dir is None:
-        output_dir = VEP_DATA_DIR / "test_lls" / "production"
+        output_dir = VEP_RESULTS_DIR
 
     # Auto-discover all available time directories
     time_dirs = _discover_time_dirs(output_dir, run_prefix, times=None)
@@ -1302,7 +1305,7 @@ def make_spearman_figure():
 
 
 def make_per_family_spearman_figure():
-    output_root = VEP_DATA_DIR / "test_lls" / "production"
+    output_root = VEP_RESULTS_DIR
     run_names_example = {
         "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
         "peint": {
@@ -1352,7 +1355,7 @@ def make_per_family_spearman_figure():
 
 
 def make_per_family_spearman_time_figure():
-    output_root = VEP_DATA_DIR / "test_lls" / "production"
+    output_root = VEP_RESULTS_DIR
     default_times = [
         0.05,
         0.1,
@@ -1390,7 +1393,7 @@ def make_per_family_spearman_time_figure():
 
 
 def make_per_family_spearman_time_figure_best_vs_default():
-    output_root = VEP_DATA_DIR / "test_lls" / "production"
+    output_root = VEP_RESULTS_DIR
     default_run_prefix = "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000"
     save_path = _fig_path("time", "per_family_spearman_time_plot_best_vs_default.png")
     plt.rcParams.update({"xtick.labelsize": 6})
@@ -1457,7 +1460,7 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
         "peint": "PEINT",
     }
     save_path = _fig_path("mutational_depth", "spearman_by_mutational_depth_esm_650m.png")
-    output_dir = VEP_DATA_DIR / "test_lls" / "production"
+    output_dir = VEP_RESULTS_DIR
 
     # Load mutational depth data for all models
     df_results_all = []
@@ -1621,7 +1624,7 @@ def make_spearman_figure_vesm(tier: str = "650M"):
 
 def make_per_family_spearman_figure_vesm(tier: str = "650M"):
     """Per-family OrganismalFitness Spearman scatter including PEINT-on-vESM."""
-    output_root = VEP_DATA_DIR / "test_lls" / "production"
+    output_root = VEP_RESULTS_DIR
     run_names, model_names = _vesm_run_and_model_names(tier)
     plt.rcParams.update(
         {
@@ -1658,7 +1661,7 @@ def make_spearman_by_mutational_depth_figure_vesm(tier: str = "650M"):
     save_path = _fig_path(
         "mutational_depth", f"spearman_by_mutational_depth_vesm_{tier}.png"
     )
-    output_dir = VEP_DATA_DIR / "test_lls" / "production"
+    output_dir = VEP_RESULTS_DIR
 
     df_results_all = []
     for name, info in run_names.items():
@@ -1694,6 +1697,135 @@ def make_spearman_by_mutational_depth_figure_vesm(tier: str = "650M"):
     return ax
 
 
+# ---------------------------------------------------------------------------
+# Official-release baselines + base-vs-PEINT / multi-model comparisons
+# ---------------------------------------------------------------------------
+# Baselines come from ProteinGym's released per-variant zero-shot scores via
+# protevo.vep.official_baselines (the maintained canonical source). Each released
+# column is materialized as an ordinary `test_lls/production/<column>/` run dir so
+# the existing bar machinery (_make_spearman_plot -> side-by-side bars per assay
+# type with SE error bars) works unchanged and any released model can sit next to
+# PEINT checkpoints scored with compute_fitness.
+
+
+def materialize_official_baselines(columns, overwrite=False):
+    """Write `test_lls/production/<col>/spearman_results.csv` for each released
+    column (schema `family, assay_type, spearman`), computing all requested columns
+    in a single pass over the release. Returns the list of run names (== columns).
+    """
+    from protevo.vep.official_baselines import released_zero_shot_spearman
+
+    prod = VEP_RESULTS_DIR
+    todo = [
+        c
+        for c in columns
+        if overwrite or not (prod / c / "spearman_results.csv").exists()
+    ]
+    if todo:
+        df = released_zero_shot_spearman(todo).rename(columns={"DMS_id": "family"})
+        for col in todo:
+            sub = df[df["model"] == col][["family", "assay_type", "spearman"]]
+            (prod / col).mkdir(parents=True, exist_ok=True)
+            sub.to_csv(prod / col / "spearman_results.csv", index=False)
+    return list(columns)
+
+
+def _spearman_bar_figure(run_names, model_names, save_name, palette=None, figsize=(11, 5)):
+    """Shared driver: materialize any official baselines referenced, then draw the
+    side-by-side-by-assay-type bar chart (SE error bars, class-avg in the legend).
+
+    `run_names[key]["run_name"]` is a `test_lls/production` sub-dir; set
+    `run_names[key]["official"] = True` for released-baseline columns so they are
+    materialized on demand.
+    """
+    official_cols = [
+        info["run_name"] for info in run_names.values() if info.get("official")
+    ]
+    if official_cols:
+        materialize_official_baselines(official_cols)
+    run_names = {k: {"run_name": v["run_name"], "t_wag": v.get("t_wag")} for k, v in run_names.items()}
+    save_path = _fig_path("spearman_agg", save_name)
+    return _make_spearman_plot(
+        run_names=run_names,
+        model_names=model_names,
+        palette=palette,
+        save_path=save_path,
+        figsize=figsize,
+        save_spearman_path=_fig_path("spearman_agg", save_name.replace(".png", ".csv")),
+    )
+
+
+def make_base_vs_peint_spearman_figure(
+    base_column, peint_run, base_label="ESM (base)", peint_label="PEINT", save_name=None, palette=None
+):
+    """Default 1v1: a base backbone (official release) vs PEINT trained on it.
+
+    Side-by-side bars per assay type with SE error bars.
+    """
+    palettes_all = sns.color_palette()
+    palette = palette or [palettes_all[7], palettes_all[0]]  # base = grey, PEINT = blue
+    run_names = {
+        "base": {"run_name": base_column, "official": True},
+        "peint": {"run_name": peint_run},
+    }
+    model_names = {"base": base_label, "peint": peint_label}
+    return _spearman_bar_figure(
+        run_names, model_names, save_name or f"base_vs_peint_{base_column}.png",
+        palette=palette, figsize=(10, 4),
+    )
+
+
+def make_multimodel_spearman_figure(methods, save_name="multimodel_spearman.png", palette=None):
+    """N-model bar chart: side-by-side bars per assay type (SE error bars).
+
+    `methods` is an ordered list of dicts, each either
+      {"label": ..., "official": "<COLUMN>"}   released zero-shot baseline, or
+      {"label": ..., "run": "<run_dir>"}       a compute_fitness result dir.
+    """
+    run_names, model_names = {}, {}
+    for i, m in enumerate(methods):
+        key = f"m{i}"
+        if "official" in m:
+            run_names[key] = {"run_name": m["official"], "official": True}
+        else:
+            run_names[key] = {"run_name": m["run"]}
+        model_names[key] = m["label"]
+    return _spearman_bar_figure(run_names, model_names, save_name, palette=palette, figsize=(12, 5))
+
+
+# Our comparison: raw ESM-C / ESM2-150M (released) vs PEINT trained on each.
+# PEINT run dirs are compute_fitness outputs copied under test_lls/production/.
+_ESMC_ESM2_CONFIG = {
+    "esmc": {"base_column": "ESMC-300M", "peint_run": "peint_esmc300m", "label": "ESM-C 300M"},
+    "esm2_150m": {"base_column": "ESM2_150M", "peint_run": "peint_esm2_150m", "label": "ESM2 150M"},
+}
+
+
+def make_esmc_esm2_comparison():
+    """Produce the 1v1 base-vs-PEINT figures for each backbone plus the combined
+    4-model bar chart (raw ESM-C, PEINT/ESM-C, raw ESM2-150M, PEINT/ESM2-150M)."""
+    palettes_all = sns.color_palette()
+    for tier, cfg in _ESMC_ESM2_CONFIG.items():
+        make_base_vs_peint_spearman_figure(
+            base_column=cfg["base_column"],
+            peint_run=cfg["peint_run"],
+            base_label=cfg["label"],
+            peint_label=f"PEINT ({cfg['label']})",
+            save_name=f"base_vs_peint_{tier}.png",
+        )
+    # Pair each backbone's hue: ESM-C blues, ESM2 oranges (raw = light, PEINT = dark).
+    palette = ["#9ecae1", "#08519c", "#fdae6b", "#d94801"]
+    methods = [
+        {"label": "ESM-C 300M", "official": "ESMC-300M"},
+        {"label": "PEINT (ESM-C 300M)", "run": "peint_esmc300m"},
+        {"label": "ESM2 150M", "official": "ESM2_150M"},
+        {"label": "PEINT (ESM2 150M)", "run": "peint_esm2_150m"},
+    ]
+    return make_multimodel_spearman_figure(
+        methods, save_name="multimodel_esmc_esm2.png", palette=palette
+    )
+
+
 def main():
     import argparse
 
@@ -1715,6 +1847,7 @@ def main():
             "agg_vesm",
             "family_vesm",
             "mutant_depth_vesm",
+            "esmc_esm2",
         ],
         required=True,
         help=(
@@ -1759,6 +1892,9 @@ def main():
     elif args.plot == "mutant_depth_vesm":
         for tier in ("150M", "650M"):
             make_spearman_by_mutational_depth_figure_vesm(tier=tier)
+
+    elif args.plot == "esmc_esm2":
+        make_esmc_esm2_comparison()
 
 if __name__ == "__main__":
     main()
