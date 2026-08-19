@@ -1826,6 +1826,130 @@ def make_esmc_esm2_comparison():
     )
 
 
+# ---------------------------------------------------------------------------
+# Overall Spearman vs pretrained-backbone size (params scatter)
+# ---------------------------------------------------------------------------
+# Class-averaged Spearman on the common core set of assays vs the parameter count of the
+# frozen pretrained LM each method leverages (log x). Base single-sequence pLMs in gray;
+# PEINT models colored by backbone family (Okabe-Ito, CVD-safe), with a connector showing
+# each backbone's base->PEINT lift. Data sources: ESM2 / ESM-C / VESPA / VespaG from the
+# ProteinGym release (official_baselines); vESM via zero_shot.py --marginals wt (its
+# distilled protocol); PEINT via compute_fitness. VESPA (ProtT5-3B) and VespaG (ESM-3B),
+# like PEINT, add small heads on frozen LMs, so backbone size is the fair x for all.
+_PARAMS_MODELS = [
+    # (label, run_dir_in_local_data, backbone_params, is_peint, family)
+    ("ESM2-150M", "ESM2_150M", 150e6, False, "esm2"),
+    ("ESM2-650M", "ESM2_650M", 650e6, False, "esm2"),
+    ("ESM-C 300M", "ESMC-300M", 300e6, False, "esmc"),
+    ("VESPA", "VESPA", 3e9, False, "other"),
+    ("VespaG", "VespaG", 3e9, False, "other"),
+    ("ProGen2-small", "Progen2_small", 151e6, False, "progen"),
+    ("ProGen2-medium", "Progen2_medium", 764e6, False, "progen"),
+    ("ProGen2-large", "Progen2_large", 2.7e9, False, "progen"),
+    ("ProGen2-xlarge", "Progen2_xlarge", 6.4e9, False, "progen"),
+    ("Tranception-S", "Tranception_S_no_retrieval", 85e6, False, "tranception"),
+    ("Tranception-M", "Tranception_M_no_retrieval", 300e6, False, "tranception"),
+    ("Tranception-L", "Tranception_L_no_retrieval", 700e6, False, "tranception"),
+    ("PEINT (ESM2-150M)", "peint_150m", 150e6, True, "esm2"),
+    ("PEINT (ESM2-650M)", "peint_650m", 650e6, True, "esm2"),
+    ("PEINT (ESM-C 300M)", "peint_esmc300m", 300e6, True, "esmc"),
+]
+_FAMILY_COLOR = {"esm2": "#0072B2", "vesm": "#009E73", "esmc": "#D55E00"}  # Okabe-Ito
+_BASE_GRAY = "#9a9a9a"
+
+
+def _core_overall_spearman(models, aggregate="class", assay_type=None):
+    """Overall Spearman per model on the assays scored by *every* model (common core set).
+
+    assay_type=None uses all classes: aggregate='class' -> mean-of-class-means (ProteinGym
+    Average_Spearman), 'flat' -> mean over assays. Setting assay_type restricts to that one
+    ProteinGym function class and returns the mean over its assays (common to all models).
+    Returns (dict label->spearman, sorted common family list).
+    """
+    per = {}
+    for label, run, *_ in models:
+        f = VEP_RESULTS_DIR / run / "spearman_results.csv"
+        if not f.exists():
+            raise FileNotFoundError(f"{label}: missing {f} (stage it into local_data first)")
+        df = pd.read_csv(f).rename(columns={"DMS_id": "family"})
+        if assay_type is not None:
+            df = df[df["assay_type"] == assay_type]
+        per[label] = df.set_index("family")
+    common = sorted(set.intersection(*[set(df.index) for df in per.values()]))
+
+    def agg(df):
+        d = df.loc[common]
+        if assay_type is not None or aggregate == "flat":
+            return d["spearman"].mean()
+        return d.groupby("assay_type")["spearman"].mean().mean()
+
+    return {label: agg(df) for label, df in per.items()}, common
+
+
+def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type=None):
+    """Scatter of overall Spearman vs pretrained-backbone params (log x), gray base pLMs
+    vs color-by-family PEINT, connectors showing the base->PEINT lift at each scale.
+
+    assay_type restricts to one ProteinGym function class (e.g. 'OrganismalFitness')."""
+    from matplotlib.lines import Line2D
+
+    vals, common = _core_overall_spearman(_PARAMS_MODELS, aggregate, assay_type)
+    if assay_type is not None:
+        ylab = f"Spearman ρ ({assay_type})"
+        title = f"VEP {assay_type} vs backbone size — ProteinGym DMS ({len(common)} assays)"
+        save_name = save_name or f"params_vs_spearman_{assay_type}.png"
+    else:
+        ylab = "Class-averaged Spearman ρ" if aggregate == "class" else "Mean Spearman ρ"
+        title = f"VEP vs backbone size — ProteinGym DMS ({len(common)} core assays)"
+        save_name = save_name or "params_vs_spearman.png"
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+
+    # base -> PEINT connectors at matching (family, params)
+    base = {(fam, p): vals[l] for l, _, p, ip, fam in _PARAMS_MODELS if not ip}
+    peint = {(fam, p): vals[l] for l, _, p, ip, fam in _PARAMS_MODELS if ip}
+    for fam, p in set(base) & set(peint):
+        ax.plot([p, p], [base[(fam, p)], peint[(fam, p)]], color="0.8", lw=1.0, zorder=1)
+
+    for label, _, p, is_peint, fam in _PARAMS_MODELS:
+        y = vals[label]
+        color = _FAMILY_COLOR[fam] if is_peint else _BASE_GRAY
+        ax.scatter(p, y, s=95 if is_peint else 60, marker="o", color=color,
+                   edgecolor="white", linewidth=0.8, zorder=3 if is_peint else 2)
+        ax.annotate(label, (p, y),
+                    xytext=(6, 5 if is_peint else -11), textcoords="offset points",
+                    fontsize=7, color=color if is_peint else "0.45",
+                    fontweight="bold" if is_peint else "normal")
+
+    ax.set_xscale("log")
+    ax.set_xticks([1e8, 3e8, 1e9, 3e9, 1e10])
+    ax.set_xticklabels(["100M", "300M", "1B", "3B", "10B"])
+    ax.set_xlim(7.0e7, 8.5e9)
+    ax.set_xlabel("Pretrained backbone parameters")
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    handles = [
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=_BASE_GRAY, markersize=8, label="base pLM (zero-shot)"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=_FAMILY_COLOR["esm2"], markersize=8, label="PEINT / ESM2"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=_FAMILY_COLOR["esmc"], markersize=8, label="PEINT / ESM-C"),
+    ]
+    ax.legend(handles=handles, frameon=False, fontsize=8, loc="lower right")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", alpha=0.3, lw=0.5)
+    fig.tight_layout()
+
+    save_path = _fig_path("params", save_name)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
+    pd.DataFrame(
+        [(l, int(p), "PEINT" if ip else "base", fam, vals[l]) for l, _, p, ip, fam in _PARAMS_MODELS],
+        columns=["model", "backbone_params", "type", "family", "spearman"],
+    ).to_csv(save_path.with_suffix(".csv"), index=False)
+    print(f"wrote {save_path} | {len(common)} core assays")
+    for l, _, _p, _ip, _f in _PARAMS_MODELS:
+        print(f"  {l:22s} {vals[l]:.4f}")
+    return ax
+
+
 def main():
     import argparse
 
@@ -1848,6 +1972,7 @@ def main():
             "family_vesm",
             "mutant_depth_vesm",
             "esmc_esm2",
+            "params",
         ],
         required=True,
         help=(
@@ -1895,6 +2020,10 @@ def main():
 
     elif args.plot == "esmc_esm2":
         make_esmc_esm2_comparison()
+
+    elif args.plot == "params":
+        make_params_vs_spearman_figure()
+        make_params_vs_spearman_figure(assay_type="OrganismalFitness")
 
 if __name__ == "__main__":
     main()
