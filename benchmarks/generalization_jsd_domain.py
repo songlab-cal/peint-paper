@@ -17,6 +17,7 @@ Assumes the alignment pipeline has been run. First run fetches + decompresses th
     python -m benchmarks.generalization_jsd_domain
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -24,11 +25,36 @@ import pandas as pd
 
 import paper_config as cfg
 from paper import generalization as gen
-from paper.jsd import REAL_OTHER_SPLIT
+from paper.jsd import REAL, REAL_OTHER_SPLIT
 from paper.splits import generate_tree_split
 from figures.figure3_conservation import DEFAULT_CONSERVATION_THRESHOLD, model_msa_dirs
 
-FOCUS_MODELS = ["PEINT (Progressive)", REAL_OTHER_SPLIT, "LG+S256"]
+# Plotted models + order (Antoine): LG+S256, PEINT (ESM2), PEINT (ESM-C), Real.
+FOCUS_MODELS = ["LG+S256", "PEINT (Progressive)", "PEINT (ESM-C)", REAL_OTHER_SPLIT]
+FOCUS_LABELS = {"PEINT (Progressive)": "PEINT (ESM2)", "PEINT (ESM-C)": "PEINT (ESM-C)",
+                REAL_OTHER_SPLIT: "Real"}
+
+# ESM-C (rev2) is folded in as a first-class model using ITS OWN alignment frame (rev2 mafft-add:
+# its real reference + its PEINT MSAs). Each family's JSD is computed once per frame; domain seq1
+# residue ranges (frame-independent) are mapped to each frame's columns. This is not a monkeypatch
+# merge — ESM-C is just another frame in the build.
+_ESMC_MAFFT = os.path.join(
+    os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR",
+                   os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc")),
+    "mafft_add",
+)
+
+
+def _jsd_frames():
+    """List of (msa_dirs, emit_models) frames. emit_models=None means every model in that frame's
+    per-site table (rev1); the ESM-C frame emits only PEINT (ESM-C) so the shared Real baseline is
+    not double-counted."""
+    return [
+        (model_msa_dirs(), None),
+        ({REAL: os.path.join(_ESMC_MAFFT, "old_sequences"),
+          "PEINT (ESM-C)": os.path.join(_ESMC_MAFFT, "peint_progressive_dir")},
+         {"PEINT (ESM-C)"}),
+    ]
 
 
 def build_domain_jsd_table(force: bool = False) -> pd.DataFrame:
@@ -49,8 +75,8 @@ def build_domain_jsd_table(force: bool = False) -> pd.DataFrame:
     # vocabulary. Taking the union of the two training vocabularies is the conservative choice: it
     # minimizes false "novel" labels from either method missing a family.
     train_vocab = gen.hmm_pfam_vocab(gen.train_families()) | gen.partition("pfam_family")["train_vocab"]
-    msa_dirs = model_msa_dirs()
     tree_dir = str(cfg.require(cfg.TREE_DIR))
+    frames = _jsd_frames()
 
     rows = []
     skipped = 0
@@ -59,64 +85,51 @@ def build_domain_jsd_table(force: bool = False) -> pd.DataFrame:
         if not hits:
             continue
         try:
-            _, per_site = gen.fast_family_jsd(msa_dirs, family, generate_tree_split(tree_dir, family),
-                                              DEFAULT_CONSERVATION_THRESHOLD)
-            res2col = gen.seq1_residue_to_column(family)
+            ts = generate_tree_split(tree_dir, family)
         except (FileNotFoundError, ValueError, KeyError):
             skipped += 1
             continue
-        scored_cols = {int(i) for i in per_site.index}
-
-        # accumulate scored columns per domain-class for this family
-        cols_by_class = {"novel": set(), "seen": set()}
-        for h in hits:
-            cls = "novel" if h["acc"] not in train_vocab else "seen"
-            dom_cols = {res2col[r] for r in range(h["start"], h["end"] + 1) if r in res2col}
-            cols_by_class[cls] |= (dom_cols & scored_cols)
-
-        for cls, cols in cols_by_class.items():
-            if not cols:
+        for msa_dirs, emit in frames:
+            # Each frame (rev1, ESM-C rev2) uses its OWN real reference + seq1 column mapping.
+            try:
+                _, per_site = gen.fast_family_jsd(msa_dirs, family, ts, DEFAULT_CONSERVATION_THRESHOLD)
+                res2col = gen.seq1_residue_to_column(family, msa_dir=msa_dirs[REAL])
+            except (FileNotFoundError, ValueError, KeyError):
+                skipped += 1
                 continue
-            idx = [str(c) for c in sorted(cols)]
-            sub = per_site.loc[idx]
-            for model in per_site.columns:
-                rows.append({
-                    "family": family, "domain_class": cls, "model": model,
-                    "jsd": float(sub[model].mean()), "n_sites": len(idx),
-                })
+            scored_cols = {int(i) for i in per_site.index}
+            cols_by_class = {"novel": set(), "seen": set()}
+            for h in hits:
+                cls = "novel" if h["acc"] not in train_vocab else "seen"
+                dom_cols = {res2col[r] for r in range(h["start"], h["end"] + 1) if r in res2col}
+                cols_by_class[cls] |= (dom_cols & scored_cols)
+            models = list(per_site.columns) if emit is None else [m for m in per_site.columns if m in emit]
+            for cls, cols in cols_by_class.items():
+                if not cols:
+                    continue
+                idx = [str(c) for c in sorted(cols)]
+                sub = per_site.loc[idx]
+                for model in models:
+                    rows.append({
+                        "family": family, "domain_class": cls, "model": model,
+                        "jsd": float(sub[model].mean()), "n_sites": len(idx),
+                    })
     if skipped:
-        print(f"(skipped {skipped} families with no computable JSD)")
+        print(f"(skipped {skipped} family/frame combos with no computable JSD)")
     df = pd.DataFrame(rows)
     df.to_csv(cache, index=False)
     return df
 
 
 def _plot(df: pd.DataFrame) -> None:
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from paper.plot_style import _set_publication_style
-
-    _set_publication_style()
-    plot_df = df[df["model"].isin(FOCUS_MODELS)].copy()
-    plot_df["model"] = pd.Categorical(plot_df["model"], categories=FOCUS_MODELS, ordered=True)
-    fig, ax = plt.subplots(figsize=(1.6 * len(FOCUS_MODELS), 3))
-    sns.boxplot(data=plot_df, x="model", y="jsd", hue="domain_class",
-                hue_order=["seen", "novel"], palette={"seen": "#9ecae1", "novel": "#fb6a4a"},
-                showfliers=False, width=0.7, linewidth=0.5, ax=ax)
-    sns.stripplot(data=plot_df, x="model", y="jsd", hue="domain_class", hue_order=["seen", "novel"],
-                  dodge=True, size=2, alpha=0.4, palette={"seen": "#3182bd", "novel": "#cb181d"},
-                  ax=ax, legend=False)
-    ax.set_xlabel("")
-    ax.set_ylabel("Mean JSD over domain sites", fontsize=9)
-    ax.set_title("Novel vs seen Pfam domain (within held-out families)", fontsize=8)
-    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
-    h, l = ax.get_legend_handles_labels()
-    ax.legend(h[:2], l[:2], fontsize=7, frameon=False)
-    sns.despine(ax=ax)
-    out = Path(cfg.GENERALIZATION_DIR)
-    fig.savefig(out / "generalization_jsd_domain.pdf", bbox_inches="tight")
-    fig.savefig(out / "generalization_jsd_domain.png", bbox_inches="tight", dpi=300)
-    plt.close(fig)
+    """Grouped by novelty (all seen, then all novel); model as the inner hue, model_style colors."""
+    gen.plot_grouped_by_novelty(
+        df, "jsd", "generalization_jsd_domain",
+        model_order=FOCUS_MODELS, model_labels=FOCUS_LABELS,
+        stratum_col="domain_class",  # per-domain novelty, already in the table
+        value_label="Mean JSD over domain sites",
+        title="Novel vs seen Pfam domain (within held-out families)",
+    )
 
 
 def main() -> None:
@@ -197,8 +210,9 @@ def _plot_paired(both: pd.DataFrame) -> None:
     if both.empty:
         return
     _set_publication_style()
-    panel_models = ["PEINT (Progressive)", REAL_OTHER_SPLIT]
-    labels = {"PEINT (Progressive)": "PEINT", REAL_OTHER_SPLIT: "Real (eval subtree)"}
+    panel_models = ["PEINT (Progressive)", "PEINT (ESM-C)", REAL_OTHER_SPLIT]
+    labels = {"PEINT (Progressive)": "PEINT (ESM2)", "PEINT (ESM-C)": "PEINT (ESM-C)",
+              REAL_OTHER_SPLIT: "Real (eval subtree)"}
     fig, axes = plt.subplots(1, len(panel_models), figsize=(2.5 * len(panel_models), 3), sharey=True)
     n_pairs = 0
 

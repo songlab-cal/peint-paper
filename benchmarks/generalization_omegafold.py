@@ -2,12 +2,13 @@
 
 Unlike AF2Rank (which threads onto the experimental structure), OmegaFold folds each simulated
 sequence from scratch, so its pLDDT reads out whether the simulated sequence encodes a foldable
-protein on its own. This is the natural place to look at the *structural* holdout — families whose
-superfamily was never seen in training — so we report both the Pfam-family and the structural
-(ECOD, SCOPe) splits. As in the AF2Rank test, "Real (other split)" is the difficulty control.
+protein on its own — split by whether the held-out family's Pfam family was seen in training.
 
-Assumes the OmegaFold benchmark has already been run (``omegafold_plddt.csv``). Fetches the
-annotation data itself. Run from the repo root::
+Reads the per-(family, model) pLDDT table that figure3_structure_metrics writes
+(``figure3_omegafold_plddt_ecdf.csv``), which already carries every model — WAG/LG/mixtures,
+PEINT (ESM2), **PEINT (ESM-C)** (parsed from its own rev2 OmegaFold structures), and Real — under
+one uniform per-family aggregation, so ESM-C is a first-class model here, not a merged one-off.
+Fetches the annotation data itself. Run from the repo root::
 
     python -m benchmarks.generalization_omegafold
 """
@@ -17,35 +18,31 @@ import pandas as pd
 import paper_config as cfg
 from paper import generalization as gen
 
+# Plotted models + order (Antoine): LG+S256, PEINT (ESM2), PEINT (ESM-C), Real.
+FOCUS_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
+
 
 def load_omegafold() -> pd.DataFrame:
-    """Long-form OmegaFold pLDDT (0-100): one row per (family, model)."""
-    return pd.read_csv(cfg.require(cfg.RESULTS_DIR / "omegafold_plddt.csv"))
+    """Long-form OmegaFold pLDDT (0-100): one row per (family, model), all models incl ESM-C."""
+    return pd.read_csv(cfg.FIGURES_DIR / "figure3_omegafold_plddt_ecdf.csv")
 
 
 def main() -> None:
     gen.ensure_annotations()
     df = load_omegafold()
+    print(f"OmegaFold: {df['family'].nunique()} families, models={sorted(df['model'].unique())}")
 
-    print(f"OmegaFold: {df['family'].nunique()} families, {df['model'].nunique()} models")
-    # Pfam family is the powered test; ECOD + SCOPe are the (underpowered) structural holdouts.
-    stats = gen.report_stratified(
+    plotted = gen.plot_grouped_by_novelty(
         df, "plddt", "generalization_omegafold_plddt",
-        schemes=("pfam_family", "ecod_hgroup", "scop_superfamily"), value_label="OmegaFold pLDDT",
+        model_order=FOCUS_MODELS, scheme="pfam_family",
+        value_label="OmegaFold pLDDT",
+        title="Novel vs seen Pfam family (held-out families)",
     )
-
-    from paper.splits import REAL_OTHER_SPLIT
-    print("\nNovel vs seen OmegaFold pLDDT (median), per model:")
-    for scheme in stats["scheme"].unique():
-        print(f"\n  [{scheme}]")
-        for _, r in stats[stats["scheme"] == scheme].iterrows():
-            flag = "  <-- PEINT" if r["model"].startswith("PEINT") else (
-                "  <-- Real baseline" if r["model"] == REAL_OTHER_SPLIT else "")
-            print(f"    {r['model']:<28} novel={r.get('median_novel', float('nan')):.1f} "
-                  f"seen={r.get('median_seen', float('nan')):.1f} "
-                  f"p={r['p']:.3g} p_matched={r['p_matched']:.3g} "
-                  f"delta={r['cliffs_delta']:+.2f}{flag}")
-    print(f"\nWrote tables + figure to {cfg.GENERALIZATION_DIR}")
+    med = (plotted.groupby(["_stratum", "model"], observed=True)["plddt"].median()
+           .unstack("_stratum"))
+    print("\nMedian OmegaFold pLDDT (seen vs novel Pfam family), per model:")
+    print(med.reindex(FOCUS_MODELS).round(1).to_string())
+    print(f"\nWrote figure to {cfg.GENERALIZATION_DIR}")
 
 
 if __name__ == "__main__":

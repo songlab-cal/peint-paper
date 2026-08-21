@@ -730,6 +730,74 @@ def report_stratified(
     return stats
 
 
+def plot_grouped_by_novelty(
+    df_long: pd.DataFrame,
+    value_col: str,
+    out_stem: str,
+    *,
+    model_order: Sequence[str],
+    model_labels: Optional[Dict[str, str]] = None,
+    scheme: str = "pfam_family",
+    stratum_col: Optional[str] = None,
+    value_label: str = "",
+    title: str = "",
+    out_dir: Optional[str] = None,
+    family_col: str = "family",
+    model_col: str = "model",
+) -> pd.DataFrame:
+    """Grouped boxplot with novelty as the OUTER group (all seen, then all novel) and model as
+    the inner hue, colored by the shared paper.model_style palette (so it matches every other
+    figure). ``model_order`` sets both which models appear and their left-to-right order.
+
+    Novelty source: if ``stratum_col`` is given, that column already holds "seen"/"novel"
+    (e.g. per-domain novelty); otherwise family-level novelty is derived from ``partition(scheme)``.
+    Returns the plotted long df.
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+    from paper.model_style import model_colors
+
+    _set_publication_style()
+    df = df_long[df_long[model_col].isin(model_order)].copy()
+    if stratum_col is not None:
+        df["_stratum"] = df[stratum_col]
+    else:
+        part = partition(scheme)
+        strat = {f: "novel" for f in part["novel"]}
+        strat.update({f: "seen" for f in part["seen"]})
+        df["_stratum"] = df[family_col].map(strat)
+    df = df[df["_stratum"].isin(["seen", "novel"])].copy()
+    df[model_col] = pd.Categorical(df[model_col], categories=list(model_order), ordered=True)
+
+    colors = model_colors()
+    labels = model_labels or {}
+    fig, ax = plt.subplots(figsize=(0.7 * len(model_order) * 2 + 1.5, 3.2))
+    sns.boxplot(data=df, x="_stratum", y=value_col, hue=model_col,
+                order=["seen", "novel"], hue_order=list(model_order),
+                palette={m: colors[m] for m in model_order},
+                showfliers=False, width=0.72, linewidth=0.5, fliersize=0, ax=ax)
+    ax.set_xlabel("")
+    ax.set_ylabel(value_label or value_col, fontsize=9)
+    n_seen = df.loc[df["_stratum"] == "seen", family_col].nunique()
+    n_novel = df.loc[df["_stratum"] == "novel", family_col].nunique()
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels([f"Seen\n(n={n_seen})", f"Novel\n(n={n_novel})"], fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9)
+    h, _l = ax.get_legend_handles_labels()
+    ax.legend(h[:len(model_order)], [labels.get(m, m) for m in model_order],
+              title="Model", fontsize=7.5, title_fontsize=8,
+              loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+    sns.despine(ax=ax)
+    out_dir = Path(out_dir) if out_dir else Path(cfg.GENERALIZATION_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / f"{out_stem}.pdf", bbox_inches="tight")
+    fig.savefig(out_dir / f"{out_stem}.png", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    return df
+
+
 def main() -> None:
     """Build the labels for all 15,051 families and print the coverage / novelty summary."""
     labels = build_family_labels()
