@@ -336,6 +336,8 @@ def main(args):
         families=families,
         model_path=args.peint_checkpoint_path,
         msa_dir=None,
+        max_batch_size=args.peint_max_batch_size,
+        family_bucket_size=args.peint_family_bucket_size,
         use_likelihood_filtering=args.use_likelihood_filtering,
         output_sequences_dir=f"{args.out_path}/simulations/peint_progressive{suffix}",
     )["output_sequences_dir"]
@@ -347,6 +349,8 @@ def main(args):
         model_path=args.peint_checkpoint_path,
         msa_dir=None,
         single_shot=True,
+        max_batch_size=args.peint_max_batch_size,
+        family_bucket_size=args.peint_family_bucket_size,
         use_likelihood_filtering=args.use_likelihood_filtering,
         output_sequences_dir=f"{args.out_path}/simulations/peint_single_shot{suffix}",
     )["output_sequences_dir"]
@@ -549,6 +553,17 @@ if __name__ == "__main__":
         type=str,
         default=str(cfg.PEINT_CHECKPOINT),
         help="PEINT checkpoint (defaults to the model shipped with peint)",
+    )
+    parser.add_argument(
+        "--peint_max_batch_size", type=int, default=64,
+        help="Max sequences per GPU forward during PEINT simulation. Lower for larger "
+             "backbones (e.g. ESM-C) to avoid OOM.",
+    )
+    parser.add_argument(
+        "--peint_family_bucket_size", type=int, default=32,
+        help="Families per length-sorted simulation bucket: families are sorted by root "
+             "sequence length and simulated in buckets so similar lengths decode together "
+             "(better GPU use, no short-family-waits-on-long-family).",
     )
     parser.add_argument(
         "--root_sequences_dir",

@@ -53,12 +53,27 @@ from figures.figure3_conservation import model_msa_dirs
 # --- models: same order/labels/colors as the JSD figure (figure3_conservation.BOXPLOT_MODELS /
 #     BOXPLOT_LABELS): classical simulators first (increasing complexity), then PEINT, then Real.
 #     PEINT (Progressive) is relabelled "PEINT"; PEINT (Single Shot) is dropped. ---
-MODEL_ORDER = ["WAG", "LG", "LG4X", "LG+C60", "LG+S256", "PEINT", "Real"]
-# display label -> directory key used by model_msa_dirs()/omegafold
+MODEL_ORDER = ["WAG", "LG", "LG4X", "LG+C60", "LG+S256",
+               "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
+# display label -> directory key used by model_msa_dirs()/omegafold. Both PEINT models use
+# the "PEINT (Progressive)" subdir key; they are disambiguated by MODEL_RESULTS_DIR / MSA dirs
+# (ESM2 = rev1, ESM-C = rev2), so ESM-C is a first-class model, not a merged one-off.
 DIRKEY = {
-    "Real": "Real", "PEINT": "PEINT (Progressive)", "WAG": "WAG", "LG": "LG",
+    "Real": "Real", "PEINT (ESM2)": "PEINT (Progressive)",
+    "PEINT (ESM-C)": "PEINT (Progressive)", "WAG": "WAG", "LG": "LG",
     "LG4X": "LG4X", "LG+C60": "LG+C60", "LG+S256": "LG+S256",
 }
+# Rev1 models read cfg.RESULTS_DIR; ESM-C reads the rev2 ESM-C results (its own alignment
+# frame for A1, its own OmegaFold structures for A2). A1 threads each model through ITS
+# revision's seq1 frame, which is revision-independent once threaded -> comparable.
+_R2 = os.environ.get(
+    "PEINT_PAPER_ESMC_RESULTS_DIR",
+    os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc"),
+)
+MODEL_RESULTS_DIR = {m: str(cfg.RESULTS_DIR) for m in MODEL_ORDER}
+MODEL_RESULTS_DIR["PEINT (ESM-C)"] = _R2
+# Old CSVs (and the rev1 run) label the ESM2 PEINT simply "PEINT"; map it forward.
+LEGACY_MODEL_RENAME = {"PEINT": "PEINT (ESM2)"}
 # x-axis labels matching the JSD figure; "Real" here is the eval-subtree (non-root split) real data.
 LABELS = {"Real": "Real (eval subtree)"}
 LEAF = re.compile(r"^seq\d+$")
@@ -68,11 +83,21 @@ OUT_DIR = Path(cfg.FIGURES_DIR) / "esmif"
 
 
 def model_colors():
-    """Same seaborn-default palette as figure3_pcp_mutation_counts, extended for LG4X/LG+C60."""
-    import seaborn as sns
-    p = sns.color_palette()
-    return {"Real": p[4], "PEINT": p[2], "WAG": p[0], "LG": p[1],
-            "LG4X": p[3], "LG+C60": p[5], "LG+S256": p[6]}
+    """Canonical colors from paper.model_style (shared with the JSD / ECDF / PCP figures)."""
+    from paper.model_style import model_colors as shared
+    return shared()
+
+
+def _a1_dirs():
+    """(msa_dir, real_dir) per model for Approach 1. Rev1 models come from the shared
+    model_msa_dirs(); ESM-C overrides to its rev2 mafft-add frame (its own real seq1)."""
+    mm = model_msa_dirs()
+    msa = {m: mm[DIRKEY[m]] for m in MODEL_ORDER if DIRKEY[m] in mm}
+    real = {m: mm["Real"] for m in MODEL_ORDER}
+    esmc_mafft = os.path.join(_R2, "mafft_add")
+    msa["PEINT (ESM-C)"] = os.path.join(esmc_mafft, "peint_progressive_dir")
+    real["PEINT (ESM-C)"] = os.path.join(esmc_mafft, "old_sequences")
+    return msa, real
 
 
 # ======================================================================================
@@ -114,35 +139,52 @@ def _thread_and_identity(leaf_gapped: str, keep, gt_seq: str):
 # ======================================================================================
 # Approach 1 — GT-structure likelihood
 # ======================================================================================
-def run_approach1(families):
-    """Return (family_df, perleaf_df). One row per (family, model[, leaf])."""
+def run_approach1(families, existing=None, existing_leaf=None):
+    """Return (family_df, perleaf_df). One row per (family, model[, leaf]).
+
+    ``existing``/``existing_leaf`` (from a prior run's CSVs) are reused verbatim; only the
+    (family, model) pairs not already present are computed. Each model is threaded through
+    ITS OWN revision's seq1 frame (rev1 vs ESM-C rev2), so ESM-C is a first-class model.
+    """
     import esm.inverse_folding as invf  # esmif import already ran the biotite shim
+    msa_dirs, real_dirs = _a1_dirs()
+    done = set()
+    fam_rows = existing.to_dict("records") if existing is not None and len(existing) else []
+    leaf_rows = existing_leaf.to_dict("records") if existing_leaf is not None and len(existing_leaf) else []
+    if fam_rows:
+        done = {(r["family"], r["model"]) for r in fam_rows}
+    todo = [(f, m) for f in families for m in MODEL_ORDER if (f, m) not in done]
+    if not todo:
+        print(f"  [A1] all ({len(families)}x{len(MODEL_ORDER)}) pairs reused; nothing to compute")
+        return pd.DataFrame(fam_rows), pd.DataFrame(leaf_rows)
+    print(f"  [A1] computing {len(todo)} (family, model) pairs; reusing {len(done)}")
     esmif.load_model()
-    mm = model_msa_dirs()
-    fam_rows, leaf_rows = [], []
     n_ok = 0
     for i, fam in enumerate(families):
-        if not _has_inputs(fam):
+        pend = [m for m in MODEL_ORDER if (fam, m) not in done]
+        if not pend or not _has_inputs(fam):
             continue
         try:
             leaves = nonroot_leaves(fam)
-            old = read_msa(os.path.join(mm["Real"], f"{fam}.txt"))
-            s1 = old["seq1"]
-            keep = esmif.reference_columns(s1, gap_character)
             coords, gt_seq = invf.util.load_coords(
                 os.path.join(str(cfg.GROUND_TRUTH_STRUCTURE_DIR), f"{fam}.pdb"), fam.split("_")[-1]
             )
         except Exception as e:  # pragma: no cover - skip unusable families, keep going
             print(f"  [A1] skip {fam}: {e}")
             continue
-        ncol = len(s1)
-        for disp in MODEL_ORDER:
+        frame_cache = {}  # real_dir -> (keep, ncol)
+        for disp in pend:
             try:
-                path = os.path.join(mm[DIRKEY[disp]], f"{fam}.txt")
+                real_dir = real_dirs[disp]
+                if real_dir not in frame_cache:
+                    s1 = read_msa(os.path.join(real_dir, f"{fam}.txt"))["seq1"]
+                    frame_cache[real_dir] = (esmif.reference_columns(s1, gap_character), len(s1))
+                keep, ncol = frame_cache[real_dir]
+                path = os.path.join(msa_dirs[disp], f"{fam}.txt")
                 if not os.path.exists(path):
                     continue
                 msa = read_msa(path)
-                if len(next(iter(msa.values()))) != ncol:  # not in the shared reference frame
+                if len(next(iter(msa.values()))) != ncol:  # not in that model's reference frame
                     continue
                 seqs, masks, idents, names = [], [], [], []
                 for n in leaves:
@@ -174,12 +216,23 @@ def run_approach1(families):
 # ======================================================================================
 # Approach 2 — self-consistency on OmegaFold structures
 # ======================================================================================
-def run_approach2(families):
+def run_approach2(families, existing=None):
+    """Self-consistency recovery per (family, model). ``existing`` rows are reused; only the
+    missing (family, model) pairs are computed. Each model's OmegaFold structures come from
+    ITS revision's results dir (rev1 vs ESM-C rev2), so ESM-C is a first-class model."""
+    rows = existing.to_dict("records") if existing is not None and len(existing) else []
+    done = {(r["family"], r["model"]) for r in rows}
+    todo = [(f, m) for f in families for m in MODEL_ORDER if (f, m) not in done]
+    if not todo:
+        print(f"  [A2] all pairs reused; nothing to compute")
+        return pd.DataFrame(rows)
+    print(f"  [A2] computing {len(todo)} (family, model) pairs; reusing {len(done)}")
     esmif.load_model()
-    rows = []
     for i, fam in enumerate(families):
         for disp in MODEL_ORDER:
-            sdir = Path(cfg.RESULTS_DIR) / "omegafold" / fam / DIRKEY[disp] / "structures"
+            if (fam, disp) in done:
+                continue
+            sdir = Path(MODEL_RESULTS_DIR[disp]) / "omegafold" / fam / DIRKEY[disp] / "structures"
             pdbs = sorted(glob.glob(str(sdir / "seq*.pdb")))
             if not pdbs:
                 continue
@@ -282,10 +335,32 @@ def write_rebuttal(a1, a2, strat):
     (OUT_DIR / "REBUTTAL_esmif.md").write_text("\n".join(lines))
 
 
+def _load_prior(path, rename=None, drop_models=()):
+    """Load a prior ESM-IF CSV, optionally relabeling model names and dropping models."""
+    if not os.path.exists(str(path)):
+        return pd.DataFrame()
+    d = pd.read_csv(path)
+    if rename:
+        d["model"] = d["model"].replace(rename)
+    if drop_models:
+        d = d[~d["model"].isin(list(drop_models))].copy()
+    return d
+
+
+def _concat(frames):
+    frames = [f for f in frames if f is not None and len(f)]
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True).drop_duplicates(["family", "model"], keep="first")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None, help="only the first N eval families")
     ap.add_argument("--approach", choices=["1", "2", "both"], default="both")
+    ap.add_argument("--no-reuse", action="store_true",
+                    help="recompute every model from scratch (default reuses prior CSVs, "
+                         "computing only the missing ESM-C columns)")
     args = ap.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     families = eval_families()
@@ -294,20 +369,36 @@ def main():
     print(f"ESM-IF validation over {len(families)} families; models={MODEL_ORDER}")
     print(f"output -> {OUT_DIR}")
 
+    # Reuse prior results: rev1 CSVs supply the 7 established models (PEINT->"PEINT (ESM2)");
+    # the wrapper's ESM-C A1 CSV supplies PEINT (ESM-C). Only ESM-C A2 is left to compute.
+    r1, rc = {"PEINT": "PEINT (ESM2)"}, {"PEINT": "PEINT (ESM-C)"}
+    FIG = Path(cfg.FIGURES_DIR)
+    a1x = a1lx = a2x = None
+    if not args.no_reuse:
+        a1x = _concat([
+            _load_prior(OUT_DIR / "esmif_gt_likelihood.csv", r1),
+            _load_prior(FIG / "esmif_a1_esmc_rev2.csv", rc, drop_models=["Real"]),
+        ])
+        a1lx = _concat([
+            _load_prior(OUT_DIR / "esmif_gt_likelihood_perleaf.csv", r1),
+            _load_prior(FIG / "esmif_a1_esmc_rev2_perleaf.csv", rc, drop_models=["Real"]),
+        ])
+        a2x = _load_prior(OUT_DIR / "esmif_selfconsistency.csv", r1)
+
     a1 = a2 = None
     if args.approach in ("1", "both"):
         print("[Approach 1] GT-structure likelihood ...")
-        a1, a1_leaf = run_approach1(families)
+        a1, a1_leaf = run_approach1(families, existing=a1x, existing_leaf=a1lx)
         a1.to_csv(OUT_DIR / "esmif_gt_likelihood.csv", index=False)
         a1_leaf.to_csv(OUT_DIR / "esmif_gt_likelihood_perleaf.csv", index=False)
-        _boxplot(a1, "ll", "ESM-IF log-likelihood", "Likelihood on the ground-truth structure",
+        _boxplot(a1, "ll", "ESM-IF log-likelihood", "Likelihood on Seq1 Structure",
                  "esmif_approach1_gt_likelihood")
         _divergence_plot(a1_leaf, "esmif_approach1_divergence_controlled")
         print("  medians:", _median_table(a1, "ll"))
 
     if args.approach in ("2", "both"):
         print("[Approach 2] self-consistency ...")
-        a2 = run_approach2(families)
+        a2 = run_approach2(families, existing=a2x)
         if len(a2):
             a2.to_csv(OUT_DIR / "esmif_selfconsistency.csv", index=False)
             _boxplot(a2, "recovery", "ESM-IF sequence recovery",
@@ -322,7 +413,8 @@ def main():
             gen.ensure_annotations()
             gen.report_stratified(
                 a1, "ll", "esmif_gt_likelihood_stratified",
-                focus_models=[m for m in ["LG+S256", "PEINT", "Real"] if m in set(a1["model"])],
+                focus_models=[m for m in ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
+                              if m in set(a1["model"])],
                 value_label="ESM-IF LL (GT structure)", out_dir=str(OUT_DIR),
             )
             strat = True
