@@ -26,7 +26,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import logomaker
 from tqdm import tqdm
 
 from paper.jsd import (
@@ -38,6 +37,7 @@ from paper.jsd import (
     signed_residue_contributions,
 )
 from paper.splits import generate_tree_split
+from paper.model_style import model_colors
 import paper_config as cfg
 
 mpl.rcParams["pdf.fonttype"] = 42
@@ -61,11 +61,30 @@ BOXPLOT_MODELS = [
     "LG+C60",
     "LG+S256",
     "PEINT (Progressive)",
+    "PEINT (ESM-C)",
     REAL_OTHER_SPLIT,
 ]
 BOXPLOT_LABELS = {
-    "PEINT (Progressive)": "PEINT",
+    "PEINT (Progressive)": "PEINT (ESM2)",
+    "PEINT (ESM-C)": "PEINT (ESM-C)",
     REAL_OTHER_SPLIT: "Real (eval subtree)",
+}
+
+# Models whose aligned MSAs live in a different revision's alignment frame and so are scored
+# against THEIR OWN real reference, then folded into the boxplot as standard models (JSD-vs-real
+# is a frame-consistent per-family scalar, so this is comparable across revisions; the real data
+# is identical). The ESM-C rev2 run reused rev1's classical baselines but re-aligned real + PEINT
+# in rev2. Add future revisions here and they are picked up automatically.
+_ESMC_MAFFT = os.path.join(
+    os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR",
+                   os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc")),
+    "mafft_add",
+)
+EXTRA_REVISION_MODELS = {
+    "PEINT (ESM-C)": {
+        "dir": os.path.join(_ESMC_MAFFT, "peint_progressive_dir"),
+        "real": os.path.join(_ESMC_MAFFT, "old_sequences"),
+    },
 }
 
 
@@ -113,6 +132,9 @@ def plot_conservation_logos(
     output_dir: str,
 ) -> pd.DataFrame:
     """2x2 logo grid for one family: real distribution + per-model signed divergence."""
+    # Lazy import: only the sequence-logo panels need logomaker. The benchmark driver uses
+    # only plot_jsd_boxplot, so this keeps logomaker an optional dependency.
+    import logomaker
     tree_split = generate_tree_split(str(cfg.require(cfg.TREE_DIR)), family)
     distributions, sites = family_site_distributions(
         msa_dirs, family, tree_split, conservation_threshold
@@ -203,6 +225,35 @@ def collect_family_jsd(
     return pd.DataFrame.from_dict(rows, orient="index")
 
 
+def collect_extra_revision_jsd(
+    families: List[str],
+    conservation_threshold: float,
+    extra_models: Dict[str, Dict[str, str]] = EXTRA_REVISION_MODELS,
+) -> pd.DataFrame:
+    """Per-family mean JSD for each cross-revision model, each scored against ITS OWN real
+    reference (its alignment frame). Returns a df with one column per extra model, indexed by
+    family — ready to ``join`` onto the standard :func:`collect_family_jsd` result."""
+    tree_dir = str(cfg.require(cfg.TREE_DIR))
+    cols = {}
+    for name, spec in extra_models.items():
+        vals, skipped = {}, 0
+        for family in tqdm(families, desc=f"JSD {name}"):
+            try:
+                tree_split = generate_tree_split(tree_dir, family)
+                mean_jsd, _ = family_jsd(
+                    {REAL: spec["real"], name: spec["dir"]},
+                    family, tree_split, conservation_threshold,
+                )
+            except (FileNotFoundError, ValueError, KeyError):
+                skipped += 1
+                continue
+            vals[family] = mean_jsd[name]
+        if skipped:
+            print(f"{name}: skipped {skipped}/{len(families)} families (missing/unusable)")
+        cols[name] = pd.Series(vals)
+    return pd.DataFrame(cols)
+
+
 def plot_jsd_boxplot(
     jsd_df: pd.DataFrame,
     output_dir: str,
@@ -213,16 +264,9 @@ def plot_jsd_boxplot(
     ``filename_stem`` lets callers write several slices of the same plot; the
     generate_all_results driver uses it for the all / in-family / held-out breakdown.
     """
-    palette = sns.color_palette()
-    colors = {
-        "WAG": palette[0],
-        "LG": palette[1],
-        "LG4X": palette[3],
-        "LG+C60": palette[5],
-        "LG+S256": palette[6],
-        "PEINT (Progressive)": palette[2],
-        REAL_OTHER_SPLIT: palette[4],
-    }
+    # Colors from the shared canonical map (paper.model_style) so every figure —
+    # this boxplot, the structure-metrics ECDFs, PCP mutation counts — matches.
+    colors = model_colors()
 
     models = [m for m in BOXPLOT_MODELS if m in jsd_df.columns]
     missing = [m for m in BOXPLOT_MODELS if m not in jsd_df.columns]
@@ -313,6 +357,9 @@ def main() -> None:
         if args.max_families is not None:
             families = families[: args.max_families]
         jsd_df = collect_family_jsd(families, msa_dirs, args.conservation_threshold)
+        # Fold in cross-revision models (ESM-C) as standard boxplot columns.
+        extra_df = collect_extra_revision_jsd(families, args.conservation_threshold)
+        jsd_df = jsd_df.join(extra_df)
 
         os.makedirs(args.output_dir, exist_ok=True)
         jsd_df.to_csv(os.path.join(args.output_dir, "figure3_conservation_jsd.csv"))

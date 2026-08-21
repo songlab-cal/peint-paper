@@ -19,7 +19,20 @@ from protevo.simulation._alisim import _UDM_NEX_PATH
 from protevo import caching as protevo_caching
 
 from paper.alignment import run_mafft_add
+from paper.model_style import model_colors
 import paper_config as cfg
+
+# ESM-C (rev2) PEINT progressive historian reconstruction (remove-dummy output), added as a
+# sixth model alongside the rev1 WAG/LG/LG+S256/PEINT-ESM2/Real. Projected into the empirical
+# frame exactly like PEINT-ESM2, then matched to the real branches.
+ESMC_RECON = (
+    "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc/"
+    "simulations/historian_progressive/_cache/remove_dummy_nodes_from_historian_output/0/e/2/"
+    "7848affe284d9acd102977c0d0f2f3dc441092610c895020ca28319a8da332aaa86e43d5d31b8b064e99a9d97e163d28c7b1f7997d8fc7dc2924a88db175a/"
+    "output_sequences_dir"
+)
+# Models whose trees are in the protevo (read_tree) format rather than AliSim .full.treefile.
+_PROTEVO_TREE_MODELS = ("PEINT", "PEINT_ESMC")
 
 @protevo_caching.cached_parallel_computation(
     parallel_arg="families",
@@ -464,6 +477,36 @@ if __name__ == "__main__":
     )
     peint_empirical_frame_dir = peint_mafft_out['output_new_sequences_msa_dir']
 
+    # ESM-C PEINT (rev2): identical empirical-frame projection as PEINT-ESM2 above, from the
+    # rev2 progressive historian reconstruction. Same shared sim trees (rerooted_tree_dir), so
+    # node IDs line up. This is the one extra MAFFT --add --keeplength cache (ESM-C wasn't in
+    # rev1); WAG/LG/LG+S256 are gap-transferred (cached) and need no MAFFT.
+    esmc_unaligned_dir = os.path.join(simulation_dir, 'esmc_msa_unaligned')
+    if not os.path.exists(esmc_unaligned_dir):
+        os.makedirs(esmc_unaligned_dir)
+    esmc_families = [f for f in families if os.path.exists(os.path.join(ESMC_RECON, f + '.txt'))]
+    for family in esmc_families:
+        dst = os.path.join(esmc_unaligned_dir, family + '.txt')
+        if os.path.exists(dst):
+            continue
+        src_msa = read_msa(os.path.join(ESMC_RECON, family + '.txt'))
+        with open(dst, 'w') as f:
+            for name, seq in src_msa.items():
+                f.write(f'>{name}\n{seq.replace("-", "")}\n')
+
+    esmc_mafft_out = run_mafft_add(
+        existing_alignment_dir=historian_msa_dir,
+        new_sequences_dirs=(esmc_unaligned_dir,),
+        new_sequences_names=('esmc',),
+        families=esmc_families,
+        num_processes=8,
+        extra_command_line_args=('--keeplength',),
+        output_all_sequences_msa_dir=os.path.join(simulation_dir, 'esmc_subtree_emp_frame_all'),
+        output_new_sequences_msa_dir=os.path.join(simulation_dir, 'esmc_subtree_emp_frame'),
+        output_old_sequences_msa_dir=os.path.join(simulation_dir, 'esmc_subtree_emp_frame_ref'),
+    )
+    esmc_empirical_frame_dir = esmc_mafft_out['output_new_sequences_msa_dir']
+
     model_dirs = {
         'PEINT': {
             'tree': rerooted_tree_dir,
@@ -482,7 +525,14 @@ if __name__ == "__main__":
             'msa': gap_transferred_lg_s256_dir,
             # .siteprob (-wspm) lands in the raw sim dir, not the gap-transferred one.
             'siteprob_dir': renamed_lg_s256_dir,
-        }
+        },
+        # ESM-C last so the boxplot builder's per-branch model loop (which `break`s on a
+        # zero-site branch) never short-circuits the established models when ESM-C lacks a
+        # branch; ESM-C is projected into the empirical frame exactly like PEINT-ESM2.
+        'PEINT_ESMC': {
+            'tree': rerooted_tree_dir,
+            'msa': esmc_empirical_frame_dir
+        },
     }
 
     udm_profiles = load_udm_profiles(_UDM_NEX_PATH)
@@ -550,7 +600,7 @@ if __name__ == "__main__":
 
         for model in model_dirs:
 
-            if model == 'PEINT':
+            if model in _PROTEVO_TREE_MODELS:
                 sim_tree = read_tree(
                     os.path.join(
                         model_dirs[model]['tree'],
@@ -632,7 +682,7 @@ if __name__ == "__main__":
 
         for model in model_dirs:
             sim_msa = read_msa(os.path.join(model_dirs[model]['msa'], family + '.txt'))
-            if model == 'PEINT':
+            if model in _PROTEVO_TREE_MODELS:
                 sim_tree_for_root = read_tree(
                     os.path.join(model_dirs[model]['tree'], family + '.txt')
                 ).to_ete3()
@@ -712,6 +762,9 @@ if __name__ == "__main__":
             lg_branch_data = matched_model_data['LG'][f].get(peint_branch)
             wag_branch_data = matched_model_data['WAG'][f].get(peint_branch)
             lg_s256_branch_data = matched_model_data['LG_S256'][f].get(peint_branch)
+            # ESM-C is NOT required for a branch to be kept (keeps the established bars
+            # unchanged); its row is added only where it has the matched branch.
+            peint_esmc_branch_data = matched_model_data['PEINT_ESMC'].get(f, {}).get(peint_branch)
 
             if not lg_branch_data or not wag_branch_data or not lg_s256_branch_data:
                 continue
@@ -737,6 +790,8 @@ if __name__ == "__main__":
 
             for model_name in matched_model_data:
                 model_branch = eval(f"{model_name.lower()}_branch_data")
+                if model_branch is None:  # ESM-C may lack this branch; others are guaranteed above
+                    continue
                 sim_muts = model_branch['sim_mutations']
                 sim_sites = model_branch['sim_sites']
                 sim_back = model_branch['sim_back_mutations']
@@ -797,7 +852,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(6, 4))
 
 
-    model_order = ['WAG', 'LG', 'LG_S256', 'PEINT', 'Real (Inferred)']
+    model_order = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC', 'Real (Inferred)']
 
     branch_lengths = sorted(subdf['branch_length_q'].unique())
 
@@ -806,27 +861,32 @@ if __name__ == "__main__":
     all_data = []
     all_colors = []
 
-    default_palette = sns.color_palette()
-
+    # Colors from the shared canonical map (paper.model_style) so this boxplot matches the
+    # conservation JSD boxplot and the structure-metrics ECDFs. Local keys -> canonical names.
+    mc = model_colors()
     colors = {
-        'WAG': default_palette[0],
-        'LG': default_palette[1],
-        'LG_S256': default_palette[6],
-        'PEINT': default_palette[2],
-        'Real (Inferred)': default_palette[4]
+        'WAG': mc['WAG'],
+        'LG': mc['LG'],
+        'LG_S256': mc['LG+S256'],
+        'PEINT': mc['PEINT (ESM2)'],
+        'PEINT_ESMC': mc['PEINT (ESM-C)'],
+        'Real (Inferred)': mc['Real'],
     }
     color_order = [colors[model] for model in model_order]
 
+    # Keep the n-box group inside the unit-wide bin slot (n grew from 5 to 6).
+    step = 0.9 / n_simulators
+    box_width = step * 0.8
     for i, bl in enumerate(branch_lengths):
         for j, sim in enumerate(model_order):
             data = subdf[(subdf['branch_length_q'] == bl) & (subdf['simulator'] == sim)]['mutations']
             if len(data) > 0:
-                pos = i + (j - n_simulators/2 + 0.5) * 0.2
+                pos = i + (j - n_simulators/2 + 0.5) * step
                 positions.append(pos)
                 all_data.append(data)
                 all_colors.append(colors[sim])
 
-    bp = ax.boxplot(all_data, positions=positions, widths=0.15, patch_artist=True,
+    bp = ax.boxplot(all_data, positions=positions, widths=box_width, patch_artist=True,
                     boxprops = dict(linewidth=0.5),
                     whiskerprops = dict(linewidth=0.5),
                     flierprops={"marker": "o", "markersize": 0.3},
@@ -853,13 +913,14 @@ if __name__ == "__main__":
     ax.set_xlabel('Branch Length (per-model)', fontsize=12)
     ax.set_ylabel('Fraction Mutated Sites', fontsize=12)
 
-    fig.savefig(
-        os.path.join(
-            distances_dir,
-            'parent_child_pairs_all_models.pdf'
-        ),
-        bbox_inches='tight'
-    )
+    # Main PCP figure -> the local paper figures/output (absolute; independent of the
+    # cwd-relative caches this script runs under). PNG twin for quick viewing.
+    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
+    for _ext in ('pdf', 'png'):
+        fig.savefig(
+            os.path.join(str(cfg.FIGURES_DIR), f'parent_child_pairs_all_models.{_ext}'),
+            dpi=300, bbox_inches='tight',
+        )
 
     ####################### per-family scatter #########################
 
@@ -867,16 +928,18 @@ if __name__ == "__main__":
 
     medians = per_family_medians.pivot(index='family', columns='simulator', values = 'mutations')
 
-    fig, axs = plt.subplots(1,4, figsize = (11, 2.5), sharey=True)
-    for ax, sim in zip(axs, ['WAG', 'LG', 'PEINT', 'LG_S256']):
+    # One panel per simulator vs Real, PEINT_ESMC (rev2) added alongside the rev1 arms.
+    scatter_order = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC']
+    fig, axs = plt.subplots(1, len(scatter_order), figsize=(2.75 * len(scatter_order), 2.5), sharey=True)
+    for ax, sim in zip(axs, scatter_order):
         x = medians['Real (Inferred)']
         y = medians[sim]
         x_clean = x[~(x.isna() | y.isna())]
         y_clean = y[~(x.isna() | y.isna())]
-        
+
         ax.scatter(x_clean, y_clean, alpha=0.6, s=20, color=colors[sim])
         ax.plot([0, 0.4], [0, 0.4], 'k-', linewidth=1, label='y=x')
-        
+
         ax.tick_params(width = 0.5, length = 2, which = 'both')
         ax.set_xlim(0, 0.4)
         ax.set_ylim(0, 0.4)
@@ -890,13 +953,13 @@ if __name__ == "__main__":
 
     fig.suptitle('Per family median mutation rate (Eval Subtrees)')
 
-    fig.savefig(
-        os.path.join(
-            distances_dir,
-            'per_family_median_mutation_rate_all_models.pdf'
-        ),
-        bbox_inches = 'tight'
-    )
+    # -> local paper figures/output (next to parent_child_pairs_all_models), PNG twin included.
+    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
+    for _ext in ('pdf', 'png'):
+        fig.savefig(
+            os.path.join(str(cfg.FIGURES_DIR), f'per_family_median_mutation_rate_all_models.{_ext}'),
+            dpi=300, bbox_inches='tight',
+        )
 
     ############### back-mutation + root->leaf figure ###############
     # Companion to the per-branch figure, both reading each model's own simulated tree:
@@ -972,5 +1035,7 @@ if __name__ == "__main__":
             spine.set_linewidth(0.5)
     sns.despine()
     fig.tight_layout()
-    fig.savefig(os.path.join(distances_dir, 'back_mutation_and_root_leaf.pdf'), bbox_inches='tight')
-    fig.savefig(os.path.join(distances_dir, 'back_mutation_and_root_leaf.png'), dpi=160, bbox_inches='tight')
+    # -> local paper figures/output (next to parent_child_pairs_all_models).
+    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
+    fig.savefig(os.path.join(str(cfg.FIGURES_DIR), 'back_mutation_and_root_leaf.pdf'), bbox_inches='tight')
+    fig.savefig(os.path.join(str(cfg.FIGURES_DIR), 'back_mutation_and_root_leaf.png'), dpi=160, bbox_inches='tight')
