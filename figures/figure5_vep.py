@@ -15,6 +15,7 @@ from protevo.vep._vep_utils import (
     _discover_time_dirs,
 )
 from paper.plot_style import _set_publication_style
+from paper import vep
 
 # Scored results now live under test_lls/production/ (archived runs under test_lls/archive/).
 # Figure functions below resolve `<TEST_LLS_PRODUCTION>/<run_name>/spearman_results.csv`.
@@ -1827,6 +1828,123 @@ def make_esmc_esm2_comparison():
 
 
 # ---------------------------------------------------------------------------
+# Multi-model VEP comparison across base LMs (adds ESM2-650M)
+# ---------------------------------------------------------------------------
+# A "new version" of the multi-model figures that also carries the 650M ESM2
+# tier and, per Antoine, is organized by frozen base LM: each backbone (ESM2-150M,
+# ESM-C 300M, ESM2-650M) contributes its released zero-shot baseline and the PEINT
+# model trained on it, in the paired order ESM2-150 | PEINT ESM2-150 | ESM-C |
+# PEINT ESM-C | ESM2-650 | PEINT ESM2-650. Config + data derivation live in
+# paper.vep; these functions are thin plotting + orchestration.
+
+
+def make_multimodel_by_base_lm(save_name="multimodel_by_base_lm.png"):
+    """Two bar charts: (1) grouped by base LM (base pLM vs PEINT, bar = class-
+    averaged Spearman over assay types, SE across assay types); (2) the assay-type-
+    resolved 6-model chart (paired hues). Both restrict to the family set common to
+    all six runs.
+    """
+    materialize_official_baselines([b for _, b, _ in vep.BASE_LM_CONFIG])
+    run_names, _ = vep.base_lm_run_and_model_names()
+    df = vep.load_spearman_overlap(VEP_RESULTS_DIR, run_names)
+    n_fam = df["family"].nunique()
+
+    # class-average building block: per (model key, assay type) mean Spearman.
+    per_assay = df.groupby(["key", "assay_type"], as_index=False)["spearman"].mean()
+    per_assay["base_lm"] = per_assay["key"].str.split("|").str[0]
+    per_assay["kind"] = per_assay["key"].str.endswith("|peint").map(
+        {True: "PEINT", False: "Base pLM"}
+    )
+    lm_order = [lm for lm, _, _ in vep.BASE_LM_CONFIG]
+
+    # --- Figure 1: grouped by base LM (base vs PEINT), class-avg over assay types ---
+    fig, ax = plt.subplots(figsize=(7, 4))
+    sns.barplot(
+        data=per_assay, x="base_lm", y="spearman", hue="kind",
+        order=lm_order, hue_order=["Base pLM", "PEINT"],
+        estimator=np.mean, errorbar="se", capsize=0.15,
+        err_kws={"linewidth": 1.0}, linewidth=0.5, edgecolor="black",
+        palette=["#9a9a9a", "#08519c"], alpha=0.85, ax=ax,
+    )
+    class_avg = per_assay.groupby(["base_lm", "kind"])["spearman"].mean()
+    for c in ax.containers:
+        ax.bar_label(c, fmt="%.3f", fontsize=8, padding=2)
+    ax.set_xlabel("Base language model")
+    ax.set_ylabel("Class-averaged Spearman")
+    ax.set_title(f"VEP: base pLM vs PEINT by backbone ({n_fam} families)")
+    ax.legend(title="", frameon=True, loc="upper left", bbox_to_anchor=(1.01, 1))
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+    fig.tight_layout()
+    save_path = _fig_path("spearman_agg", save_name)
+    fig.savefig(save_path, dpi=400, bbox_inches="tight")
+    fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
+    per_assay.to_csv(save_path.with_suffix(".csv"), index=False)
+    print(f"Plot saved to: {save_path} and {save_path.with_suffix('.pdf')}")
+    print("\nClass-averaged Spearman (base_lm, kind):")
+    print(class_avg.round(3).to_string())
+
+    # --- Figure 2: assay-type-resolved 6-model bar chart (paired hues) ---
+    methods = []
+    for lm, base_col, peint_run in vep.BASE_LM_CONFIG:
+        methods.append({"label": lm, "official": base_col})
+        methods.append({"label": f"PEINT ({lm})", "run": peint_run})
+    make_multimodel_spearman_figure(
+        methods, save_name="multimodel_esm2_150_650_esmc.png",
+        palette=vep.base_lm_palette(),
+    )
+    return ax
+
+
+def make_mutational_depth_by_base_lm(save_name="mutational_depth_by_base_lm.png"):
+    """Spearman-by-mutational-depth pointplot for all six base-LM entries (base pLM
+    + PEINT per backbone). Base-pLM depth curves are materialized from the release;
+    everything is restricted to the family set common to all six runs.
+    """
+    run_names, model_names = vep.base_lm_run_and_model_names()
+    peint_run = next(rd for k, rd in run_names.items() if k.endswith("|peint"))
+    peint_fams = set(pd.read_csv(
+        VEP_RESULTS_DIR / peint_run / "spearman_by_mutation_depth.csv"
+    )["family"])
+    vep.materialize_official_depth(
+        VEP_RESULTS_DIR,
+        [rd for k, rd in run_names.items() if k.endswith("|base")],
+        families=peint_fams,
+    )
+
+    dfs, overlap = [], None
+    for key, rd in run_names.items():
+        df = pd.read_csv(VEP_RESULTS_DIR / rd / "spearman_by_mutation_depth.csv")
+        df["model"] = key
+        dfs.append(df)
+        fams = set(df["family"])
+        overlap = fams if overlap is None else (overlap & fams)
+    df = pd.concat(dfs, ignore_index=True)
+    df = df[df["family"].isin(overlap)].reset_index(drop=True)
+
+    ax = _plot_spearman_by_mutational_depth(
+        df_results_all=df, model_names=model_names, palette=vep.base_lm_palette(),
+        figsize=(8, 5), alpha=0.85,
+    )
+    ax.set_title(f"Mean Spearman by Mutational Depth ({df['family'].nunique()} families)")
+    ax.legend(title="Model", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=True)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+    ax.tick_params(width=0.5, length=2)
+    ax.grid(True, alpha=0.3, which="both", linewidth=0.25)
+    fig = ax.get_figure()
+    fig.tight_layout()
+    save_path = _fig_path("mutational_depth", save_name)
+    fig.savefig(save_path, dpi=400, bbox_inches="tight")
+    fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
+    print(f"Plot saved to: {save_path} and {save_path.with_suffix('.pdf')}")
+    return ax
+
+
+# ---------------------------------------------------------------------------
 # Overall Spearman vs pretrained-backbone size (params scatter)
 # ---------------------------------------------------------------------------
 # Class-averaged Spearman on the common core set of assays vs the parameter count of the
@@ -1913,7 +2031,7 @@ def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type
     for label, _, p, is_peint, fam in _PARAMS_MODELS:
         y = vals[label]
         color = _FAMILY_COLOR[fam] if is_peint else _BASE_GRAY
-        ax.scatter(p, y, s=95 if is_peint else 60, marker="o", color=color,
+        ax.scatter(p, y, s=190 if is_peint else 120, marker="o", color=color,
                    edgecolor="white", linewidth=0.8, zorder=3 if is_peint else 2)
         ax.annotate(label, (p, y),
                     xytext=(6, 5 if is_peint else -11), textcoords="offset points",
@@ -1972,6 +2090,7 @@ def main():
             "family_vesm",
             "mutant_depth_vesm",
             "esmc_esm2",
+            "by_base_lm",
             "params",
         ],
         required=True,
@@ -2020,6 +2139,10 @@ def main():
 
     elif args.plot == "esmc_esm2":
         make_esmc_esm2_comparison()
+
+    elif args.plot == "by_base_lm":
+        make_multimodel_by_base_lm()
+        make_mutational_depth_by_base_lm()
 
     elif args.plot == "params":
         make_params_vs_spearman_figure()
