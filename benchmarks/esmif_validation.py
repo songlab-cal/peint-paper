@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+from collections import Counter
 import os
 import re
 from pathlib import Path
@@ -148,11 +149,30 @@ def run_approach1(families, existing=None, existing_leaf=None):
     """
     import esm.inverse_folding as invf  # esmif import already ran the biotite shim
     msa_dirs, real_dirs = _a1_dirs()
-    done = set()
     fam_rows = existing.to_dict("records") if existing is not None and len(existing) else []
     leaf_rows = existing_leaf.to_dict("records") if existing_leaf is not None and len(existing_leaf) else []
-    if fam_rows:
-        done = {(r["family"], r["model"]) for r in fam_rows}
+    # A pair counts as done only if BOTH its family-level row and its per-leaf rows exist.
+    # Keying on the family frame alone let a truncated per-leaf table look complete, so the
+    # divergence-controlled panel silently kept plotting one leaf per model.
+    done_fam = {(r["family"], r["model"]) for r in fam_rows}
+    # Count leaf rows per pair and compare against the n_leaves the family row recorded, so a
+    # pair that was truncated to a single leaf is not mistaken for a complete one.
+    leaf_counts = Counter((r["family"], r["model"]) for r in leaf_rows)
+    expected = {(r["family"], r["model"]): r.get("n_leaves") for r in fam_rows}
+
+    def _complete(key):
+        want = expected.get(key)
+        want = int(want) if want == want and want else 1   # NaN-safe
+        return leaf_counts.get(key, 0) >= want
+
+    done = {k for k in done_fam if _complete(k)}
+    stale = done_fam - done
+    if stale:
+        print(f"  [A1] {len(stale)} (family, model) pairs have incomplete per-leaf rows; recomputing")
+        # Drop the stale rows from BOTH frames. Leaving the partial leaf rows in place would
+        # duplicate whichever leaves the recompute reproduces, double-weighting them.
+        fam_rows = [r for r in fam_rows if (r["family"], r["model"]) not in stale]
+        leaf_rows = [r for r in leaf_rows if (r["family"], r["model"]) not in stale]
     todo = [(f, m) for f in families for m in MODEL_ORDER if (f, m) not in done]
     if not todo:
         print(f"  [A1] all ({len(families)}x{len(MODEL_ORDER)}) pairs reused; nothing to compute")
@@ -347,11 +367,18 @@ def _load_prior(path, rename=None, drop_models=()):
     return d
 
 
-def _concat(frames):
+def _concat(frames, keys=("family", "model")):
+    """Concatenate prior frames, keeping the first row per key.
+
+    ``keys`` matters: the family-level table has one row per (family, model), but the
+    per-leaf table has ~60. Deduplicating the per-leaf table on (family, model) collapses
+    it to a single leaf per model and silently throws away 59/60 of the data, which is what
+    previously truncated esmif_gt_likelihood_perleaf.csv — pass the leaf key for that one.
+    """
     frames = [f for f in frames if f is not None and len(f)]
     if not frames:
         return None
-    return pd.concat(frames, ignore_index=True).drop_duplicates(["family", "model"], keep="first")
+    return pd.concat(frames, ignore_index=True).drop_duplicates(list(keys), keep="first")
 
 
 def main():
@@ -381,8 +408,9 @@ def main():
         ])
         a1lx = _concat([
             _load_prior(OUT_DIR / "esmif_gt_likelihood_perleaf.csv", r1),
+            _load_prior(FIG / "esmif_a1_esm2_rev1_perleaf.csv", r1),
             _load_prior(FIG / "esmif_a1_esmc_rev2_perleaf.csv", rc, drop_models=["Real"]),
-        ])
+        ], keys=("family", "model", "leaf"))
         a2x = _load_prior(OUT_DIR / "esmif_selfconsistency.csv", r1)
 
     a1 = a2 = None
