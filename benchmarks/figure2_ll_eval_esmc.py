@@ -15,17 +15,16 @@ Only the ESM-C arm is computed fresh, via the same
 so a rerun is a no-op once done).
 
 Env: ``peint-esmc`` (has the Biohub ESM-C backbone + sentencepiece). Needs a GPU and
-``HF_HOME`` set for the ESM-C backbone. Run from anywhere::
+``HF_HOME`` set for the ESM-C backbone. Run from the repo root::
 
     HF_HOME=/scratch/users/akoehl/hf_cache \
-      python /scratch/users/akoehl/peint-paper/benchmarks/figure2_ll_eval_esmc.py
+      python -m benchmarks.figure2_ll_eval_esmc
 """
 
 import argparse
 import glob
 import os
 import random
-import sys
 
 import numpy as np
 import matplotlib as mpl
@@ -37,22 +36,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
-# The peint repo ships the data, the _cache_peint cache, and the protevo package.
-PEINT_REPO = "/scratch/users/akoehl/peint"
-sys.path.insert(0, PEINT_REPO)
-
-from protevo import caching as protevo_caching  # noqa: E402
-from protevo.evaluation import (  # noqa: E402
+from protevo import caching as protevo_caching
+from protevo.evaluation import (
     evaluate_peint_model_transitions_log_likelihood__cached,
 )
-from protevo.io import (  # noqa: E402
+from protevo.io import (
     read_transitions,
     read_transitions_log_likelihood_per_site,
 )
-from protevo.utils import (  # noqa: E402
+from protevo.utils import (
     get_quantile_idx,
     get_quantization_points_from_geometric_grid,
 )
+
+import paper_config as cfg
+from paper.model_style import model_colors
+
+# The peint repo ships the data and the _cache_peint cache alongside the protevo
+# package, so it is resolved from the installed package rather than hardcoded.
+PEINT_REPO = str(cfg.PEINT_REPO)
 
 
 def _p(*parts):
@@ -67,10 +69,8 @@ CACHE_DIR = _p("_cache_peint")
 CHERRYML_CACHE_DIR = _p("_cache_cherryml")
 
 # ESM-C PEINT (A3, 60k). Self-describing checkpoint (encoder_backbone="esmc-biohub").
-ESMC_CHECKPOINT = (
-    "/scratch/users/yufan.cao/protevo_ablations/esmc/"
-    "20260729-5e5d20h960d-esmc-14498fams-esmc/epoch=4-step=60000.ckpt"
-)
+# Not shipped with the paper deposit; set PEINT_PAPER_ESMC_CHECKPOINT to your copy.
+ESMC_CHECKPOINT = cfg.ESMC_SIM_CHECKPOINT
 
 # Family split — identical to figure2_ll_eval.build_family_split, kept here so the split is
 # reproduced without importing the peint top-level script. Verified to reproduce the exact
@@ -88,15 +88,14 @@ CACHED_EVAL_FUNCS = {
     "PEINT (ESM2)": "evaluate_peint_model_transitions_log_likelihood__cached",
 }
 
-# Canonical model->color, matched to the paper's ESM-C figures (seaborn "deep" indices:
-# WAG=0, LG4X=3, PEINT (ESM2)=2 green, PEINT (ESM-C)=9 cyan).
-_DEEP = sns.color_palette("deep")
+# Canonical model->color from the shared map, so this panel matches every other figure.
+_C = model_colors()
 MODEL_COLORS = {
     "Random guess": "gray",
-    "WAG": _DEEP[0],
-    "LG (4 rate categories)": _DEEP[3],
-    "PEINT (ESM2)": _DEEP[2],
-    "PEINT (ESM-C)": _DEEP[9],
+    "WAG": _C["WAG"],
+    "LG (4 rate categories)": _C["LG4X"],
+    "PEINT (ESM2)": _C["PEINT (ESM2)"],
+    "PEINT (ESM-C)": _C["PEINT (ESM-C)"],
 }
 # Plot order (Random first as the floor, ESM-C last).
 PLOT_ORDER = ["Random guess", "WAG", "LG (4 rate categories)", "PEINT (ESM2)", "PEINT (ESM-C)"]
@@ -120,27 +119,43 @@ def build_family_split(transitions_dir):
     return families_train, families_test, train_held_out_subset
 
 
-def discover_cached_per_site_dir(func_subdir, needed_families):
+def discover_cached_per_site_dir(func_subdir, needed_families, exclude=()):
     """Find the cached per-site dir for an eval function that covers all needed families.
 
     The peint _cache_peint holds one output_...per_site_dir per (args) hash; several may
     exist (smoke subsets, full runs). Pick the one whose family files are a superset of the
     families this plot needs; raise if none is.
+
+    ``exclude`` drops known-irrelevant dirs. It matters for the PEINT eval function, which
+    is shared by the ESM2 and ESM-C checkpoints: both write a full-coverage dir under the
+    same subdir, so without excluding the ESM-C one the "PEINT (ESM2)" curve can silently
+    become a second ESM-C curve. Ambiguity that ``exclude`` does not resolve is an error
+    rather than a coin flip.
     """
     needed = set(needed_families)
+    exclude = {os.path.realpath(e) for e in exclude}
     pattern = os.path.join(
         CACHE_DIR, func_subdir, "*/*/*/*/output_transitions_log_likelihood_per_site_dir"
     )
-    best, best_have = None, -1
-    for entry in glob.glob(pattern):
+    covering = []
+    for entry in sorted(glob.glob(pattern)):
+        if os.path.realpath(entry) in exclude:
+            continue
         have = {f[: -len(".txt")] for f in os.listdir(entry) if f.endswith(".txt")}
-        if needed <= have and len(have) > best_have:
-            best, best_have = entry, len(have)
-    if best is None:
+        if needed <= have:
+            covering.append((entry, len(have)))
+    if not covering:
         raise FileNotFoundError(
             f"No cached per-site dir under {func_subdir} covers all {len(needed)} families."
         )
-    return best
+    if len(covering) > 1:
+        listing = "\n  ".join(f"{e} ({n} families)" for e, n in covering)
+        raise RuntimeError(
+            f"{len(covering)} cached per-site dirs under {func_subdir} cover all "
+            f"{len(needed)} families, so the choice would depend on glob order:\n  "
+            f"{listing}\nPass the intended one explicitly (--peint-esm2-per-site-dir)."
+        )
+    return covering[0][0]
 
 
 def esmc_per_site_dir(families, device, batch_size):
@@ -236,7 +251,11 @@ def main():
     ap.add_argument("--limit-families", type=int, default=None,
                     help="Use only the first N families of each set (smoke test).")
     ap.add_argument("--no-esmc", action="store_true", help="Base models only (skip ESM-C).")
-    ap.add_argument("--out-dir", default="/scratch/users/akoehl/peint-paper/figures/output")
+    ap.add_argument("--peint-esm2-per-site-dir", default=None,
+                    help="Pin the ESM2 PEINT cached per-site dir instead of discovering it. "
+                         "Needed with --no-esmc, where the ESM-C dir cannot be excluded "
+                         "automatically and both cover every family.")
+    ap.add_argument("--out-dir", default=str(cfg.FIGURES_DIR))
     args = ap.parse_args()
 
     protevo_caching.set_cache_dir(CACHE_DIR)
@@ -249,19 +268,29 @@ def main():
     all_families = sorted(set(families_test) | set(train_held_out_subset))
     print(f"test={len(families_test)} in-family={len(train_held_out_subset)}")
 
-    # Base models: read the cached per-site dirs directly (one dir serves both family sets).
+    # ESM-C first (per-family cached under the ESM-C checkpoint key, so a rerun is a
+    # no-op): its dir has to be known before the ESM2 lookup, because both checkpoints
+    # cache under the same PEINT eval function and both now cover every family.
     per_site_dirs = {}
+    esmc_dir = None
+    if not args.no_esmc:
+        print("Scoring ESM-C PEINT (cached) ...")
+        esmc_dir = esmc_per_site_dir(all_families, args.device, args.batch_size)
+        print(f"  PEINT (ESM-C)            <- {esmc_dir}")
+
+    # Base models: read the cached per-site dirs directly (one dir serves both family sets).
     for name, subdir in CACHED_EVAL_FUNCS.items():
-        d = discover_cached_per_site_dir(subdir, all_families)
+        if name == "PEINT (ESM2)" and args.peint_esm2_per_site_dir:
+            d = args.peint_esm2_per_site_dir
+        else:
+            d = discover_cached_per_site_dir(
+                subdir, all_families, exclude=[esmc_dir] if esmc_dir else ()
+            )
         per_site_dirs[name] = d
         print(f"  {name:24s} <- {d[len(CACHE_DIR) + 1:][:64]}...")
 
-    # ESM-C: computed fresh (per-family cached under the ESM-C checkpoint key).
-    if not args.no_esmc:
-        print("Scoring ESM-C PEINT (fresh) ...")
-        esmc_dir = esmc_per_site_dir(all_families, args.device, args.batch_size)
+    if esmc_dir is not None:
         per_site_dirs["PEINT (ESM-C)"] = esmc_dir
-        print(f"  PEINT (ESM-C)            <- {esmc_dir}")
 
     quantization_points = [float(q) for q in get_quantization_points_from_geometric_grid()]
 

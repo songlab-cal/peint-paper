@@ -15,7 +15,6 @@ ESM2-vs-ESM-C, and saves a 3-panel scatter.
 import argparse
 import json
 import os
-import glob
 
 import numpy as np
 import pandas as pd
@@ -28,17 +27,17 @@ import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
 from protevo import caching as protevo_caching
-from paper.historian import get_all_evolutionary_counts_from_historian_output
+from paper.historian import (
+    esmc_historian_dirs,
+    get_all_evolutionary_counts_from_historian_output,
+)
+from paper.model_style import model_colors
+import paper_config as cfg
 
-R1 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1/simulations"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
-FAM_JSON = "/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json"
-FIG_OUT = "/scratch/users/akoehl/peint-paper/figures/output"
-
-# ESM-C per-family event tables (revision-2 historian job output).
-ESMC_EVENTS = sorted(glob.glob(
-    f"{R2}/simulations/historian_progressive/_cache/"
-    "get_all_evolutionary_counts_from_historian_output/*/*/*/*/output_events_dir"))[0]
+R1 = str(cfg.RESULTS_R1_DIR / "simulations")
+R2 = str(cfg.RESULTS_R2_DIR)
+FAM_JSON = str(cfg.HELDOUT_FAMILIES_JSON)
+FIG_OUT = str(cfg.FIGURES_DIR)
 
 
 def indel_events(events_dir, fam):
@@ -69,14 +68,16 @@ def _annotate(ax, x, y, xlabel, ylabel):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--esmc_variant", default="refine", choices=("refine", "norefine"),
+                    help="Which ESM-C Historian run to read (default: refine, matching "
+                         "every other ESM-C indel panel).")
     ap.add_argument("--esmc_events", default=None,
-                    help="ESM-C events dir. Default: no-refine (sorted glob [0]). "
-                         "Pass the refine dir for the matched-option comparison.")
-    ap.add_argument("--out_suffix", default="",
-                    help="Suffix for output files, e.g. '_refine'.")
+                    help="Explicit ESM-C events dir, overriding --esmc_variant.")
+    ap.add_argument("--out_suffix", default="_refine",
+                    help="Suffix for output files; defaults to match --esmc_variant.")
     ap.add_argument("--esmc_label", default="PEINT ESM-C")
     args = ap.parse_args()
-    esmc_events = args.esmc_events or ESMC_EVENTS
+    esmc_events = args.esmc_events or esmc_historian_dirs(R2, args.esmc_variant)["events"]
     sfx = args.out_suffix
     lbl = args.esmc_label
 
@@ -127,9 +128,10 @@ def main():
             out.extend(d.loc[d["event_type"].isin(["insertion", "deletion"]), "length"].values)
         return np.sort(np.asarray(out, dtype=float))
 
-    series = [("Real (inferred)", _indel_lengths(real), "purple"),
-              (lbl, _indel_lengths(esmc_events), "green"),
-              ("PEINT ESM2 (rev1)", _indel_lengths(esm2), "orange")]
+    _c = model_colors()
+    series = [("Real (inferred)", _indel_lengths(real), _c["Real"]),
+              (lbl, _indel_lengths(esmc_events), _c["PEINT (ESM-C)"]),
+              ("PEINT ESM2 (rev1)", _indel_lengths(esm2), _c["PEINT (ESM2)"])]
     figc, axc = plt.subplots(1, 1, figsize=(4, 3.2))
     for name, L, c in series:
         cdf = np.arange(1, len(L) + 1) / len(L)
@@ -155,7 +157,8 @@ def main():
     print(f"ESM2 vs ESM-C : Pearson {s3[0]:.3f}  Spearman {s3[1]:.3f}")
     print("\nmedian indel events/family:  real %.0f  ESM-C %.0f  ESM2 %.0f"
           % (df["real"].median(), df["esmc"].median(), df["esm2"].median()))
-    print(f"\nsaved: {FIG_OUT}/historian_indel_esmc_vs_rev1.{{png,pdf,csv}}")
+    print(f"\nsaved: {FIG_OUT}/historian_indel_esmc_vs_rev1{sfx}.{{png,pdf,csv}}"
+          f"\n       {FIG_OUT}/historian_indel_length_cdf{sfx}.{{png,pdf}}")
 
 
 if __name__ == "__main__":
