@@ -228,6 +228,10 @@ def plot_conservation(
         n_rows, 2, figsize=(8, 8 / 3 * n_rows), constrained_layout=True, squeeze=False
     )
     ax_positions = [(r, c) for r in range(n_rows) for c in range(2)]
+    # An odd number of models leaves trailing slots; blank them so the grid does not show an
+    # empty framed axes next to the last panel.
+    for pos in ax_positions[len(sorted_items):]:
+        axs[pos].axis("off")
 
     for (title, site_freqs_df), ax_pos in zip(sorted_items, ax_positions):
         axs[ax_pos].set_title(f"{title}")
