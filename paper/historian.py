@@ -1,3 +1,4 @@
+import glob
 import os
 import subprocess
 from pathlib import Path
@@ -1386,3 +1387,57 @@ def get_all_evolutionary_counts_from_historian_output(
             )
         )
 
+
+
+# ---------------------------------------------------------------------------
+# Locating the revision-2 (ESM-C) Historian outputs
+# ---------------------------------------------------------------------------
+ESMC_HISTORIAN_VARIANTS = ("refine", "norefine")
+
+
+def esmc_historian_dirs(r2_root, variant: str = "refine") -> Dict[str, str]:
+    """Return ``{"events": ..., "reconstructions": ...}`` for one ESM-C Historian run.
+
+    ``historian_esmc_progressive.py`` was run twice, with and without Historian's
+    ``--refine``. Preferred layout is the repacked, self-describing one::
+
+        <r2_root>/historian_esmc/<variant>/{events,reconstructions}
+
+    Falling back to the protevo content-hash cache, whose paths carry no label — there
+    the two runs are told apart by the mtime of the cached output directory. Each run
+    wrote its reconstructions and then its event tables within a minute of each other,
+    and the two runs are a day apart, so pairing the directories in time order gives
+    norefine first and refine second.
+
+    Selecting these by ``sorted(glob(...))[0]`` (as several scripts used to) silently
+    mixes the two: the events came from the norefine run while the reconstructions were
+    hardcoded to the refine one.
+    """
+    if variant not in ESMC_HISTORIAN_VARIANTS:
+        raise ValueError(f"variant must be one of {ESMC_HISTORIAN_VARIANTS}, got {variant!r}")
+
+    packed = os.path.join(str(r2_root), "historian_esmc", variant)
+    events, recons = os.path.join(packed, "events"), os.path.join(packed, "reconstructions")
+    if os.path.isdir(events) and os.path.isdir(recons):
+        return {"events": events, "reconstructions": recons}
+
+    cache = os.path.join(str(r2_root), "simulations", "historian_progressive", "_cache")
+
+    def _by_time(func_name, output_name):
+        hits = glob.glob(os.path.join(cache, func_name, "*/*/*/*", output_name))
+        if len(hits) != len(ESMC_HISTORIAN_VARIANTS):
+            raise FileNotFoundError(
+                f"Expected {len(ESMC_HISTORIAN_VARIANTS)} cached {output_name} dirs under "
+                f"{func_name}, found {len(hits)}. Repack them into "
+                f"{packed} (see esmc_historian_dirs) and re-run."
+            )
+        return [p for _, p in sorted((os.path.getmtime(p), p) for p in hits)]
+
+    order = list(ESMC_HISTORIAN_VARIANTS[::-1])  # oldest run first == norefine
+    i = order.index(variant)
+    return {
+        "events": _by_time("get_all_evolutionary_counts_from_historian_output",
+                           "output_events_dir")[i],
+        "reconstructions": _by_time("remove_dummy_nodes_from_historian_output",
+                                    "output_sequences_dir")[i],
+    }

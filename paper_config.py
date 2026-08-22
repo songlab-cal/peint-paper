@@ -31,10 +31,39 @@ def _peint_repo_root() -> Path:
         )
     return Path(spec.origin).resolve().parent.parent
 
+
+# The peint checkout: it ships the model checkpoints and, for the Figure 2 likelihood
+# panel, the transition data and the _cache_peint evaluation cache.
+_peint_repo_env = os.environ.get("PEINT_PAPER_PEINT_REPO")
+PEINT_REPO = Path(_peint_repo_env) if _peint_repo_env else _peint_repo_root()
+
 # Root holding the current results + a3m inputs (e.g. results_revision1, input_data/a3m).
 DATA_ROOT = Path(os.environ.get(
     "PEINT_PAPER_DATA_ROOT",
     "/scratch/users/akoehl/protein-evolution",
+))
+
+# Single root for the collated inputs, matching the layout of the Zenodo tarballs (each
+# unpacks relative to this directory). On the development machine the r1/r2/sim entries
+# are symlinks out to the authoritative trees; for anyone else they are real directories.
+LOCAL_DATA = Path(os.environ.get("PEINT_PAPER_LOCAL_DATA", str(REPO_ROOT / "local_data")))
+
+# Per-panel tables that fully determine each figure — the lightweight reproduction tier.
+FIGURE_DATA_DIR = Path(os.environ.get(
+    "PEINT_PAPER_FIGURE_DATA_DIR", str(LOCAL_DATA / "figure_data")
+))
+
+# Everything the benchmarks WRITE goes here, so the input trees above stay read-only.
+DERIVED_DIR = Path(os.environ.get("PEINT_PAPER_DERIVED_DIR", str(LOCAL_DATA / "derived")))
+
+# Computation caches. These were previously set from RELATIVE paths, which forced the
+# PCP benchmark to be run from one specific working directory; routing them through
+# config means every script can run from the repo root.
+PROTEVO_CACHE_DIR = Path(os.environ.get(
+    "PEINT_PAPER_PROTEVO_CACHE_DIR", str(DERIVED_DIR / "_cache_protevo")
+))
+CHERRYML_CACHE_DIR = Path(os.environ.get(
+    "PEINT_PAPER_CHERRYML_CACHE_DIR", str(DERIVED_DIR / "_cache_benchmarking")
 ))
 
 # Root holding the 512-leaf simulation inputs (empirical_msas / trees / root_sequences).
@@ -51,10 +80,20 @@ SIM_ROOT = Path(os.environ.get(
 INPUT_A3M_DIR = Path(os.environ.get(
     "PEINT_PAPER_INPUT_A3M_DIR", str(DATA_ROOT / "input_data" / "a3m")
 ))
-RESULTS_DIR = Path(os.environ.get(
-    "PEINT_PAPER_RESULTS_DIR",
-    str(DATA_ROOT / "local_data" / "results_revision1"),
-))
+# The two result generations, kept separate: revision 1 holds the classical baselines,
+# PEINT-ESM2 and real; revision 2 holds the ESM-C rerun (its own mafft frame).
+RESULTS_R1_DIR = Path(
+    os.environ.get("PEINT_PAPER_RESULTS_R1_DIR")
+    or os.environ.get("PEINT_PAPER_RESULTS_DIR")
+    or str(DATA_ROOT / "local_data" / "results_revision1")
+)
+RESULTS_R2_DIR = Path(
+    os.environ.get("PEINT_PAPER_RESULTS_R2_DIR")
+    or os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR")
+    or str(DATA_ROOT / "local_data" / "results_revision2_esmc")
+)
+# Back-compat alias; RESULTS_R1_DIR is the name to use in new code.
+RESULTS_DIR = RESULTS_R1_DIR
 
 EMPIRICAL_MSA_DIR = SIM_ROOT / "empirical_msas"
 TREE_DIR = SIM_ROOT / "trees"
@@ -81,8 +120,17 @@ FIGURES_DIR = Path(os.environ.get("PEINT_PAPER_FIGURES_DIR", str(REPO_ROOT / "fi
 # from later experiments; the released model supersedes it.
 PEINT_CHECKPOINT = Path(os.environ.get(
     "PEINT_PAPER_CHECKPOINT",
-    str(_peint_repo_root() / "model_checkpoints" / "peint.ckpt"),
+    str(PEINT_REPO / "model_checkpoints" / "peint.ckpt"),
 ))
+
+# PEINT trained on the Biohub ESM-C backbone, used by the revision-2 simulation runs and
+# the Figure 2 likelihood panel. Not part of the paper data deposit — it lives on a
+# collaborator's scratch — so there is no usable public default; set the env var.
+ESMC_SIM_CHECKPOINT = os.environ.get(
+    "PEINT_PAPER_ESMC_CHECKPOINT",
+    "/scratch/users/yufan.cao/protevo_ablations/esmc/"
+    "20260729-5e5d20h960d-esmc-14498fams-esmc/epoch=4-step=60000.ckpt",
+)
 
 # Transitions (x, y, t triples) behind the time-estimation panel.
 # PROVISIONAL: this default is the 192-leaf subset that was used to keep runtimes down,
@@ -114,6 +162,12 @@ AF2_WEIGHTS_DIR = Path(os.environ.get(
 ))
 TMALIGN_PATH = Path(os.environ.get(
     "PEINT_PAPER_TMALIGN_PATH", str(REPO_ROOT / "bin" / "TMalign")
+))
+
+# Historian, built by scripts/build_historian.sh from the submodule. Only the ancestral
+# reconstruction *producers* need it; none of the released figure panels invoke it.
+HISTORIAN_PATH = Path(os.environ.get(
+    "PEINT_PAPER_HISTORIAN_PATH", str(REPO_ROOT / "historian" / "bin" / "historian")
 ))
 
 # Experimental structures the TM-score / contact benchmarks compare against
@@ -153,6 +207,12 @@ REAL_MSA_DIR = Path(os.environ.get("PEINT_PAPER_REAL_MSA_DIR", str(EMPIRICAL_MSA
 HELDOUT_FAMILIES_FILE = Path(os.environ.get(
     "PEINT_PAPER_HELDOUT_FAMILIES_FILE",
     str(DATA_ROOT / "local_data" / "final_sim_held_out_family.txt"),
+))
+# Same 553 families as HELDOUT_FAMILIES_FILE, in the {"families": [...]} JSON form the
+# revision-2 benchmarks read.
+HELDOUT_FAMILIES_JSON = Path(os.environ.get(
+    "PEINT_PAPER_HELDOUT_FAMILIES_JSON",
+    str(DATA_ROOT / "local_data" / "final_sim_held_out_family.json"),
 ))
 
 # --- Generalization analysis (reviewer response) ---
