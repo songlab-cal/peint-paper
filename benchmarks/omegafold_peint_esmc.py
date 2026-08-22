@@ -29,12 +29,12 @@ from protevo.io import write_msa
 from paper.splits import generate_tree_split
 from paper.structure_prediction import generate_omegafold_predictions
 from benchmarks.generate_all_results import _subsample_selection
+import paper_config as cfg
 
-SIM = ("/scratch/users/akoehl/old/protein-evolution/local_data/simulation/"
-       "final_simulation_512_leaves/ratio_0-1_nucleus_1-0")
+SIM = str(cfg.SIM_ROOT)
 TREE_DIR = f"{SIM}/trees_newick"        # same --tree_dir the ESM-C sims/generate_all_results use
 ROOT_SEQ_DIR = f"{SIM}/root_sequences"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
+R2 = str(cfg.RESULTS_R2_DIR)
 MODELS = {  # raw sim dir -> generate_all_results model key (dir name); both use subsampled_a
     "peint_progressive_unfiltered": "PEINT (Progressive)",
     "peint_single_shot_unfiltered": "PEINT (Single Shot)",

@@ -14,6 +14,8 @@ Run once per revision by setting PEINT_PAPER_RESULTS_DIR before invoking:
 import argparse
 import os
 
+import paper_config as cfg
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -31,7 +33,7 @@ def main():
           f"{len(fams)} families  models={ev.MODEL_ORDER}")
 
     a1, a1_leaf = ev.run_approach1(fams)
-    out = "/scratch/users/akoehl/peint-paper/figures/output"
+    out = str(cfg.FIGURES_DIR)
     os.makedirs(out, exist_ok=True)
     a1.to_csv(f"{out}/esmif_a1_{args.tag}.csv", index=False)
     a1_leaf.to_csv(f"{out}/esmif_a1_{args.tag}_perleaf.csv", index=False)

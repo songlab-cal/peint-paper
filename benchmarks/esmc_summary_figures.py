@@ -23,15 +23,16 @@ import seaborn as sns
 from paper.jsd import REAL, REAL_OTHER_SPLIT
 from paper.model_style import model_colors
 from figures.figure3_conservation import collect_family_jsd
+import paper_config as cfg
 
-R1 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
-FAM_JSON = "/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json"
-OUT = "/scratch/users/akoehl/peint-paper/figures/output/esmc_summary"
+R1 = str(cfg.RESULTS_R1_DIR)
+R2 = str(cfg.RESULTS_R2_DIR)
+FAM_JSON = str(cfg.HELDOUT_FAMILIES_JSON)
+OUT = str(cfg.FIGURES_DIR / "esmc_summary")
 THRESH = 0.7
 
 # Colors from the shared canonical map so PEINT ESM-C matches the ECDFs /
-# figure3_conservation (cyan, not the old brown).
+# figure3_conservation.
 ORDER = ["WAG", "LG", "PEINT ESM2", "PEINT ESM-C", "Real"]
 COLORS = model_colors()
 

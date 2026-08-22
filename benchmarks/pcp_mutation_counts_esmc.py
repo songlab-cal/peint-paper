@@ -29,24 +29,26 @@ from ete3 import Tree
 
 from protevo.io import read_tree
 from protevo.utils import read_msa
+from paper.historian import esmc_historian_dirs
+from paper.model_style import model_colors
+import paper_config as cfg
+
 from figures.figure3_pcp_mutation_counts import get_branches, match_branches
 
-R1 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1/simulations"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
-SIM_TREES = ("/scratch/users/akoehl/old/protein-evolution/local_data/simulation/"
-             "final_simulation_512_leaves/ratio_0-1_nucleus_1-0/trees")
-FAM_JSON = "/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json"
-FIG_OUT = "/scratch/users/akoehl/peint-paper/figures/output"
-ESMC_RECON = (f"{R2}/simulations/historian_progressive/_cache/"
-              "remove_dummy_nodes_from_historian_output/0/e/2/"
-              "7848affe284d9acd102977c0d0f2f3dc441092610c895020ca28319a8da332aaa86e43d5d31b8b064e99a9d97e163d28c7b1f7997d8fc7dc2924a88db175a/"
-              "output_sequences_dir")
-# figure3-style palette (matplotlib default cycle-ish): Real neutral, ESM2 orange, ESM-C green
-COLORS = {"Real": "#8172b3", "PEINT ESM2 (rev1)": "#c44e52", "PEINT ESM-C": "#55a868"}
+_MC = model_colors()
+R1 = str(cfg.RESULTS_R1_DIR / "simulations")
+R2 = str(cfg.RESULTS_R2_DIR)
+SIM_TREES = str(cfg.TREE_DIR)
+FAM_JSON = str(cfg.HELDOUT_FAMILIES_JSON)
+FIG_OUT = str(cfg.FIGURES_DIR)
+# The "refine" ESM-C Historian run, same one every other ESM-C indel panel uses.
+# Resolved inside main() so importing this module never requires the rev2 data.
+COLORS = {k: _MC[k] for k in ("Real", "PEINT ESM2 (rev1)", "PEINT ESM-C")}
 MODEL_ORDER = ["PEINT ESM2 (rev1)", "PEINT ESM-C", "Real"]
 
 
 def main():
+    esmc_recon = esmc_historian_dirs(R2, "refine")["reconstructions"]
     families = json.load(open(FAM_JSON))["families"]
     rows = []
     for i, fam in enumerate(families):
@@ -67,7 +69,7 @@ def main():
         # ESM2 / ESM-C: matched to real branches; branch length = each model's OWN length
         # (sim_branch_length), matching figure3's per-model binning.
         for label, recon in [("PEINT ESM2 (rev1)", f"{R1}/peint_msa_historian"),
-                             ("PEINT ESM-C", ESMC_RECON)]:
+                             ("PEINT ESM-C", esmc_recon)]:
             fp = f"{recon}/{fam}.txt"
             if not os.path.exists(fp):
                 continue
