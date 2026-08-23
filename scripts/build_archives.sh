@@ -11,7 +11,6 @@
 #
 # Produces, in --out (default <root>/_upload):
 #   figure_data/            loose, so the Hub can browse it
-#   vep/                    loose
 #   r1.tar.zst r2.tar.zst sim.tar.zst aux.tar.zst
 #   MANIFEST.toml  README.md  CHECKSUMS.sha256
 #

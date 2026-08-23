@@ -60,7 +60,7 @@ unpacking the published dataset into it is the whole setup step:
 ```
 local_data/
   figure_data/   per-panel tables — enough to re-render every panel, no models needed
-  vep/           per-run ProteinGym Spearman tables
+  vep/           per-run ProteinGym Spearman tables (git-tracked, ships with the code)
   r1/            revision 1: classical baselines, PEINT-ESM2, real
   r2/            revision 2: the ESM-C rerun (its own mafft frame)
   sim/           trees, root sequences, empirical + simulated MSAs
@@ -69,8 +69,11 @@ local_data/
   derived/       everything the benchmarks WRITE, incl. computation caches
 ```
 
-`local_data/` is git-ignored. Override any location with the `PEINT_PAPER_*` environment
-variables listed in `paper_config.py`; `LOCAL_DATA` moves the whole tree at once.
+`local_data/` is git-ignored, with one exception: `local_data/vep/` is 329 KB of per-run
+ProteinGym Spearman tables that the three VEP panels cannot render without, so it is tracked
+and the deposit neither carries nor overwrites it. Override any location with the
+`PEINT_PAPER_*` environment variables listed in `paper_config.py`; `LOCAL_DATA` moves the
+whole tree at once.
 
 ### The manifest
 

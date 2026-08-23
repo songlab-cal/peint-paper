@@ -55,7 +55,7 @@ environments involved.
 
 | file | unpacked | files | what it is |
 |---|---|---|---|
-| `figure_data/` + `vep/` | 26 MB | 52 | per-panel tables — the values actually plotted |
+| `figure_data/` | 25 MB | 20 | per-panel tables — the values actually plotted |
 | `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
@@ -78,7 +78,8 @@ the whole instruction. `fetch_local_data.py` does this for you, and verifies eve
 against `CHECKSUMS.sha256` before unpacking.
 
 `MANIFEST.toml` is the machine-readable inventory: one entry per role, with its path, the
-archive that carries it, a probe file, measured sizes, and the panels that need it.
+archive that carries it, a probe file, measured sizes, and the panels that need it. Roles
+marked `in_repo` ship with the code instead and are deliberately absent here.
 
 Bulk roles are tarred rather than stored as loose files on purpose: several hold tens of
 thousands of small per-family text files, which would exceed the Hub's 10,000-entries-per-folder

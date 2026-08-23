@@ -108,6 +108,11 @@ class Role(dict):
         return [Path(_expand(f)) for f in self.get("source_files", [])]
 
     @property
+    def in_repo(self):
+        """True if the role is git-tracked and ships with the code, not the deposit."""
+        return bool(self.get("in_repo"))
+
+    @property
     def excludes(self):
         return list(self.get("exclude", []))
 
@@ -217,6 +222,8 @@ def _cmd_archive_plan(args):
     """
     arcs = archives()
     for r in roles(shipped=True):
+        if r.in_repo:                   # ships with the code; not part of the deposit
+            continue
         arc = r.get("archive")
         file = arcs.get(arc, {}).get("file", "")
         # A file-list role must contribute its individual files, never its directory: several

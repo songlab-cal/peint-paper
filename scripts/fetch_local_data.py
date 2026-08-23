@@ -112,7 +112,7 @@ def main(argv=None):
                   f"{t['files']:>7,} files")
             print(f"      {arc.get('note', '')}")
             print(f"      roles: {', '.join(r.name for r in rs)}")
-        loose = [r for r in manifest.roles(tier="figure_data")]
+        loose = [r for r in manifest.roles(tier="figure_data") if not r.in_repo]
         print(f"  {'(loose)':12s} {'figure_data/':16s} "
               f"{manifest.totals(loose)['apparent_mb']} M unpacked  "
               f"{manifest.totals(loose)['files']:>7,} files")
@@ -141,7 +141,8 @@ def main(argv=None):
 
     # The loose figure_data tier always comes along: it is small and it is what makes every
     # panel replottable regardless of which bulk archives were chosen.
-    patterns = [f"{r['path']}/**" for r in manifest.roles(tier="figure_data")]
+    patterns = [f"{r['path']}/**" for r in manifest.roles(tier="figure_data")
+                if not r.in_repo]
     patterns += ["README.md", "MANIFEST.toml", CHECKSUMS]
     patterns += [arcs[a]["file"] for a in wanted]
 
