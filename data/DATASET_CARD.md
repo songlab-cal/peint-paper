@@ -53,22 +53,32 @@ environments involved.
 
 ## Contents
 
+| file | unpacked | files | what it is |
+|---|---|---|---|
+| `figure_data/` + `vep/` | 26 MB | 52 | per-panel tables — the values actually plotted |
+| `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
+| `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
+| `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
+| `aux.tar.zst` | 0.1 GB | 30,117 | Pfam/SCOPe/ECOD labels, per-site rates, split lists |
+
 ```
-figure_data/     per-panel tables — the values actually plotted
-r1.tar.zst       revision 1: classical baselines, PEINT-ESM2, real
-                   mafft_add/     realigned real + PEINT leaves (shared column frame)
-                   simulations/   per-model simulated MSAs + Historian reconstructions
-                   3di/           ProstT5 structural-alphabet sequences per model
-                   *_plddt.csv    per-family AF2Rank / OmegaFold pLDDT
-r2.tar.zst       revision 2: the ESM-C rerun (its own mafft frame)
-                   historian_esmc/{refine,norefine}/{events,reconstructions}
-sim.tar.zst      trees, root sequences, empirical + simulated MSAs (1,093 families)
-aux.tar.zst      Pfam/SCOPe/ECOD labels, per-site rates, family split lists
-omegafold_structures.tar.zst   optional: raw ESM-C OmegaFold PDBs
+r1/  mafft_add/     realigned real + PEINT leaves (shared column frame)
+     simulations/   per-model simulated MSAs + the three Historian reconstructions
+     3di/           ProstT5 structural-alphabet sequences per model
+     *.csv          per-family AF2Rank / OmegaFold pLDDT summaries
+r2/  mafft_add/, 3di/, af2/, omegafold/
+     simulations/historian_progressive/  ESM-C Historian, refine and norefine
+aux  annotations/   derived Pfam domain + family labels
+     splits/        the 14,498 train / 553 held-out family lists
+     output_site_rates_dir/   4-category per-site rates
 ```
 
 Each archive unpacks relative to `local_data/`, so `tar -xf X.tar.zst -C local_data/` is
-the whole instruction. `fetch_local_data.py` does this for you.
+the whole instruction. `fetch_local_data.py` does this for you, and verifies every file
+against `CHECKSUMS.sha256` before unpacking.
+
+`MANIFEST.toml` is the machine-readable inventory: one entry per role, with its path, the
+archive that carries it, a probe file, measured sizes, and the panels that need it.
 
 Bulk roles are tarred rather than stored as loose files on purpose: several hold tens of
 thousands of small per-family text files, which would exceed the Hub's 10,000-entries-per-folder
@@ -85,8 +95,10 @@ These are third-party or too large to redistribute; the code fetches them:
   *derived* labels are in `aux.tar.zst`, so the generalization panels work offline.
 - **AlphaFold weights, TM-align, ProstT5, ProteinGym** — see the repo's `scripts/fetch_*.sh`.
 - **Model checkpoints** — <FILL: where PEINT checkpoints live, if released>.
-- **Raw AF2Rank/OmegaFold structure predictions for revision 1** — ~100 GB across ~835,000
-  files. Only the per-family pLDDT summaries they produce are included.
+- **Raw AF2Rank/OmegaFold structure predictions for revision 1** — `r1/af2` (481,316 files)
+  and `r1/omegafold` (607,696), **1.09 million files and ~100 GB**. Only the two per-family
+  pLDDT summaries they produce are included, and those are the only thing any panel reads
+  out of them. Both are declared in `MANIFEST.toml` as `tier = "on_request"`.
 
 ## Reproducibility, honestly
 
