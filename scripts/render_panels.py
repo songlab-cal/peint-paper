@@ -197,6 +197,32 @@ def cmd_check(sel):
                 print(f"  MISSING  figures/{o}   (run --only {p.name})")
                 missing += 1
     print("all selected outputs present" if not missing else f"{missing} missing")
+
+    # An output can be present and stale, or absent because its inputs are. Report the data
+    # side too, scoped to the panels actually selected, so --check answers both halves of
+    # "can I regenerate this?" -- the inventory lives in data/MANIFEST.toml.
+    try:
+        from paper import manifest
+    except Exception as exc:                            # tomli missing, manifest malformed
+        print(f"(data check unavailable: {exc})")
+        return 1 if missing else 0
+
+    needed, seen = [], set()
+    for panel in sel:
+        for r in manifest.roles(panel=panel.name):
+            if r.name not in seen:
+                seen.add(r.name)
+                needed.append(r)
+    _, absent = manifest.check(needed)
+    absent = [r for r in absent if r.get("tier") != "on_request"]
+    if absent:
+        print(f"{len(absent)} data role(s) missing for the selected panels: "
+              f"{', '.join(r.name for r in absent)}")
+        hint = ("scripts/check_local_data.py --panels " + " ".join(p.name for p in sel)
+                if len(sel) <= 4 else "scripts/check_local_data.py")
+        print("  " + hint)
+    else:
+        print(f"all {len(needed)} data role(s) for the selected panels present")
     return 1 if missing else 0
 
 
