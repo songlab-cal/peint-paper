@@ -69,7 +69,7 @@ local_data/
   derived/       everything the benchmarks WRITE, incl. computation caches
 ```
 
-`local_data/` is git-ignored, with one exception: `local_data/vep/` is 329 KB of per-run
+`local_data/` is git-ignored, with one exception: `local_data/vep/` is 250 KB of per-run
 ProteinGym Spearman tables that the three VEP panels cannot render without, so it is tracked
 and the deposit neither carries nor overwrites it. Override any location with the
 `PEINT_PAPER_*` environment variables listed in `paper_config.py`; `LOCAL_DATA` moves the

@@ -1623,135 +1623,6 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
 
 
 # ---------------------------------------------------------------------------
-# vESM-encoder comparison figures
-# ---------------------------------------------------------------------------
-# "Version of the paper plots" that adds PEINT-on-vESM alongside the paper's
-# ESM2 baseline and PEINT-on-ESM2, within each encoder tier. Paper generators
-# above are left untouched; these are additive.
-_VESM_TIER_CONFIG = {
-    "150M": {
-        "esm": "ESM2_150M",
-        "peint_esm": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        "peint_vesm": "20260606_122013-ft_217fams-esm2_vesm_150M-vesm_150M-epoch=6-step=5439-t_1_0",
-    },
-    "650M": {
-        "esm": "ESM2_650M",
-        "peint_esm": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0",
-        "peint_vesm": "20260606_123141-ft_217fams-esm2_vesm_650M-vesm_650M-epoch=4-step=3885-t_1_0",
-    },
-}
-
-
-def _vesm_run_and_model_names(tier: str):
-    """Build (run_names, model_names) for the 3-way vESM comparison at a tier."""
-    cfg = _VESM_TIER_CONFIG[tier]
-    run_names = {
-        "esm": {"run_name": cfg["esm"], "t_wag": None},
-        "peint_esm": {"run_name": cfg["peint_esm"], "t_wag": None},
-        "peint_vesm": {"run_name": cfg["peint_vesm"], "t_wag": None},
-    }
-    model_names = {
-        "esm": f"ESM2-{tier}",
-        "peint_esm": f"PEINT (ESM2-{tier})",
-        "peint_vesm": f"PEINT (vESM-{tier})",
-    }
-    return run_names, model_names
-
-
-def make_spearman_figure_vesm(tier: str = "650M"):
-    """Aggregate Spearman-by-assay-type bar chart including PEINT-on-vESM."""
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    save_path = _fig_path("spearman_agg", f"spearman_plot_vesm_{tier}.png")
-    return _make_spearman_plot(
-        run_names=run_names,
-        model_names=model_names,
-        palette=palettes,
-        save_path=save_path,
-        figsize=(10, 4),
-        save_spearman_path=_fig_path(
-            "spearman_agg", f"spearman_results_vesm_{tier}.csv"
-        ),
-    )
-
-
-def make_per_family_spearman_figure_vesm(tier: str = "650M"):
-    """Per-family OrganismalFitness Spearman scatter including PEINT-on-vESM."""
-    output_root = VEP_RESULTS_DIR
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    plt.rcParams.update(
-        {
-            "axes.labelsize": 12,
-            "axes.titlesize": 12,
-            "xtick.labelsize": 6,
-            "ytick.labelsize": 8,
-            "legend.title_fontsize": 12,
-            "legend.fontsize": 10,
-        }
-    )
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    save_path = _fig_path("per_family", f"per_family_spearman_plot_vesm_{tier}.png")
-    return _make_per_family_spearman_plot(
-        run_names=run_names,
-        model_names=model_names,
-        output_dir=Path(output_root),
-        assay_type="OrganismalFitness",
-        sort_by_model=f"PEINT (ESM2-{tier})",
-        save_path=save_path,
-        palette=palettes,
-        dot_size=50,
-        figsize=(12, 5),
-        display_full_family_name=True,
-    )
-
-
-def make_spearman_by_mutational_depth_figure_vesm(tier: str = "650M"):
-    """Spearman-by-mutational-depth pointplot including PEINT-on-vESM."""
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    save_path = _fig_path(
-        "mutational_depth", f"spearman_by_mutational_depth_vesm_{tier}.png"
-    )
-    output_dir = VEP_RESULTS_DIR
-
-    df_results_all = []
-    for name, info in run_names.items():
-        depth_fpath = output_dir / info["run_name"] / "spearman_by_mutation_depth.csv"
-        if not depth_fpath.exists():
-            print(f"{name}: {depth_fpath} not found, skipping")
-            continue
-        df = pd.read_csv(depth_fpath)
-        df["model"] = name
-        df_results_all.append(df)
-    if not df_results_all:
-        raise ValueError("No valid mutation depth data files found")
-    df_results_all = pd.concat(df_results_all, ignore_index=True)
-
-    ax = _plot_spearman_by_mutational_depth(
-        df_results_all=df_results_all,
-        model_names=model_names,
-        palette=palettes,
-        figsize=(8, 5),
-        alpha=0.8,
-    )
-    ax.set_title(f"Mean Spearman by Mutational Depth (vESM vs ESM2, {tier})")
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.5)
-    ax.tick_params(width=0.5, length=2)
-    ax.grid(True, alpha=0.3, which="both", linewidth=0.25)
-    fig = ax.get_figure()
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=400, bbox_inches="tight")
-    fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
-    print(f"Plot saved to: {save_path} and {save_path.with_suffix('.pdf')}")
-    plt.show()
-    return ax
-
-
-# ---------------------------------------------------------------------------
 # Official-release baselines + base-vs-PEINT / multi-model comparisons
 # ---------------------------------------------------------------------------
 # Baselines come from ProteinGym's released per-variant zero-shot scores via
@@ -2026,8 +1897,9 @@ def make_mutational_depth_by_base_lm(save_name="mutational_depth_by_base_lm.png"
 #                     332,997,184 frozen +  26,882,944 head = 359,880,128    (+8.1%)
 #
 # (summed over state_dict, split on the "model.esm." prefix; do NOT infer these from
-# checkpoint file size — the encoder-stripped vESM checkpoints carry optimizer state and
-# imply a head about 3x too large.) ProGen2 / Tranception keep their published counts.
+# checkpoint file size — the encoder-stripped checkpoints of the vESM runs, since dropped,
+# carried optimizer state and implied a head about 3x too large.) ProGen2 / Tranception keep
+# their published counts.
 #
 # Data sources: ESM2 / ESM-C from the ProteinGym release (official_baselines); PEINT via
 # compute_fitness.
@@ -2187,9 +2059,6 @@ def main():
             "esm_vs_peint",
             "mutant_depth",
             "time_family_best_vs_default",
-            "agg_vesm",
-            "family_vesm",
-            "mutant_depth_vesm",
             "esmc_esm2",
             "by_base_lm",
             "params",
@@ -2225,18 +2094,6 @@ def main():
 
     elif args.plot == "time_family_best_vs_default":
         make_per_family_spearman_time_figure_best_vs_default()
-
-    elif args.plot == "agg_vesm":
-        for tier in ("150M", "650M"):
-            make_spearman_figure_vesm(tier=tier)
-
-    elif args.plot == "family_vesm":
-        for tier in ("150M", "650M"):
-            make_per_family_spearman_figure_vesm(tier=tier)
-
-    elif args.plot == "mutant_depth_vesm":
-        for tier in ("150M", "650M"):
-            make_spearman_by_mutational_depth_figure_vesm(tier=tier)
 
     elif args.plot == "esmc_esm2":
         make_esmc_esm2_comparison()

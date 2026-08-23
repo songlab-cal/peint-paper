@@ -82,13 +82,12 @@ in_repo = true
 probe = "test_lls/production/ESM2_150M/spearman_results.csv"
 blocks_mb = 1
 apparent_mb = 1
-files = 32
+files = 24
 panels = ["vep_params", "vep_by_base_lm"]
-note = """Per-run ProteinGym Spearman tables, 329 KB across 32 CSVs. `in_repo` means these
+note = """Per-run ProteinGym Spearman tables, 250 KB across 24 CSVs. `in_repo` means these
 are git-tracked and ship with the code, so the deposit neither carries nor overwrites them --
 a fetch that wrote over tracked files would dirty the working tree for no gain. The role
-still exists so --check can confirm they are there; only 15 of the runs are still plotted,
-the rest are kept as provenance for which models were compared."""
+still exists so --check can confirm they are there."""
 
 
 # =====================================================================================
