@@ -48,6 +48,26 @@ DATA_ROOT = Path(os.environ.get(
 # are symlinks out to the authoritative trees; for anyone else they are real directories.
 LOCAL_DATA = Path(os.environ.get("PEINT_PAPER_LOCAL_DATA", str(REPO_ROOT / "local_data")))
 
+
+def _first_existing(*candidates, env=None):
+    """First candidate that exists, else the last one, with an env var overriding all.
+
+    One config has to serve two layouts: this machine, where these inputs sit in scattered
+    absolute trees, and an unpacked data deposit, where everything lives under LOCAL_DATA.
+    The authoritative tree is listed first so the producing machine keeps resolving to the
+    exact same string -- protevo cache keys hash absolute argument paths, and a "harmless"
+    reordering here would cold-start every cached computation.
+
+    Falling through to the last candidate rather than raising means a missing input is
+    reported against the deposit path, which is the layout whoever hits that error is using.
+    """
+    if env and os.environ.get(env):
+        return Path(os.environ[env])
+    for c in candidates:
+        if Path(c).exists():
+            return Path(c)
+    return Path(candidates[-1])
+
 # Per-panel tables that fully determine each figure — the lightweight reproduction tier.
 FIGURE_DATA_DIR = Path(os.environ.get(
     "PEINT_PAPER_FIGURE_DATA_DIR", str(LOCAL_DATA / "figure_data")
@@ -68,30 +88,35 @@ CHERRYML_CACHE_DIR = Path(os.environ.get(
 
 # Root holding the 512-leaf simulation inputs (empirical_msas / trees / root_sequences).
 # These live under a separate legacy tree in the current layout.
-SIM_ROOT = Path(os.environ.get(
-    "PEINT_PAPER_SIM_ROOT",
+SIM_ROOT = _first_existing(
     "/scratch/users/akoehl/old/protein-evolution/local_data/simulation"
     "/final_simulation_512_leaves/ratio_0-1_nucleus_1-0",
-))
+    LOCAL_DATA / "sim",
+    env="PEINT_PAPER_SIM_ROOT",
+)
 
 # --- Derived locations (extend as figures are migrated) ---
 # The a3m alignments (and the ground-truth PDBs below) come from the trRosetta training
 # set: https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz (~30 GB, fetch manually).
-INPUT_A3M_DIR = Path(os.environ.get(
-    "PEINT_PAPER_INPUT_A3M_DIR", str(DATA_ROOT / "input_data" / "a3m")
-))
+INPUT_A3M_DIR = _first_existing(
+    DATA_ROOT / "input_data" / "a3m",
+    LOCAL_DATA / "a3m",
+    env="PEINT_PAPER_INPUT_A3M_DIR",
+)
 # The two result generations, kept separate: revision 1 holds the classical baselines,
 # PEINT-ESM2 and real; revision 2 holds the ESM-C rerun (its own mafft frame).
-RESULTS_R1_DIR = Path(
-    os.environ.get("PEINT_PAPER_RESULTS_R1_DIR")
-    or os.environ.get("PEINT_PAPER_RESULTS_DIR")
-    or str(DATA_ROOT / "local_data" / "results_revision1")
-)
-RESULTS_R2_DIR = Path(
-    os.environ.get("PEINT_PAPER_RESULTS_R2_DIR")
-    or os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR")
-    or str(DATA_ROOT / "local_data" / "results_revision2_esmc")
-)
+RESULTS_R1_DIR = _first_existing(
+    DATA_ROOT / "local_data" / "results_revision1",
+    LOCAL_DATA / "r1",
+    env="PEINT_PAPER_RESULTS_R1_DIR",
+) if not os.environ.get("PEINT_PAPER_RESULTS_DIR") else Path(
+    os.environ["PEINT_PAPER_RESULTS_DIR"])
+RESULTS_R2_DIR = _first_existing(
+    DATA_ROOT / "local_data" / "results_revision2_esmc",
+    LOCAL_DATA / "r2",
+    env="PEINT_PAPER_RESULTS_R2_DIR",
+) if not os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR") else Path(
+    os.environ["PEINT_PAPER_ESMC_RESULTS_DIR"])
 # Back-compat alias; RESULTS_R1_DIR is the name to use in new code.
 RESULTS_DIR = RESULTS_R1_DIR
 
@@ -103,10 +128,11 @@ ROOT_SEQ_DIR = SIM_ROOT / "root_sequences"
 RATE_MATRIX_DIR = REPO_ROOT / "data" / "rate_matrices"
 
 # --- Figure 3 (PCP mutation counts / Historian indels) specifics ---
-SIM_FAMILIES_FILE = Path(os.environ.get(
-    "PEINT_PAPER_SIM_FAMILIES_FILE",
-    str(DATA_ROOT / "local_data" / "sim_families_out_lg_s256_ok.txt"),
-))
+SIM_FAMILIES_FILE = _first_existing(
+    DATA_ROOT / "local_data" / "sim_families_out_lg_s256_ok.txt",
+    LOCAL_DATA / "splits" / "sim_families_out_lg_s256_ok.txt",
+    env="PEINT_PAPER_SIM_FAMILIES_FILE",
+)
 SIMULATIONS_DIR = RESULTS_DIR / "simulations"
 LEAF_DISTANCES_DIR = RESULTS_DIR / "leaf_distances"
 
@@ -140,17 +166,17 @@ TRANSITIONS_DIR = Path(os.environ.get(
     "PEINT_PAPER_TRANSITIONS_DIR",
     "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l",
 ))
-NONTRAIN_FAMILIES_FILE = Path(os.environ.get(
-    "PEINT_PAPER_NONTRAIN_FAMILIES_FILE",
-    str(DATA_ROOT / "local_data" / "14k5_nontrain_fam.json"),
-))
+NONTRAIN_FAMILIES_FILE = _first_existing(
+    DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
+    LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    env="PEINT_PAPER_NONTRAIN_FAMILIES_FILE",
+)
 
 # Per-site rates (4-category) for the LG arm of the simulation panel, one <family>.txt per
 # family. Originally produced by cherryml's treewise train/test split
 # (``train_site_rates_4cat_dir``); shipped as data rather than recomputed here.
 SITE_RATES_DIR = Path(os.environ.get(
-    "PEINT_PAPER_SITE_RATES_DIR",
-    str(REPO_ROOT / "local_data" / "output_site_rates_dir"),
+    "PEINT_PAPER_SITE_RATES_DIR", str(LOCAL_DATA / "output_site_rates_dir"),
 ))
 
 # --- Structure prediction (Figure 2 pLDDT + the TM-score benchmarks) ---
@@ -176,9 +202,11 @@ HISTORIAN_PATH = Path(os.environ.get(
 #     https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz   (~30 GB)
 # Download and extract it yourself, then point the two env vars at its pdb/ and a3m/
 # subdirectories. Deliberately not fetched by any script here given the size.
-GROUND_TRUTH_STRUCTURE_DIR = Path(os.environ.get(
-    "PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR", "/scratch/users/matthew_liu/input_data/pdb"
-))
+GROUND_TRUTH_STRUCTURE_DIR = _first_existing(
+    "/scratch/users/matthew_liu/input_data/pdb",
+    LOCAL_DATA / "pdb",
+    env="PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR",
+)
 
 # --- 3Di annotation (ProstT5) ---
 # Both fetched by scripts/fetch_3di_weights.sh. PROSTT5_CACHE_DIR is a HuggingFace cache
@@ -204,16 +232,18 @@ CONSERVATION_DIR = RESULTS_DIR / "conservation"
 SIMULATED_MSA_DIR = SIM_ROOT / "simulated_msas"
 REAL_TREE_DIR = Path(os.environ.get("PEINT_PAPER_REAL_TREE_DIR", str(TREE_DIR)))
 REAL_MSA_DIR = Path(os.environ.get("PEINT_PAPER_REAL_MSA_DIR", str(EMPIRICAL_MSA_DIR)))
-HELDOUT_FAMILIES_FILE = Path(os.environ.get(
-    "PEINT_PAPER_HELDOUT_FAMILIES_FILE",
-    str(DATA_ROOT / "local_data" / "final_sim_held_out_family.txt"),
-))
+HELDOUT_FAMILIES_FILE = _first_existing(
+    DATA_ROOT / "local_data" / "final_sim_held_out_family.txt",
+    LOCAL_DATA / "splits" / "final_sim_held_out_family.txt",
+    env="PEINT_PAPER_HELDOUT_FAMILIES_FILE",
+)
 # Same 553 families as HELDOUT_FAMILIES_FILE, in the {"families": [...]} JSON form the
 # revision-2 benchmarks read.
-HELDOUT_FAMILIES_JSON = Path(os.environ.get(
-    "PEINT_PAPER_HELDOUT_FAMILIES_JSON",
-    str(DATA_ROOT / "local_data" / "final_sim_held_out_family.json"),
-))
+HELDOUT_FAMILIES_JSON = _first_existing(
+    DATA_ROOT / "local_data" / "final_sim_held_out_family.json",
+    LOCAL_DATA / "splits" / "final_sim_held_out_family.json",
+    env="PEINT_PAPER_HELDOUT_FAMILIES_JSON",
+)
 
 # --- Generalization analysis (reviewer response) ---
 # Tests whether simulation quality holds on protein classes ABSENT from training. The
@@ -225,15 +255,21 @@ HELDOUT_FAMILIES_JSON = Path(os.environ.get(
 # The train / held-out family lists. The held-out list is the simulation eval set; it is
 # the JSON form of HELDOUT_FAMILIES_FILE (same 553 families), kept separate because the
 # JSON also carries the canonical ordering used elsewhere.
-TRAIN_FAMILIES_FILE = Path(os.environ.get(
-    "PEINT_PAPER_TRAIN_FAMILIES_FILE", str(DATA_ROOT / "local_data" / "14k5_fam.json")
-))
-EVAL_FAMILIES_FILE = Path(os.environ.get(
-    "PEINT_PAPER_EVAL_FAMILIES_FILE", str(DATA_ROOT / "local_data" / "14k5_nontrain_fam.json")
-))
-ANNOTATION_DIR = Path(os.environ.get(
-    "PEINT_PAPER_ANNOTATION_DIR", str(DATA_ROOT / "local_data" / "generalization" / "annotations")
-))
+TRAIN_FAMILIES_FILE = _first_existing(
+    DATA_ROOT / "local_data" / "14k5_fam.json",
+    LOCAL_DATA / "splits" / "14k5_fam.json",
+    env="PEINT_PAPER_TRAIN_FAMILIES_FILE",
+)
+EVAL_FAMILIES_FILE = _first_existing(
+    DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
+    LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    env="PEINT_PAPER_EVAL_FAMILIES_FILE",
+)
+ANNOTATION_DIR = _first_existing(
+    DATA_ROOT / "local_data" / "generalization" / "annotations",
+    LOCAL_DATA / "annotations",
+    env="PEINT_PAPER_ANNOTATION_DIR",
+)
 GENERALIZATION_DIR = Path(os.environ.get(
     "PEINT_PAPER_GENERALIZATION_DIR", str(FIGURES_DIR / "generalization")
 ))
