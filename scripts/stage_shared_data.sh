@@ -17,6 +17,13 @@
 #   PUSH (run as yourself; the shared account accepts your key)
 #     scripts/stage_shared_data.sh --apply
 #
+#   BULK ARCHIVES — for roles too file-heavy to rsync (the rev1 structure trees are
+#   481,316 and 607,696 files), --as-archive streams the role as one tar.zst straight to
+#   the destination. Nothing intermediate is written, so it costs no scratch on either side.
+#     scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --apply
+#     scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --verify
+#   --only reaches on_request roles by name; --level sets zstd effort (default 10).
+#
 #   Either way:
 #     scripts/stage_shared_data.sh --plan          # role table, touches nothing
 #     scripts/stage_shared_data.sh                 # dry run: every file that would move
@@ -36,12 +43,20 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="${PEINT_PAPER_PY_ESMC:-${PEINT_PAPER_PY:-python3}}"
 SHARED_DIR="/scratch/users/spa-evolution-yss/peint_paper_data"
+SHARED_USER="${PEINT_PAPER_SHARED_USER:-spa-evolution-yss}"
 DEST="${PEINT_PAPER_SHARED_DEST:-}"
 
 MODE=dry
 ONLY=""
 RESUME=0
+AS_ARCHIVE=0
+ZLEVEL="${PEINT_PAPER_ZSTD_LEVEL:-10}"
+ZTHREADS="${PEINT_PAPER_ZSTD_THREADS:-8}"
 SRC_HOST="${PEINT_PAPER_SRC_HOST:-}"
+# The ssh hop switches *user*, not machine: /scratch is one NFS mount, so the source data is
+# the same bytes from any node. Default to whichever host you are on, and accept a bare
+# username for --src-host so nothing here is pinned to one login node.
+THIS_HOST="$(hostname)"
 SRC_REPO="${PEINT_PAPER_SRC_REPO:-/scratch/users/akoehl/peint-paper}"
 # An ssh command gets a login shell, not your interactive environment, so the default python
 # there is whatever is first on PATH -- here a 3.8 that predates tomllib and has no tomli.
@@ -58,6 +73,8 @@ while [[ $# -gt 0 ]]; do
     --verify)  MODE=verify ;;
     --plan)    MODE=plan ;;
     --resume)  RESUME=1 ;;
+    --as-archive) AS_ARCHIVE=1 ;;
+    --level)   ZLEVEL="${2:?--level needs a number}"; shift ;;
     --dest)    DEST="${2:?--dest needs a value}"; shift ;;
     --src-host) SRC_HOST="${2:?--src-host needs user@host}"; shift ;;
     --src-repo) SRC_REPO="${2:?--src-repo needs a path}"; shift ;;
@@ -75,7 +92,7 @@ done
 # half of the rsync, which is the whole point.
 if [[ -z "$DEST" ]]; then
   if [[ -n "$SRC_HOST" ]]; then DEST="$SHARED_DIR"
-  else DEST="spa-evolution-yss@beren:$SHARED_DIR"; fi
+  else DEST="$SHARED_USER@$THIS_HOST:$SHARED_DIR"; fi
 fi
 
 # "host:/path" or a plain local "/path".
@@ -94,6 +111,7 @@ DEST_PATH="${DEST_PATH%/}"
 SSH_CM=(-o ControlMaster=auto -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=8h)
 SSH="ssh ${SSH_CM[*]}"
 
+[[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
 [[ -n "$SRC_HOST" && -n "$DEST_HOST" ]] && {
   echo "remote source and remote destination at once is not supported" >&2; exit 2; }
 
@@ -102,6 +120,8 @@ SSH="ssh ${SSH_CM[*]}"
 # the first pull-mode run.
 on_src()  { if [[ -n "$SRC_HOST" ]];  then ssh -n "${SSH_CM[@]}" "$SRC_HOST"  "$@"; else bash -c "$*" </dev/null; fi; }
 on_dest() { if [[ -n "$DEST_HOST" ]]; then ssh -n "${SSH_CM[@]}" "$DEST_HOST" "$@"; else bash -c "$*" </dev/null; fi; }
+# Same, but keeps stdin open -- only for the archive stream, which pipes into it.
+on_dest_pipe() { if [[ -n "$DEST_HOST" ]]; then ssh "${SSH_CM[@]}" "$DEST_HOST" "$@"; else bash -c "$*"; fi; }
 
 # Whichever side is remote, that is the one needing an open connection.
 REMOTE_SIDE="${SRC_HOST:-$DEST_HOST}"
@@ -158,14 +178,19 @@ EOF
   exit 5
 fi
 [[ -n "$PLAN" ]] || { echo "empty transfer plan from paper.manifest" >&2; exit 1; }
+# Default to what the deposit ships. Naming a role explicitly overrides that, including the
+# on_request ones -- asking for r1_af2 by name is a deliberate act, and making you pass a tier
+# flag too would be friction rather than a safeguard.
 if [[ -n "$ONLY" ]]; then
   PLAN="$(awk -F'\t' -v r="$ONLY" '$1==r' <<<"$PLAN")"
-  [[ -n "$PLAN" ]] || { echo "no role named '$ONLY' in the shipped tiers" >&2; exit 2; }
+  [[ -n "$PLAN" ]] || { echo "no role named '$ONLY' in data/MANIFEST.toml" >&2; exit 2; }
+else
+  PLAN="$(awk -F'\t' '$2!="on_request"' <<<"$PLAN")"
 fi
 
 # Refuse a destination that is inside a source, or a source inside the destination. This is
 # the guard that matters: everything else this script does is a read.
-while IFS=$'\t' read -r -u 3 role kind rel src excl; do
+while IFS=$'\t' read -r -u 3 role tier kind rel src excl; do
   [[ -n "${src:-}" ]] || continue
   srcdir="$src"; [[ "$kind" == file ]] && srcdir="$(dirname "$src")"
   if [[ -z "$DEST_HOST" ]]; then
@@ -207,6 +232,67 @@ esac
 
 rc=0
 n_roles=0
+
+# ---------------------------------------------------------------- archive stream
+# Move a role as ONE compressed stream instead of file-by-file. For the rev1 structure trees
+# -- 481,316 and 607,696 files -- per-file rsync is the wrong tool by an order of magnitude,
+# and tarring to disk first would need ~25 GB of scratch on a quota that has ~52 GB free.
+# Nothing intermediate is ever written: tar and zstd run on the source side, the bytes land
+# straight in the destination file, and it is owned by whoever runs the receiving end.
+#
+# The archive name matches the role's `archive` file in MANIFEST.toml, so deciding later to
+# ship one of these is a tier change in the manifest, not a rename here.
+stream_archive() {
+  local role="$1" src="$2"
+  local parent base arc
+  parent="$(dirname "$src")"; base="$(basename "$src")"
+  arc="$DEST_PATH/${role}.tar.zst"
+
+  if [[ "$MODE" != apply ]]; then
+    printf '  %-8s %-22s %s  (tar | zstd -%s -T%s, streamed)\n' \
+      "$MODE" "$role" "${role}.tar.zst" "$ZLEVEL" "$ZTHREADS"
+    return
+  fi
+
+  if [[ $RESUME -eq 0 ]] && on_dest "test -e '$arc'" >/dev/null 2>&1; then
+    printf '  ALREADY THERE   %-22s %s (pass --resume to overwrite)\n' "$role" "${role}.tar.zst"
+    rc=1; return
+  fi
+
+  printf '  %-8s %-22s %s\n' "$MODE" "$role" "${role}.tar.zst"
+  # pipefail matters here: without it a tar that dies mid-way still leaves a valid-looking
+  # zstd file, which is precisely the silent-truncation failure this script exists to avoid.
+  local tarcmd="set -o pipefail; tar -C '$parent' -cf - '$base' | zstd -q -T$ZTHREADS -$ZLEVEL"
+  if [[ -n "$SRC_HOST" ]]; then
+    on_src "$tarcmd" > "$arc" || { printf '  FAILED    %-22s\n' "$role"; rc=1; return; }
+  elif [[ -n "$DEST_HOST" ]]; then
+    bash -o pipefail -c "$tarcmd" | on_dest_pipe "cat > '$arc'" \
+      || { printf '  FAILED    %-22s\n' "$role"; rc=1; return; }
+  else
+    bash -o pipefail -c "$tarcmd" > "$arc" \
+      || { printf '  FAILED    %-22s\n' "$role"; rc=1; return; }
+  fi
+}
+
+verify_archive() {
+  local role="$1" src="$2"
+  local arc="$DEST_PATH/${role}.tar.zst"
+  if ! on_dest "test -e '$arc'"; then
+    printf '  MISSING   %-22s %s\n' "$role" "${role}.tar.zst"; rc=1; return
+  fi
+  # zstd frames carry a content checksum, so -t proves the stream decompresses to what was
+  # compressed. It cannot prove tar was *given* everything, hence the member count too.
+  if ! on_dest "zstd -t '$arc'" >/dev/null 2>&1; then
+    printf '  CORRUPT   %-22s %s\n' "$role" "${role}.tar.zst"; rc=1; return
+  fi
+  local want have
+  want="$(on_src "find '$src' -type f | wc -l")"
+  have="$(on_dest "tar --use-compress-program=unzstd -tf '$arc' | grep -vc '/\$'")"
+  if [[ "$want" != "$have" ]]; then
+    printf '  COUNT     %-22s src=%s archive=%s\n' "$role" "$want" "$have"; rc=1; return
+  fi
+  printf '  ok        %-22s %s (%s members)\n' "$role" "${role}.tar.zst" "$have"
+}
 
 # ---------------------------------------------------------------- transfer
 transfer() {
@@ -298,10 +384,17 @@ echo "mode        ${SRC_HOST:+pull from $SRC_HOST}${DEST_HOST:+push to $DEST_HOS
 echo "plan        ${SRC_HOST:+$SRC_HOST:}$SRC_REPO/data/MANIFEST.toml"
 echo "destination ${DEST_HOST:+$DEST_HOST:}$DEST_PATH"
 echo
-while IFS=$'\t' read -r -u 3 role kind rel src excl; do
+while IFS=$'\t' read -r -u 3 role tier kind rel src excl; do
   [[ -n "${role:-}" ]] || continue
   n_roles=$((n_roles + 1))
-  if [[ "$MODE" == verify ]]; then verify_role "$role" "$kind" "$rel" "$src" "${excl:-}"
+  if [[ $AS_ARCHIVE -eq 1 ]]; then
+    if [[ "$kind" != dir ]]; then
+      echo "  --as-archive only applies to directory roles; $role is a file list" >&2
+      rc=1; continue
+    fi
+    if [[ "$MODE" == verify ]]; then verify_archive "$role" "$src"
+    else stream_archive "$role" "$src"; fi
+  elif [[ "$MODE" == verify ]]; then verify_role "$role" "$kind" "$rel" "$src" "${excl:-}"
   else transfer "$role" "$kind" "$rel" "$src" "${excl:-}"; fi
 done 3<<<"$PLAN"
 

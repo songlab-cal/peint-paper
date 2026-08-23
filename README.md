@@ -117,6 +117,25 @@ Dry-run is the default in both directions. `--plan` shows the role table without
 anything, `--verify` confirms the destination is complete, and `--only <role>` does one at a
 time. Nothing is ever written to the source side.
 
+The ssh hop switches *user*, not machine — `/scratch` is one NFS mount, so the source data is
+the same bytes from any node. Both scripts default to whichever host you are on, and
+`--src-host` accepts a bare username. Note that ssh between accounts may be gated by
+`pam_slurm_adopt` on compute nodes, which refuses unless you hold a job there.
+
+For roles too file-heavy to rsync sensibly — the two rev1 structure trees are 481,316 and
+607,696 files — `--as-archive` streams the role as a single `tar.zst` straight to the
+destination, writing nothing intermediate on either side:
+
+```bash
+scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --apply
+scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --verify
+```
+
+`--only` reaches `on_request` roles by name, so asking for one is deliberate. Verification
+tests the zstd frame checksum and compares the archive's member count against the source's
+file count. The archive is named after the role's `archive` entry in the manifest, so
+deciding later to publish one is a `tier` change there rather than a rename.
+
 Sizes are measured, not estimated. Note that `blocks_mb` (what it costs on a compressing
 filesystem) can *exceed* `apparent_mb` for roles made of many tiny files — `site_rates` is
 30,104 files averaging 1 KB.

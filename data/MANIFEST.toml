@@ -56,6 +56,19 @@ name = "aux"
 file = "aux.tar.zst"
 note = "annotation labels, per-site rates, family split lists"
 
+# The two rev1 structure trees. Declared so they can be transferred or deposited on demand
+# without inventing names for them at the time; they stay out of every tier that ships until
+# their roles' `tier` is changed from on_request to full.
+[[archive]]
+name = "r1_af2"
+file = "r1_af2.tar.zst"
+note = "optional: raw rev1 AF2Rank output, 481,316 files. Only af2rank_comparisons.csv is needed by any panel."
+
+[[archive]]
+name = "r1_omegafold"
+file = "r1_omegafold.tar.zst"
+note = "optional: raw rev1 OmegaFold structures, 607,696 files. Only omegafold_plddt.csv is needed by any panel."
+
 
 # =====================================================================================
 #  Tier: figure_data -- ~22 MB, replots every panel with no models and no GPU
@@ -335,6 +348,7 @@ name = "r1_af2"
 path = "r1/af2"
 source = "{data_root}/local_data/results_revision1/af2"
 tier = "on_request"
+archive = "r1_af2"
 probe = "."
 blocks_mb = 12775
 apparent_mb = 53581
@@ -349,6 +363,7 @@ name = "r1_omegafold"
 path = "r1/omegafold"
 source = "{data_root}/local_data/results_revision1/omegafold"
 tier = "on_request"
+archive = "r1_omegafold"
 probe = "."
 blocks_mb = 12433
 apparent_mb = 47564

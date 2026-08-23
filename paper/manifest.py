@@ -204,13 +204,19 @@ def _cmd_links(args):
 
 
 def _cmd_rsync_plan(args):
-    """Tab-separated transfer plan: role, kind, dest-relative-path, source, excludes."""
-    for r in roles(shipped=True):
+    """Tab-separated: role, tier, kind, dest-relative-path, source, excludes.
+
+    Emits every tier, on_request included. The consumer decides what to act on -- naming an
+    on_request role explicitly is a legitimate request for it, and making the caller pass a
+    tier flag as well would be friction without safety.
+    """
+    for r in roles():
         exc = ",".join(r.excludes)
+        tier = r.get("tier", "")
         if r.source is not None:
-            print(f"{r.name}\tdir\t{r['path']}\t{r.source}\t{exc}")
+            print(f"{r.name}\t{tier}\tdir\t{r['path']}\t{r.source}\t{exc}")
         for f in r.source_files:
-            print(f"{r.name}\tfile\t{r['path']}\t{f}\t")
+            print(f"{r.name}\t{tier}\tfile\t{r['path']}\t{f}\t")
     return 0
 
 

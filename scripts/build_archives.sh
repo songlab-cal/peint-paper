@@ -31,6 +31,10 @@ PY="${PEINT_PAPER_PY_ESMC:-${PEINT_PAPER_PY:-python3}}"
 # Same remote-source options as stage_shared_data.sh, so the account holding the staged tree
 # needs no checkout of its own: the plan and the two metadata files come over ssh.
 SRC_HOST="${PEINT_PAPER_SRC_HOST:-}"
+# The ssh hop switches *user*, not machine: /scratch is one NFS mount, so the source data is
+# the same bytes from any node. Default to whichever host you are on, and accept a bare
+# username for --src-host so nothing here is pinned to one login node.
+THIS_HOST="$(hostname)"
 SRC_REPO="${PEINT_PAPER_SRC_REPO:-/scratch/users/akoehl/peint-paper}"
 SRC_PYTHON="${PEINT_PAPER_SRC_PYTHON:-/scratch/users/akoehl/conda/envs/peint-esmc/bin/python}"
 SSH_CM=(-o ControlMaster=auto -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=8h)
@@ -77,7 +81,8 @@ manifest() {
   else "$PY" -m paper.manifest "$@"; fi
 }
 
-if ! PLAN="$(manifest --archive-plan 2>&1)"; then
+if ! [[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
+PLAN="$(manifest --archive-plan 2>&1)"; then
   echo "Could not generate the archive plan${SRC_HOST:+ on $SRC_HOST}:" >&2
   echo "$PLAN" >&2
   exit 5
