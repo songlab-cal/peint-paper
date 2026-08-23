@@ -55,8 +55,15 @@ fi
 [[ "$DEST_PATH" == /* ]] || { echo "destination path must be absolute: $DEST_PATH" >&2; exit 2; }
 DEST_PATH="${DEST_PATH%/}"
 
+# One authenticated ssh connection, reused by every rsync and every remote check. Without
+# multiplexing, password auth would prompt once per role -- and the shared account here has
+# no key installed for us, so password auth is what you get. ControlPersist keeps the master
+# alive between invocations, so you type it once for the whole transfer.
+SSH_CM=(-o ControlMaster=auto -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=8h)
+SSH="ssh ${SSH_CM[*]}"
+
 remote() {  # run a command on whichever side the destination lives
-  if [[ -n "$DEST_HOST" ]]; then ssh -o BatchMode=yes "$DEST_HOST" "$@"; else bash -c "$*"; fi
+  if [[ -n "$DEST_HOST" ]]; then ssh "${SSH_CM[@]}" "$DEST_HOST" "$@"; else bash -c "$*"; fi
 }
 
 # ---------------------------------------------------------------- the plan
@@ -81,6 +88,21 @@ while IFS=$'\t' read -r role kind rel src excl; do
   fi
 done <<<"$PLAN"
 
+if [[ -n "$DEST_HOST" && "$MODE" != plan ]]; then
+  if ! ssh "${SSH_CM[@]}" -o BatchMode=yes -o ConnectTimeout=5 "$DEST_HOST" true 2>/dev/null; then
+    cat >&2 <<EOF
+Cannot reach $DEST_HOST without a prompt. Open one master connection first, and every
+step below will reuse it:
+
+    ssh ${SSH_CM[*]} -fN $DEST_HOST
+
+You will be asked for the shared account's password once; it stays open for 8 hours.
+(Or install your public key in that account's ~/.ssh/authorized_keys and skip this.)
+EOF
+    exit 4
+  fi
+fi
+
 if [[ "$MODE" == plan ]]; then
   "$PY" -m paper.manifest --list --tier figure_data
   echo
@@ -97,6 +119,7 @@ fi
 # --partial-dir makes an interrupted role resume instead of restarting.
 BASE=(-a --no-o --no-g --chmod=D755,F644 --mkpath
       --partial --partial-dir=.rsync-partial --human-readable)
+[[ -n "$DEST_HOST" ]] && BASE+=(-e "$SSH")
 
 for f in "${BASE[@]}"; do
   case "$f" in
