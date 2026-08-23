@@ -25,6 +25,8 @@ dependencies = [
     "ete3",
     "biotite",
     "logomaker",
+    # data/MANIFEST.toml. stdlib tomllib from 3.11; both project envs are still 3.10.
+    'tomli; python_version < "3.11"',
 ]
 
 [project.optional-dependencies]

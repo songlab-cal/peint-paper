@@ -1,0 +1,494 @@
+# Inventory of the data behind the paper's panels.
+#
+# One entry per logical role: where it lives on the machine that produced it (`source`),
+# where it must land relative to `local_data/` (`path`), which archive carries it, and which
+# panels break without it. This file is the single source of truth for four consumers:
+#
+#   scripts/link_local_data.sh     symlink the roles on the producing machine
+#   scripts/stage_shared_data.sh   rsync them to the shared cluster account
+#   scripts/build_archives.sh      tar them for the data deposit
+#   scripts/fetch_local_data.py    download and unpack them again
+#
+# Keeping it in one place is the point: the role list previously existed three times and
+# had already drifted.
+#
+# Sizes are measured, not estimated. `blocks_mb` is what it costs on the destination (the
+# cluster filesystem compresses transparently); `apparent_mb` is what rsync moves and what a
+# downloader needs free. For many small files blocks can EXCEED apparent -- `site_rates` is
+# 30,104 files averaging 1 KB, so it is 33 MB of content in 78 MB of blocks.
+#
+# Tiers:
+#   figure_data  every table needed to re-render all panels; loose files on the Hub
+#   full         the inputs behind those tables, so metrics recompute rather than replot
+#   on_request   real data, deliberately NOT transferred or deposited (see each note)
+
+version = 1
+
+[defaults]
+data_root = "/scratch/users/akoehl/protein-evolution"
+sim_root = "/scratch/users/akoehl/old/protein-evolution/local_data/simulation/final_simulation_512_leaves/ratio_0-1_nucleus_1-0"
+gt_pdb_root = "/scratch/users/matthew_liu/input_data/pdb"
+peint_repo = "/scratch/users/akoehl/peint"
+
+
+# =====================================================================================
+#  Archives. Each unpacks relative to local_data/, so `tar -xf X.tar.zst -C local_data/`
+#  is the whole instruction.
+# =====================================================================================
+
+[[archive]]
+name = "r1"
+file = "r1.tar.zst"
+note = "revision 1: classical baselines, PEINT-ESM2 and real, in the rev1 mafft frame"
+
+[[archive]]
+name = "r2"
+file = "r2.tar.zst"
+note = "revision 2: the ESM-C rerun, in its own mafft frame, incl. the Historian outputs"
+
+[[archive]]
+name = "sim"
+file = "sim.tar.zst"
+note = "trees, root sequences, empirical + simulated MSAs behind the 512-leaf simulation"
+
+[[archive]]
+name = "aux"
+file = "aux.tar.zst"
+note = "annotation labels, per-site rates, family split lists"
+
+
+# =====================================================================================
+#  Tier: figure_data -- ~22 MB, replots every panel with no models and no GPU
+# =====================================================================================
+
+[[role]]
+name = "figure_data"
+path = "figure_data"
+source = "{repo_root}/local_data/figure_data"
+tier = "figure_data"
+probe = "figure3_conservation_jsd.csv"
+blocks_mb = 21
+apparent_mb = 25
+files = 20
+panels = ["all"]
+note = "Per-panel tables. Shipped loose rather than tarred so they can be browsed on the Hub."
+
+[[role]]
+name = "vep"
+path = "vep"
+source = "{repo_root}/local_data/vep"
+tier = "figure_data"
+probe = "test_lls/production/ESM2_150M/spearman_results.csv"
+blocks_mb = 1
+apparent_mb = 1
+files = 32
+panels = ["vep_params", "vep_by_base_lm"]
+note = """Per-run ProteinGym Spearman tables. The README calls these in-repo but .gitignore
+ignores local_data/ wholesale and nothing under it is tracked, so a fresh clone cannot
+render panels 16-18 without this role."""
+
+
+# =====================================================================================
+#  Tier: full / archive r1
+# =====================================================================================
+
+[[role]]
+name = "r1_simulations"
+path = "r1/simulations"
+source = "{data_root}/local_data/results_revision1/simulations"
+tier = "full"
+archive = "r1"
+probe = "lg_s256/1a2t_1_A.full.treefile"
+blocks_mb = 4598
+apparent_mb = 13770
+files = 40076
+panels = ["figure3_jsd_boxplot", "figure3_conservation_logo", "pcp_panels",
+          "historian_indel_vs_length", "historian_indel_esmc_vs_rev1", "threedi_jsd_boxplot"]
+note = """The rev1 simulated alignments plus the three Historian reconstructions
+(real_msa_historian, real_subtree_historian, peint_msa_historian) that panels 7/8/9 parse.
+The *_subtree_simulation subdirs are pipeline OUTPUT, carried so a fresh run is warm."""
+
+[[role]]
+name = "r1_3di"
+path = "r1/3di"
+source = "{data_root}/local_data/results_revision1/3di"
+tier = "full"
+archive = "r1"
+probe = "LG/sequences"
+blocks_mb = 1094
+apparent_mb = 3307
+files = 28939
+panels = ["threedi_jsd_boxplot"]
+note = "ProstT5 3Di states per model. Shipped so the panel never needs a GPU."
+
+[[role]]
+name = "r1_mafft_add"
+path = "r1/mafft_add"
+source = "{data_root}/local_data/results_revision1/mafft_add"
+tier = "full"
+archive = "r1"
+probe = "old_sequences/1a2t_1_A.txt"
+blocks_mb = 778
+apparent_mb = 2760
+files = 5420
+panels = ["figure3_jsd_boxplot", "figure3_conservation_logo", "threedi_jsd_boxplot",
+          "generalization_jsd_domain"]
+note = "Real + PEINT sequences realigned into the reference frame by `mafft --add`."
+
+[[role]]
+name = "r1_blast"
+path = "r1/blast_sequences"
+source = "{data_root}/local_data/results_revision1/blast_sequences"
+tier = "full"
+archive = "r1"
+probe = "revision1.csv"
+blocks_mb = 280
+apparent_mb = 576
+files = 3
+panels = ["blast_similarity"]
+note = "BLAST nr tabular output for the rev1 simulated leaves. Three files, one huge."
+
+[[role]]
+name = "r1_structure_tables"
+path = "r1"
+source_files = [
+  "{data_root}/local_data/results_revision1/af2rank_comparisons.csv",
+  "{data_root}/local_data/results_revision1/omegafold_plddt.csv",
+]
+tier = "full"
+archive = "r1"
+probe = "omegafold_plddt.csv"
+blocks_mb = 1
+apparent_mb = 1
+files = 2
+panels = ["figure3_af2rank_ecdf", "figure3_omegafold_ecdf", "generalization_omegafold"]
+note = """750 KB that stands in for 25 GB. These two summaries are the ONLY thing any panel
+reads out of the rev1 af2/ and omegafold/ trees, which together hold 1,089,012 files -- see
+the r1_af2 and r1_omegafold roles below."""
+
+
+# =====================================================================================
+#  Tier: full / archive r2
+# =====================================================================================
+
+[[role]]
+name = "r2_simulations"
+path = "r2/simulations"
+source = "{data_root}/local_data/results_revision2_esmc/simulations"
+tier = "full"
+archive = "r2"
+probe = "historian_progressive/_cache"
+blocks_mb = 2365
+apparent_mb = 9348
+files = 22919
+panels = ["pcp_panels", "historian_indel_vs_length", "historian_indel_esmc_vs_rev1"]
+note = """Carries the ESM-C Historian outputs in their protevo content-hash form under
+historian_progressive/_cache/; paper.historian.esmc_historian_dirs resolves the refine and
+norefine runs out of it by mtime. Both variants are kept so that comparison stays checkable."""
+
+[[role]]
+name = "r2_mafft_add"
+path = "r2/mafft_add"
+source = "{data_root}/local_data/results_revision2_esmc/mafft_add"
+tier = "full"
+archive = "r2"
+probe = "old_sequences/1a2t_1_A.txt"
+blocks_mb = 1858
+apparent_mb = 9778
+files = 5450
+panels = ["figure3_jsd_boxplot", "threedi_jsd_boxplot", "generalization_jsd_domain"]
+note = "The ESM-C rerun has its own alignment frame; it is not interchangeable with rev1's."
+
+[[role]]
+name = "r2_omegafold"
+path = "r2/omegafold"
+source = "{data_root}/local_data/results_revision2_esmc/omegafold"
+tier = "full"
+archive = "r2"
+probe = "1a2t_1_A"
+blocks_mb = 979
+apparent_mb = 2337
+files = 19221
+panels = ["figure3_omegafold_ecdf", "esmif_validation"]
+note = """Predicted structures for the ESM-C arm. Unlike rev1's, this tree IS walked at
+render time (figure3_structure_metrics globs it per family), so it cannot be reduced to a
+summary CSV."""
+
+[[role]]
+name = "r2_af2"
+path = "r2/af2"
+source = "{data_root}/local_data/results_revision2_esmc/af2"
+tier = "full"
+archive = "r2"
+probe = "1a2t_1_A"
+blocks_mb = 928
+apparent_mb = 2166
+files = 22854
+panels = ["figure3_af2rank_ecdf"]
+note = "AF2Rank scores for the ESM-C arm; read as scores/result.txt per family."
+
+[[role]]
+name = "r2_3di"
+path = "r2/3di"
+source = "{data_root}/local_data/results_revision2_esmc/3di"
+tier = "full"
+archive = "r2"
+probe = "Real/sequences"
+blocks_mb = 311
+apparent_mb = 1896
+files = 5458
+panels = ["threedi_jsd_boxplot"]
+
+[[role]]
+name = "r2_blast"
+path = "r2/blast_sequences"
+source = "{data_root}/local_data/results_revision2_esmc/blast_sequences"
+tier = "full"
+archive = "r2"
+probe = "revision2.csv"
+blocks_mb = 96
+apparent_mb = 265
+files = 2
+panels = ["blast_similarity"]
+
+
+# =====================================================================================
+#  Tier: full / archives sim and aux
+# =====================================================================================
+
+[[role]]
+name = "sim"
+path = "sim"
+source = "{sim_root}"
+tier = "full"
+archive = "sim"
+probe = "trees/1a2t_1_A.txt"
+blocks_mb = 556
+apparent_mb = 543
+files = 6010
+panels = ["figure3_jsd_boxplot", "figure3_conservation_logo", "pcp_panels",
+          "threedi_jsd_boxplot", "generalization_jsd_domain"]
+note = "Trees, root sequences and the empirical + simulated MSAs of the 512-leaf simulation."
+
+[[role]]
+name = "annotations"
+path = "annotations"
+source = "{data_root}/local_data/generalization/annotations"
+exclude = ["Pfam-A.hmm", "Pfam-A.hmm.gz", "ecod.domains.txt"]
+tier = "full"
+archive = "aux"
+probe = "pfam_domains_seq1.json"
+blocks_mb = 34
+apparent_mb = 94
+files = 8
+panels = ["generalization_jsd_domain", "generalization_omegafold"]
+note = """The derived pfam_domains_seq1.json is the whole trick: with it present,
+scan_pfam_domains returns from cache, which takes BOTH Pfam-A.hmm (2.2 GB) and the 16 GB a3m
+set off the cold path. The excluded three are the raw sources -- see annotation_sources."""
+
+[[role]]
+name = "splits"
+path = "splits"
+source_files = [
+  "{data_root}/local_data/14k5_fam.json",
+  "{data_root}/local_data/14k5_nontrain_fam.json",
+  "{data_root}/local_data/final_sim_held_out_family.json",
+  "{data_root}/local_data/final_sim_held_out_family.txt",
+  "{data_root}/local_data/sim_families_out_lg_s256_ok.txt",
+]
+tier = "full"
+archive = "aux"
+probe = "final_sim_held_out_family.json"
+blocks_mb = 1
+apparent_mb = 1
+files = 5
+panels = ["figure3_jsd_boxplot", "pcp_panels", "generalization_jsd_domain",
+          "generalization_omegafold"]
+note = """The 14,498 train / 553 held-out family split, in both the .txt and .json forms
+different benchmarks expect. Tiny, and nothing reproduces without it."""
+
+[[role]]
+name = "site_rates"
+path = "output_site_rates_dir"
+source = "{repo_root}/local_data/output_site_rates_dir"
+tier = "full"
+archive = "aux"
+probe = "1a2t_1_A.txt"
+blocks_mb = 78
+apparent_mb = 33
+files = 30104
+panels = ["figure2_simulation_generate"]
+note = """4-category per-site rates for the LG arm of the Figure 2 simulation. 30,104 flat
+files -- over the Hub's hard limit of 10,000 entries per folder, which is the specific
+reason the bulk roles are tarred rather than uploaded loose."""
+
+
+# =====================================================================================
+#  Tier: on_request -- real data, deliberately not transferred or deposited.
+#  Declared so `check_local_data.py` can say "absent by design" instead of "missing".
+# =====================================================================================
+
+[[role]]
+name = "r1_af2"
+path = "r1/af2"
+source = "{data_root}/local_data/results_revision1/af2"
+tier = "on_request"
+probe = "."
+blocks_mb = 12775
+apparent_mb = 53581
+files = 481316
+panels = []
+note = """Raw rev1 AF2Rank output. Needed only to regenerate af2rank_comparisons.csv, which
+is shipped. Excluded for file count as much as size: with this and r1_omegafold the deposit
+would be ~1.28 M files against the Hub's ~100 k recommendation."""
+
+[[role]]
+name = "r1_omegafold"
+path = "r1/omegafold"
+source = "{data_root}/local_data/results_revision1/omegafold"
+tier = "on_request"
+probe = "."
+blocks_mb = 12433
+apparent_mb = 47564
+files = 607696
+panels = []
+note = """Raw rev1 OmegaFold structures. Needed to regenerate omegafold_plddt.csv (shipped),
+and by esmif_validation if its result CSVs are incomplete -- they are shipped complete."""
+
+[[role]]
+name = "r1_results_af2"
+path = "r1/results_af2"
+source = "{data_root}/local_data/results_revision1/results_af2"
+tier = "on_request"
+blocks_mb = 9220
+apparent_mb = 9366
+files = 16834
+panels = []
+note = "AF2Rank intermediates. Read by no panel."
+
+[[role]]
+name = "r1_results"
+path = "r1/results"
+source = "{data_root}/local_data/results_revision1/results"
+tier = "on_request"
+blocks_mb = 1375
+apparent_mb = 1466
+files = 5966
+panels = []
+note = "Producer intermediates. Read by no panel."
+
+[[role]]
+name = "r1_all_data"
+path = "r1"
+source_files = ["{data_root}/local_data/results_revision1/all_data.json"]
+tier = "on_request"
+blocks_mb = 2300
+apparent_mb = 2300
+files = 1
+panels = []
+note = "2.3 GB single JSON from the original exploratory notebooks. Read by no panel."
+
+[[role]]
+name = "r1_leaf_distances"
+path = "r1/leaf_distances"
+source = "{data_root}/local_data/results_revision1/leaf_distances"
+tier = "on_request"
+blocks_mb = 148
+apparent_mb = 419
+files = 17
+panels = []
+note = """PCP pipeline OUTPUT, not input: the two tables the panels read ship gzipped and
+column-subset under figure_data/leaf_distances/, and a full run regenerates the rest.
+per_site_diagnostics.csv alone is 264 MB and is read by nothing."""
+
+[[role]]
+name = "r1_mafft"
+path = "r1/mafft"
+source = "{data_root}/local_data/results_revision1/mafft"
+tier = "on_request"
+blocks_mb = 84
+apparent_mb = 252
+files = 1084
+panels = []
+note = "Written by generate_all_results.py; the panels use mafft_add/, not this."
+
+[[role]]
+name = "r2_mafft"
+path = "r2/mafft"
+source = "{data_root}/local_data/results_revision2_esmc/mafft"
+tier = "on_request"
+blocks_mb = 84
+apparent_mb = 255
+files = 1090
+panels = []
+note = "As r1_mafft."
+
+[[role]]
+name = "annotation_sources"
+path = "annotations"
+source_files = [
+  "{data_root}/local_data/generalization/annotations/Pfam-A.hmm",
+  "{data_root}/local_data/generalization/annotations/Pfam-A.hmm.gz",
+  "{data_root}/local_data/generalization/annotations/ecod.domains.txt",
+]
+tier = "on_request"
+blocks_mb = 3355
+apparent_mb = 3355
+files = 3
+panels = []
+note = """Third-party sources, redistributable but pointless to ship: the derived
+pfam_domains_seq1.json in the `annotations` role short-circuits them. paper.generalization
+re-fetches them on demand if you ever need to rebuild the labels."""
+
+[[role]]
+name = "gt_pdb"
+path = "pdb"
+source = "{gt_pdb_root}"
+tier = "on_request"
+probe = "."
+blocks_mb = 4500
+apparent_mb = 4500
+files = 15049
+panels = ["esmif_validation"]
+note = """Experimental structures from the trRosetta training set
+(https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz). Not ours to redistribute, and
+on this cluster they live in a third user's scratch. esmif_validation needs them only for a
+cold run; its result CSVs ship complete."""
+
+[[role]]
+name = "a3m"
+path = "a3m"
+source = "{data_root}/input_data/a3m"
+tier = "on_request"
+probe = "."
+blocks_mb = 16000
+apparent_mb = 16000
+files = 15051
+panels = []
+note = """trRosetta training-set alignments, same download as gt_pdb. Only on the Pfam
+cold path, which the shipped annotations bypass. figure2_simulation asserts the directory
+exists but reads one family from it."""
+
+[[role]]
+name = "peint_cache"
+path = "peint/_cache_peint"
+source = "{peint_repo}/_cache_peint"
+tier = "on_request"
+blocks_mb = 5164
+apparent_mb = 5164
+files = 0
+panels = ["figure2_likelihood_eval"]
+note = """Cached per-site likelihood evaluations in the peint repo. protevo cache keys are a
+sha512 over absolute argument paths, so this is only valid in place -- it cannot be relocated
+or shared, which is why figure2_likelihood_eval is replot-only for everyone else."""
+
+[[role]]
+name = "peint_checkpoints"
+path = "peint/model_checkpoints"
+source = "{peint_repo}/model_checkpoints"
+tier = "on_request"
+blocks_mb = 6839
+apparent_mb = 6839
+files = 7
+panels = ["figure2_likelihood_eval", "figure2_simulation_generate"]
+note = "Model weights. Deposited separately from the data, as model artifacts."
