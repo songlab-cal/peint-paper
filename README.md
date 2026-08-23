@@ -85,10 +85,37 @@ panels that need it. Four scripts read it, so the list cannot drift:
 scripts/check_local_data.py                      # what is present; what supplies the rest
 scripts/check_local_data.py --panels pcp_panels  # scoped to the figures you want
 scripts/link_local_data.sh --apply               # symlink the roles, on a machine that has them
-scripts/stage_shared_data.sh --apply             # rsync them to another account or host
+scripts/stage_shared_data.sh --plan              # rsync them to another account (see below)
 scripts/build_archives.sh --root <staged> --apply  # tar them for the deposit
 scripts/fetch_local_data.py --tier full          # download and unpack them again
 ```
+
+### Copying the data to another account
+
+`stage_shared_data.sh` runs in either direction, because which one is available depends on
+which account has a password. Both exist for the same reason: the source tree is mode 700 so
+the receiving account cannot read it directly, and the shared directory is owned by that
+account so the sending one cannot write it directly. rsync over ssh is what puts a reader on
+one side and a writer on the other — and the writer's identity decides whose quota the bytes
+land on.
+
+```bash
+# PULL — run as the receiving account; the source account is the one you can log into.
+scripts/stage_shared_data.sh --src-host akoehl@beren \
+    --dest /scratch/users/spa-evolution-yss/peint_paper_data --apply
+
+# PUSH — run as yourself, if the receiving account accepts your key.
+scripts/stage_shared_data.sh --apply
+```
+
+In pull mode the plan is generated on the source side and streamed back, so the receiving
+account needs nothing but this one script — no checkout, no conda, no python. Point
+`--src-python` at an interpreter over there that can read TOML; an ssh login shell will not
+have your conda environment on `PATH`.
+
+Dry-run is the default in both directions. `--plan` shows the role table without touching
+anything, `--verify` confirms the destination is complete, and `--only <role>` does one at a
+time. Nothing is ever written to the source side.
 
 Sizes are measured, not estimated. Note that `blocks_mb` (what it costs on a compressing
 filesystem) can *exceed* `apparent_mb` for roles made of many tiny files — `site_rates` is
