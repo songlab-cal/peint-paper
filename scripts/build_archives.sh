@@ -81,6 +81,17 @@ manifest() {
   else "$PY" -m paper.manifest "$@"; fi
 }
 
+# This file is a copy when --src-host is used; the manifest it reads is live. Warn on drift.
+if [[ -n "$SRC_HOST" ]]; then
+  _mine="$(sha256sum "${BASH_SOURCE[0]}" 2>/dev/null | cut -d' ' -f1)"
+  _theirs="$(on_src "sha256sum '$SRC_REPO/scripts/build_archives.sh' 2>/dev/null | cut -d' ' -f1" || true)"
+  if [[ -n "$_mine" && -n "$_theirs" && "$_mine" != "$_theirs" ]]; then
+    echo "NOTE: this copy of build_archives.sh differs from $SRC_REPO's. Refresh with:" >&2
+    echo "          ssh $SRC_HOST 'cat $SRC_REPO/scripts/build_archives.sh' > \"${BASH_SOURCE[0]}\"" >&2
+    echo >&2
+  fi
+fi
+
 if ! [[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
 PLAN="$(manifest --archive-plan 2>&1)"; then
   echo "Could not generate the archive plan${SRC_HOST:+ on $SRC_HOST}:" >&2

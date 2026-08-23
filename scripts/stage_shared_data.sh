@@ -147,6 +147,25 @@ EOF
   fi
 fi
 
+# ---------------------------------------------------------------- staleness
+# In pull mode this file is a COPY, taken from the source repo at some point in the past,
+# while the plan it runs on comes from that repo live. That split is the whole reason the
+# receiving account needs no checkout -- and it is also a drift hazard, because a stale copy
+# will happily run against a newer manifest. Compare the two and say so; never act on it.
+if [[ -n "$SRC_HOST" && "$MODE" != plan ]]; then
+  _mine="$(sha256sum "${BASH_SOURCE[0]}" 2>/dev/null | cut -d' ' -f1)"
+  _theirs="$(on_src "sha256sum '$SRC_REPO/scripts/stage_shared_data.sh' 2>/dev/null | cut -d' ' -f1" || true)"
+  if [[ -n "$_mine" && -n "$_theirs" && "$_mine" != "$_theirs" ]]; then
+    cat >&2 <<EOF
+NOTE: this copy of stage_shared_data.sh differs from the one in $SRC_REPO.
+      Refresh it with:
+          ssh $SRC_HOST 'cat $SRC_REPO/scripts/stage_shared_data.sh' > "${BASH_SOURCE[0]}"
+      Continuing with the copy you have.
+
+EOF
+  fi
+fi
+
 # ---------------------------------------------------------------- the plan
 # Tab-separated: role, kind(dir|file), destination-relative path, source, comma-separated
 # excludes. One source of truth -- data/MANIFEST.toml -- for this, the symlink farm, the
