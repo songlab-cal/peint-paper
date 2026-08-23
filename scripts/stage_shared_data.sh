@@ -30,6 +30,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Exported, not set per call: `python -m paper.manifest` otherwise only resolves when the
+# working directory happens to be the repo root, and this script is meant to be run from
+# anywhere -- including copied to another account on its own.
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="${PEINT_PAPER_PY_ESMC:-${PEINT_PAPER_PY:-python3}}"
 SHARED_DIR="/scratch/users/spa-evolution-yss/peint_paper_data"
 DEST="${PEINT_PAPER_SHARED_DEST:-}"
@@ -102,6 +106,27 @@ on_dest() { if [[ -n "$DEST_HOST" ]]; then ssh -n "${SSH_CM[@]}" "$DEST_HOST" "$
 # Whichever side is remote, that is the one needing an open connection.
 REMOTE_SIDE="${SRC_HOST:-$DEST_HOST}"
 
+# --plan needs the connection only in pull mode, where the manifest itself lives over there.
+# In push mode --plan reads a local manifest and touches nothing remote.
+NEED_SSH=""
+[[ -n "$SRC_HOST" ]] && NEED_SSH="$SRC_HOST"
+[[ -n "$DEST_HOST" && "$MODE" != plan ]] && NEED_SSH="$DEST_HOST"
+
+if [[ -n "$NEED_SSH" ]]; then
+  if ! ssh "${SSH_CM[@]}" -o BatchMode=yes -o ConnectTimeout=5 "$NEED_SSH" true 2>/dev/null; then
+    cat >&2 <<EOF
+Cannot reach $NEED_SSH without a prompt. Open one master connection first, and every
+step below -- including --plan -- will reuse it:
+
+    ssh ${SSH_CM[*]} -fN $NEED_SSH
+
+The password is asked once and the connection stays open for 8 hours. (Or install a public
+key in that account's ~/.ssh/authorized_keys and skip this entirely.)
+EOF
+    exit 4
+  fi
+fi
+
 # ---------------------------------------------------------------- the plan
 # Tab-separated: role, kind(dir|file), destination-relative path, source, comma-separated
 # excludes. One source of truth -- data/MANIFEST.toml -- for this, the symlink farm, the
@@ -109,21 +134,28 @@ REMOTE_SIDE="${SRC_HOST:-$DEST_HOST}"
 # In pull mode the manifest lives on the source side, behind a mode-700 directory, so the
 # plan is generated there and streamed back. That is what lets the pulling account run this
 # script with no checkout, no conda and no python of its own.
-if [[ -n "$SRC_HOST" ]]; then
-  if ! PLAN="$(on_src "cd '$SRC_REPO' && '$SRC_PYTHON' -m paper.manifest --rsync-plan" 2>&1)"; then
-    cat >&2 <<EOF
-Could not generate the transfer plan on $SRC_HOST:
+# Run paper.manifest on whichever side actually holds the repo. In pull mode that is the
+# source, which is the whole reason the pulling account needs no checkout -- but it has to be
+# every call, not just the plan: --plan asks for the role tables too, and a version of this
+# that only redirected the plan appeared to work purely because the shell happened to be
+# sitting in the repo.
+manifest() {
+  if [[ -n "$SRC_HOST" ]]; then on_src "cd '$SRC_REPO' && '$SRC_PYTHON' -m paper.manifest $*"
+  else "$PY" -m paper.manifest "$@"; fi
+}
+
+if ! PLAN="$(manifest --rsync-plan 2>&1)"; then
+  cat >&2 <<EOF
+Could not generate the transfer plan${SRC_HOST:+ on $SRC_HOST}:
 
 $PLAN
 
-Tried: cd $SRC_REPO && $SRC_PYTHON -m paper.manifest --rsync-plan
-Point --src-python at an interpreter there that can read TOML (3.11+, or 3.10 with tomli),
-and --src-repo at the peint-paper checkout if it is not where I looked.
+Tried: ${SRC_HOST:+cd $SRC_REPO && $SRC_PYTHON}${SRC_HOST:-$PY} -m paper.manifest --rsync-plan
+The interpreter needs to read TOML (3.11+, or 3.10 with tomli) and import the repo.
+In pull mode, point --src-python and --src-repo at the source account's interpreter and
+checkout; locally, run from the repo or set PYTHONPATH to it.
 EOF
-    exit 5
-  fi
-else
-  PLAN="$("$PY" -m paper.manifest --rsync-plan)"
+  exit 5
 fi
 [[ -n "$PLAN" ]] || { echo "empty transfer plan from paper.manifest" >&2; exit 1; }
 if [[ -n "$ONLY" ]]; then
@@ -142,25 +174,10 @@ while IFS=$'\t' read -r -u 3 role kind rel src excl; do
   fi
 done 3<<<"$PLAN"
 
-if [[ -n "$REMOTE_SIDE" ]]; then
-  if ! ssh "${SSH_CM[@]}" -o BatchMode=yes -o ConnectTimeout=5 "$REMOTE_SIDE" true 2>/dev/null; then
-    cat >&2 <<EOF
-Cannot reach $REMOTE_SIDE without a prompt. Open one master connection first, and every
-step below -- including --plan -- will reuse it:
-
-    ssh ${SSH_CM[*]} -fN $REMOTE_SIDE
-
-The password is asked once and the connection stays open for 8 hours. (Or install a public
-key in that account's ~/.ssh/authorized_keys and skip this entirely.)
-EOF
-    exit 4
-  fi
-fi
-
 if [[ "$MODE" == plan ]]; then
-  "$PY" -m paper.manifest --list --tier figure_data
+  manifest --list --tier figure_data
   echo
-  "$PY" -m paper.manifest --list --tier full
+  manifest --list --tier full
   echo
   echo "destination: ${DEST_HOST:+$DEST_HOST:}$DEST_PATH"
   exit 0

@@ -9,6 +9,10 @@
 #   scripts/build_archives.sh --root <staged> --out <upload-dir> --apply
 #   scripts/build_archives.sh --root <staged> --only r2 --apply    # rebuild one archive
 #
+# Like stage_shared_data.sh, --src-host lets the account holding the staged tree run this
+# without a checkout: the archive plan and the two metadata files are fetched over ssh.
+#   scripts/build_archives.sh --root <staged> --src-host akoehl@beren --apply
+#
 # Produces, in --out (default <root>/_upload):
 #   figure_data/            loose, so the Hub can browse it
 #   r1.tar.zst r2.tar.zst sim.tar.zst aux.tar.zst
@@ -19,7 +23,19 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Exported, not set per call: `python -m paper.manifest` otherwise only resolves when the
+# working directory happens to be the repo root, and this script is meant to be run from
+# anywhere -- including copied to another account on its own.
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="${PEINT_PAPER_PY_ESMC:-${PEINT_PAPER_PY:-python3}}"
+# Same remote-source options as stage_shared_data.sh, so the account holding the staged tree
+# needs no checkout of its own: the plan and the two metadata files come over ssh.
+SRC_HOST="${PEINT_PAPER_SRC_HOST:-}"
+SRC_REPO="${PEINT_PAPER_SRC_REPO:-/scratch/users/akoehl/peint-paper}"
+SRC_PYTHON="${PEINT_PAPER_SRC_PYTHON:-/scratch/users/akoehl/conda/envs/peint-esmc/bin/python}"
+SSH_CM=(-o ControlMaster=auto -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=8h)
+
+on_src() { if [[ -n "$SRC_HOST" ]]; then ssh -n "${SSH_CM[@]}" "$SRC_HOST" "$@"; else bash -c "$*" </dev/null; fi; }
 ROOT=""
 OUT=""
 APPLY=0
@@ -36,6 +52,9 @@ while [[ $# -gt 0 ]]; do
     --out)   OUT="${2:?}"; shift ;;
     --apply) APPLY=1 ;;
     --only)  ONLY="${ONLY:+$ONLY }${2:?--only needs an archive name, or 'loose'}"; shift ;;
+    --src-host)   SRC_HOST="${2:?--src-host needs user@host}"; shift ;;
+    --src-repo)   SRC_REPO="${2:?--src-repo needs a path}"; shift ;;
+    --src-python) SRC_PYTHON="${2:?--src-python needs a path}"; shift ;;
     --level) LEVEL="${2:?}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -53,7 +72,16 @@ if command -v pzstd >/dev/null; then COMPRESS="pzstd -$LEVEL -p $THREADS"
 elif command -v zstd >/dev/null; then COMPRESS="zstd -$LEVEL -T$THREADS"
 else echo "need pzstd or zstd on PATH" >&2; exit 1; fi
 
-PLAN="$("$PY" -m paper.manifest --archive-plan)"
+manifest() {
+  if [[ -n "$SRC_HOST" ]]; then on_src "cd '$SRC_REPO' && '$SRC_PYTHON' -m paper.manifest $*"
+  else "$PY" -m paper.manifest "$@"; fi
+}
+
+if ! PLAN="$(manifest --archive-plan 2>&1)"; then
+  echo "Could not generate the archive plan${SRC_HOST:+ on $SRC_HOST}:" >&2
+  echo "$PLAN" >&2
+  exit 5
+fi
 [[ -n "$PLAN" ]] || { echo "empty archive plan from paper.manifest" >&2; exit 1; }
 
 # --only narrows to named archives, or to "loose" for the untarred figure_data tier. Useful
@@ -103,8 +131,16 @@ if [[ -n "$ONLY" ]]; then
 fi
 
 echo "  metadata MANIFEST.toml, README.md"
-run cp "$REPO_ROOT/data/MANIFEST.toml" "$OUT/MANIFEST.toml"
-run cp "$REPO_ROOT/data/DATASET_CARD.md" "$OUT/README.md"
+if [[ -n "$SRC_HOST" ]]; then
+  # `cat` over the existing ssh master; no checkout needed on this side.
+  run_pipe() { if [[ $APPLY -eq 1 ]]; then on_src "cat '$1'" > "$2"; else printf '    would: ssh %s cat %s > %s\n' "$SRC_HOST" "$1" "$2"; fi; }
+  run mkdir -p "$OUT"
+  run_pipe "$SRC_REPO/data/MANIFEST.toml"    "$OUT/MANIFEST.toml"
+  run_pipe "$SRC_REPO/data/DATASET_CARD.md"  "$OUT/README.md"
+else
+  run cp "$REPO_ROOT/data/MANIFEST.toml" "$OUT/MANIFEST.toml"
+  run cp "$REPO_ROOT/data/DATASET_CARD.md" "$OUT/README.md"
+fi
 
 echo "  checksums CHECKSUMS.sha256"
 if [[ $APPLY -eq 1 ]]; then
