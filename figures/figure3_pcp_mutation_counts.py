@@ -568,6 +568,22 @@ def render_all(df, path_df):
     plot_back_mutation_and_root_leaf(df, path_df)
 
 
+def _writable_out(base, name):
+    """Where a pipeline output goes: the authoritative tree if we own it, else DERIVED_DIR.
+
+    The data trees are inputs for everyone except the machine that produced them, and a
+    published/shared copy is read-only. Deciding on ``os.access(W_OK)`` rather than a config
+    flag keeps the producing machine bit-identical -- same output path, so every protevo
+    cache key stays warm -- while a read-only mirror diverts the writes instead of raising.
+    """
+    shipped = Path(base) / name
+    if shipped.is_dir() and os.access(shipped, os.W_OK):
+        return str(shipped)
+    out = Path(cfg.DERIVED_DIR) / name
+    out.mkdir(parents=True, exist_ok=True)
+    return str(out)
+
+
 def _find_table(dirs, stem):
     """First existing <dir>/<stem>.csv{,.gz} across dirs, else None."""
     for d in dirs:
@@ -628,12 +644,8 @@ def _run_full_pipeline():
     simulation_dir = str(cfg.SIMULATIONS_DIR)
     rerooted_tree_dir = str(cfg.TREE_DIR)
 
-    distances_dir = os.path.join(output_dir, 'leaf_distances')
-    os.makedirs(distances_dir, exist_ok=True)
-    output_lg_dir = os.path.join(simulation_dir, 'lg_subtree_simulation')
-
-    if not os.path.exists(output_lg_dir):
-        os.makedirs(output_lg_dir)
+    distances_dir = _writable_out(output_dir, 'leaf_distances')
+    output_lg_dir = _writable_out(simulation_dir, 'lg_subtree_simulation')
 
     renamed_lg_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
@@ -652,10 +664,7 @@ def _run_full_pipeline():
         num_processes = 8
     )['output_msa_dir']
 
-    output_wag_dir = os.path.join(simulation_dir, 'wag_subtree_simulation')
-
-    if not os.path.exists(output_wag_dir):
-        os.makedirs(output_wag_dir)
+    output_wag_dir = _writable_out(simulation_dir, 'wag_subtree_simulation')
 
     renamed_wag_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
@@ -673,7 +682,7 @@ def _run_full_pipeline():
         num_processes = 8
     )['output_msa_dir']
 
-    output_lg_s256_dir = os.path.join(simulation_dir, 'lg_s256_subtree_simulation')
+    output_lg_s256_dir = _writable_out(simulation_dir, 'lg_s256_subtree_simulation')
 
     renamed_lg_s256_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
