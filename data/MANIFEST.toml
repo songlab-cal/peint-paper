@@ -76,18 +76,20 @@ note = "optional: raw rev1 OmegaFold structures, 607,696 files. Only omegafold_p
 
 [[role]]
 name = "figure_data"
+producer = "the panel scripts themselves (each writes its own table next to its figure)"
 path = "figure_data"
 source = "{repo_root}/local_data/figure_data"
 tier = "figure_data"
 probe = "figure3_conservation_jsd.csv"
-blocks_mb = 21
-apparent_mb = 25
-files = 20
+blocks_mb = 29
+apparent_mb = 40
+files = 25
 panels = ["all"]
 note = "Per-panel tables. Shipped loose rather than tarred so they can be browsed on the Hub."
 
 [[role]]
 name = "vep"
+producer = "protevo.vep compute_fitness + official_baselines, per run directory"
 path = "vep"
 source = "{repo_root}/local_data/vep"
 tier = "figure_data"
@@ -109,6 +111,7 @@ still exists so --check can confirm they are there."""
 
 [[role]]
 name = "r1_simulations"
+producer = "benchmarks/generate_all_results.py --out_path <r1>  (AliSim for the classical arms, PEINT for the learned ones, Historian for the reconstructions)"
 path = "r1/simulations"
 source = "{data_root}/local_data/results_revision1/simulations"
 tier = "full"
@@ -125,6 +128,7 @@ The *_subtree_simulation subdirs are pipeline OUTPUT, carried so a fresh run is 
 
 [[role]]
 name = "r1_3di"
+producer = "benchmarks/threedi_jsd_all_models.py without --skip-3di-generation (ProstT5 on a GPU)"
 path = "r1/3di"
 source = "{data_root}/local_data/results_revision1/3di"
 tier = "full"
@@ -138,6 +142,7 @@ note = "ProstT5 3Di states per model. Shipped so the panel never needs a GPU."
 
 [[role]]
 name = "r1_mafft_add"
+producer = "benchmarks/generate_all_results.py --out_path <r1>  (mafft --add into the empirical frame)"
 path = "r1/mafft_add"
 source = "{data_root}/local_data/results_revision1/mafft_add"
 tier = "full"
@@ -152,6 +157,7 @@ note = "Real + PEINT sequences realigned into the reference frame by `mafft --ad
 
 [[role]]
 name = "r1_blast"
+producer = "blastp against nr, run outside this repo; the tabular output is the artifact"
 path = "r1/blast_sequences"
 source = "{data_root}/local_data/results_revision1/blast_sequences"
 tier = "full"
@@ -165,6 +171,7 @@ note = "BLAST nr tabular output for the rev1 simulated leaves. Three files, one 
 
 [[role]]
 name = "r1_structure_tables"
+producer = "benchmarks/generate_all_results.py --out_path <r1> --include_plddt / --use_af2, aggregating the af2/ and omegafold/ trees"
 path = "r1"
 source_files = [
   "{data_root}/local_data/results_revision1/af2rank_comparisons.csv",
@@ -188,6 +195,7 @@ the r1_af2 and r1_omegafold roles below."""
 
 [[role]]
 name = "r2_simulations"
+producer = "benchmarks/generate_all_results.py --out_path <r2> --alisim_models WAG LG (see benchmarks/run_esmc_benchmark_shard.sbatch), plus benchmarks/historian_esmc_progressive.py for historian_progressive/"
 path = "r2/simulations"
 source = "{data_root}/local_data/results_revision2_esmc/simulations"
 tier = "full"
@@ -203,6 +211,7 @@ norefine runs out of it by mtime. Both variants are kept so that comparison stay
 
 [[role]]
 name = "r2_mafft_add"
+producer = "benchmarks/generate_all_results.py --out_path <r2>"
 path = "r2/mafft_add"
 source = "{data_root}/local_data/results_revision2_esmc/mafft_add"
 tier = "full"
@@ -216,6 +225,7 @@ note = "The ESM-C rerun has its own alignment frame; it is not interchangeable w
 
 [[role]]
 name = "r2_omegafold"
+producer = "benchmarks/omegafold_peint_esmc.py (writes to the path generate_all_results would, so a later --include_plddt cache-hits it)"
 path = "r2/omegafold"
 source = "{data_root}/local_data/results_revision2_esmc/omegafold"
 tier = "full"
@@ -231,6 +241,7 @@ summary CSV."""
 
 [[role]]
 name = "r2_af2"
+producer = "benchmarks/af2rank_peint_esmc.py (reuses the non-keeplength mafft-add alignments; no re-alignment needed)"
 path = "r2/af2"
 source = "{data_root}/local_data/results_revision2_esmc/af2"
 tier = "full"
@@ -244,6 +255,7 @@ note = "AF2Rank scores for the ESM-C arm; read as scores/result.txt per family."
 
 [[role]]
 name = "r2_3di"
+producer = "benchmarks/threedi_jsd_all_models.py without --skip-3di-generation"
 path = "r2/3di"
 source = "{data_root}/local_data/results_revision2_esmc/3di"
 tier = "full"
@@ -256,6 +268,7 @@ panels = ["threedi_jsd_boxplot"]
 
 [[role]]
 name = "r2_blast"
+producer = "blastp against nr, run outside this repo"
 path = "r2/blast_sequences"
 source = "{data_root}/local_data/results_revision2_esmc/blast_sequences"
 tier = "full"
@@ -273,6 +286,7 @@ panels = ["blast_similarity"]
 
 [[role]]
 name = "sim"
+producer = "upstream of this repo: the 512-leaf simulation setup (trees, root sequences, empirical MSAs)"
 path = "sim"
 source = "{sim_root}"
 tier = "full"
@@ -287,6 +301,7 @@ note = "Trees, root sequences and the empirical + simulated MSAs of the 512-leaf
 
 [[role]]
 name = "annotations"
+producer = "paper/generalization.py ensure_annotations() + scan_pfam_domains(), from the fetched Pfam/SIFTS/CATH/SCOPe sources"
 path = "annotations"
 source = "{data_root}/local_data/generalization/annotations"
 exclude = ["Pfam-A.hmm", "Pfam-A.hmm.gz", "ecod.domains.txt"]
@@ -303,6 +318,7 @@ set off the cold path. The excluded three are the raw sources -- see annotation_
 
 [[role]]
 name = "splits"
+producer = "upstream of this repo: the family train/eval split used to train PEINT"
 path = "splits"
 source_files = [
   "{data_root}/local_data/14k5_fam.json",
@@ -324,6 +340,7 @@ different benchmarks expect. Tiny, and nothing reproduces without it."""
 
 [[role]]
 name = "site_rates"
+producer = "cherryml's treewise train/test split (train_site_rates_4cat_dir)"
 path = "output_site_rates_dir"
 source = "{repo_root}/local_data/output_site_rates_dir"
 tier = "full"
@@ -345,6 +362,7 @@ reason the bulk roles are tarred rather than uploaded loose."""
 
 [[role]]
 name = "r1_af2"
+producer = "benchmarks/generate_all_results.py --out_path <r1> --use_af2 (AF2Rank via ColabDesign, one directory per family)"
 path = "r1/af2"
 source = "{data_root}/local_data/results_revision1/af2"
 tier = "on_request"
@@ -360,6 +378,7 @@ would be ~1.28 M files against the Hub's ~100 k recommendation."""
 
 [[role]]
 name = "r1_omegafold"
+producer = "benchmarks/generate_all_results.py --out_path <r1> --include_plddt (OmegaFold, one directory per family)"
 path = "r1/omegafold"
 source = "{data_root}/local_data/results_revision1/omegafold"
 tier = "on_request"
@@ -374,6 +393,7 @@ and by esmif_validation if its result CSVs are incomplete -- they are shipped co
 
 [[role]]
 name = "r1_results_af2"
+producer = "benchmarks/generate_all_results.py intermediates"
 path = "r1/results_af2"
 source = "{data_root}/local_data/results_revision1/results_af2"
 tier = "on_request"
@@ -385,6 +405,7 @@ note = "AF2Rank intermediates. Read by no panel."
 
 [[role]]
 name = "r1_results"
+producer = "benchmarks/generate_all_results.py intermediates"
 path = "r1/results"
 source = "{data_root}/local_data/results_revision1/results"
 tier = "on_request"
@@ -396,6 +417,7 @@ note = "Producer intermediates. Read by no panel."
 
 [[role]]
 name = "r1_all_data"
+producer = "the original exploratory notebooks"
 path = "r1"
 source_files = ["{data_root}/local_data/results_revision1/all_data.json"]
 tier = "on_request"
@@ -407,6 +429,7 @@ note = "2.3 GB single JSON from the original exploratory notebooks. Read by no p
 
 [[role]]
 name = "r1_leaf_distances"
+producer = "figures/figure3_pcp_mutation_counts.py (pipeline output, not input)"
 path = "r1/leaf_distances"
 source = "{data_root}/local_data/results_revision1/leaf_distances"
 tier = "on_request"
@@ -420,6 +443,7 @@ per_site_diagnostics.csv alone is 264 MB and is read by nothing."""
 
 [[role]]
 name = "r1_mafft"
+producer = "benchmarks/generate_all_results.py --out_path <r1>"
 path = "r1/mafft"
 source = "{data_root}/local_data/results_revision1/mafft"
 tier = "on_request"
@@ -431,6 +455,7 @@ note = "Written by generate_all_results.py; the panels use mafft_add/, not this.
 
 [[role]]
 name = "r2_mafft"
+producer = "benchmarks/generate_all_results.py --out_path <r2>"
 path = "r2/mafft"
 source = "{data_root}/local_data/results_revision2_esmc/mafft"
 tier = "on_request"
@@ -442,6 +467,7 @@ note = "As r1_mafft."
 
 [[role]]
 name = "annotation_sources"
+producer = "fetched from Pfam / ECOD upstream by paper/generalization.py"
 path = "annotations"
 source_files = [
   "{data_root}/local_data/generalization/annotations/Pfam-A.hmm",
@@ -459,6 +485,7 @@ re-fetches them on demand if you ever need to rebuild the labels."""
 
 [[role]]
 name = "gt_pdb"
+producer = "the trRosetta training set (third party)"
 path = "pdb"
 source = "{gt_pdb_root}"
 tier = "on_request"
@@ -474,6 +501,7 @@ cold run; its result CSVs ship complete."""
 
 [[role]]
 name = "a3m"
+producer = "the trRosetta training set (third party)"
 path = "a3m"
 source = "{data_root}/input_data/a3m"
 tier = "on_request"
@@ -488,6 +516,7 @@ exists but reads one family from it."""
 
 [[role]]
 name = "peint_cache"
+producer = "protevo's evaluate_peint_model_* cached computations, in the peint repo"
 path = "peint/_cache_peint"
 source = "{peint_repo}/_cache_peint"
 tier = "on_request"
@@ -501,6 +530,7 @@ or shared, which is why figure2_likelihood_eval is replot-only for everyone else
 
 [[role]]
 name = "peint_checkpoints"
+producer = "PEINT training runs"
 path = "peint/model_checkpoints"
 source = "{peint_repo}/model_checkpoints"
 tier = "on_request"

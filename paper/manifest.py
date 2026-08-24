@@ -14,6 +14,7 @@ As a CLI it emits the machine-readable forms the shell scripts consume::
     python -m paper.manifest --list
     python -m paper.manifest --links          # rel|target, for link_local_data.sh
     python -m paper.manifest --rsync-plan     # role/kind/dest/source/excludes, tab-separated
+    python -m paper.manifest --chain          # producer -> role -> panels, for provenance
 """
 
 import argparse
@@ -241,6 +242,27 @@ def _cmd_archive_plan(args):
     return 0
 
 
+def _cmd_chain(args):
+    """Provenance: what produced each role, and which panels consume it.
+
+    The producer side is the half nothing else records -- render_panels knows how to draw a
+    panel, the manifest knows where its inputs live, but neither says how those inputs came
+    to exist. For a shipped structure tree that is the difference between data you can cite
+    and data you have to take on faith.
+    """
+    sel = roles(tier=args.tier) if args.tier else roles()
+    for r in sel:
+        panels = ", ".join(r.get("panels", [])) or "-"
+        print(f"{r.name}   [{r.get('tier','')}]")
+        print(f"    path      {r['path']}")
+        print(f"    produced  {r.get('producer', 'unrecorded')}")
+        print(f"    feeds     {panels}")
+        if r.get("files"):
+            print(f"    size      {r.get('apparent_mb',0)} MB apparent, {r['files']:,} files")
+        print()
+    return 0
+
+
 def _cmd_sources(args):
     """Probe the SOURCE side: can this machine stage the deposit? Read-only."""
     missing = 0
@@ -281,6 +303,8 @@ def main(argv=None):
     g.add_argument("--links", action="store_true")
     g.add_argument("--rsync-plan", action="store_true")
     g.add_argument("--archive-plan", action="store_true")
+    g.add_argument("--chain", action="store_true",
+                   help="provenance: producer -> role -> panels")
     g.add_argument("--check", action="store_true",
                    help="probe the destination: can a downloader render?")
     g.add_argument("--sources", action="store_true",
@@ -293,6 +317,8 @@ def main(argv=None):
         return _cmd_rsync_plan(args)
     if args.archive_plan:
         return _cmd_archive_plan(args)
+    if args.chain:
+        return _cmd_chain(args)
     if args.check:
         return _cmd_check(args)
     if args.sources:

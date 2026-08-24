@@ -162,6 +162,12 @@ AlphaFold weights and TM-align (`scripts/fetch_af2rank_assets.sh`), ProstT5
 Pfam-A/ECOD/CATH/SCOPe (fetched on demand by `paper.generalization`), ProteinGym, and the
 model checkpoints.
 
+## Reproducing the figures
+
+`REPRODUCING.md` is the full account: what redraws from ~40 MB, what recomputes from ~46 GB,
+what cannot be regenerated from the deposit and why, and how each shipped intermediate traces
+back to the script that produced it.
+
 ## Rendering the figures
 
 `scripts/render_panels.py` is the whitelist of panels that appear in the paper.

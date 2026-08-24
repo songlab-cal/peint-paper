@@ -356,9 +356,19 @@ def write_rebuttal(a1, a2, strat):
 
 
 def _load_prior(path, rename=None, drop_models=()):
-    """Load a prior ESM-IF CSV, optionally relabeling model names and dropping models."""
-    if not os.path.exists(str(path)):
-        return pd.DataFrame()
+    """Load a prior ESM-IF CSV, optionally relabeling model names and dropping models.
+
+    Falls back to the shipped copy under FIGURE_DATA_DIR. These three tables are the only
+    thing standing between the ESM-IF panels and a two-hour GPU run against ground-truth
+    structures that the deposit does not redistribute, so a fresh checkout has to be able to
+    find them without being told. Same preference order as figure3_pcp's _find_table.
+    """
+    path = Path(path)
+    if not path.exists():
+        shipped = Path(cfg.FIGURE_DATA_DIR) / "esmif" / path.name
+        if not shipped.exists():
+            return pd.DataFrame()
+        path = shipped
     d = pd.read_csv(path)
     if rename:
         d["model"] = d["model"].replace(rename)
