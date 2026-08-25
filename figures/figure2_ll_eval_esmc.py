@@ -18,7 +18,7 @@ Env: ``peint-esmc`` (has the Biohub ESM-C backbone + sentencepiece). Needs a GPU
 ``HF_HOME`` set for the ESM-C backbone. Run from the repo root::
 
     HF_HOME=/scratch/users/akoehl/hf_cache \
-      python -m benchmarks.figure2_ll_eval_esmc
+      python -m figures.figure2_ll_eval_esmc
 """
 
 import argparse
@@ -58,7 +58,18 @@ PEINT_REPO = str(cfg.PEINT_REPO)
 
 
 def _p(*parts):
-    return os.path.join(PEINT_REPO, *parts)
+    """Resolve a peint-repo-relative path, falling back to the data deposit.
+
+    These inputs live in the model repo on the machine that trained the model, and under
+    ``LOCAL_DATA/peint/`` for anyone who unpacked them from the deposit. Authoritative tree
+    first, so this machine keeps resolving to the exact same strings and the _cache_peint
+    hashes -- which key on absolute argument paths -- stay warm.
+    """
+    here = os.path.join(PEINT_REPO, *parts)
+    if os.path.exists(here):
+        return here
+    shipped = os.path.join(str(cfg.LOCAL_DATA), "peint", *parts)
+    return shipped if os.path.exists(shipped) else here
 
 
 # Data dirs (in the peint repo), matching figure2_ll_eval.py.

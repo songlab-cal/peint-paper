@@ -54,7 +54,7 @@ class Panel:
 
 PANELS = [
     # ---------------- main text ----------------
-    Panel("figure2_likelihood_eval", "main", "benchmarks.figure2_ll_eval_esmc",
+    Panel("figure2_likelihood_eval", "main", "figures.figure2_ll_eval_esmc",
           outputs=["output/figure2_likelihood_eval_test_esmc.pdf",
                    "output/figure2_likelihood_eval_train_held_out_esmc.pdf"],
           cost="GPU; ~15 min",

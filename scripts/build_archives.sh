@@ -92,8 +92,10 @@ if [[ -n "$SRC_HOST" ]]; then
   fi
 fi
 
-if ! [[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
-PLAN="$(manifest --archive-plan 2>&1)"; then
+# A bare username means "same host, other account" -- the only thing this hop is ever for.
+[[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
+
+if ! PLAN="$(manifest --archive-plan 2>&1)"; then
   echo "Could not generate the archive plan${SRC_HOST:+ on $SRC_HOST}:" >&2
   echo "$PLAN" >&2
   exit 5

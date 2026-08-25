@@ -65,6 +65,26 @@ file = "r1_af2.tar.zst"
 note = "optional: raw rev1 AF2Rank output, 481,316 files. Only af2rank_comparisons.csv is needed by any panel."
 
 [[archive]]
+name = "peint_checkpoints"
+file = "peint_checkpoints.tar.zst"
+note = "optional: the four model checkpoints. Four big files -- plain rsync, not --as-archive."
+
+[[archive]]
+name = "peint_transitions_aligned"
+file = "peint_transitions_aligned.tar.zst"
+note = "optional: held-out transitions, alignment frame. 90,312 files -- use --as-archive."
+
+[[archive]]
+name = "peint_transitions_unaligned"
+file = "peint_transitions_unaligned.tar.zst"
+note = "optional: held-out transitions, unaligned. 60,208 files -- use --as-archive."
+
+[[archive]]
+name = "transitions_192l"
+file = "transitions_192l.tar.zst"
+note = "optional: the 192-leaf transition scale test. 30,104 files -- use --as-archive."
+
+[[archive]]
 name = "r1_omegafold"
 file = "r1_omegafold.tar.zst"
 note = "optional: raw rev1 OmegaFold structures, 607,696 files. Only omegafold_plddt.csv is needed by any panel."
@@ -89,7 +109,7 @@ note = "Per-panel tables. Shipped loose rather than tarred so they can be browse
 
 [[role]]
 name = "vep"
-producer = "protevo.vep compute_fitness + official_baselines, per run directory"
+producer = "protevo.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The PEINT VEP checkpoints and their raw scoring output live on the shared account: checkpoints/vep/ and results/vep/ under spa-evolution-yss/protevo."
 path = "vep"
 source = "{repo_root}/local_data/vep"
 tier = "figure_data"
@@ -515,6 +535,49 @@ cold path, which the shipped annotations bypass. figure2_simulation asserts the 
 exists but reads one family from it."""
 
 [[role]]
+name = "peint_transitions_aligned"
+producer = "upstream of this repo: the (x, y, t) transition extraction that PEINT was trained and evaluated on"
+path = "peint/local_data/aligned"
+source = "{peint_repo}/local_data/aligned"
+tier = "on_request"
+archive = "peint_transitions_aligned"
+probe = "test_transitions_dir"
+blocks_mb = 6102
+apparent_mb = 13665
+files = 90312
+panels = ["figure2_likelihood_eval"]
+note = """Held-out transitions in the empirical alignment frame. With the shipped per-site
+tables the likelihood panel replots without these; they are what a recompute needs."""
+
+[[role]]
+name = "peint_transitions_unaligned"
+producer = "upstream of this repo: the same extraction, before projection into the alignment frame"
+path = "peint/local_data/unaligned"
+source = "{peint_repo}/local_data/unaligned"
+tier = "on_request"
+archive = "peint_transitions_unaligned"
+probe = "test_transitions_dir"
+blocks_mb = 3917
+apparent_mb = 12845
+files = 60208
+panels = ["figure2_likelihood_eval"]
+
+[[role]]
+name = "transitions_192l"
+producer = "upstream of this repo: the 192-leaf scale test used to keep time-estimation runtimes down"
+path = "transitions_192l"
+source = "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l"
+tier = "on_request"
+archive = "transitions_192l"
+probe = "13gs_1_A.txt"
+blocks_mb = 1396
+apparent_mb = 1289
+files = 30104
+panels = []
+note = """Behind figure2_time_estimation, which is not one of the released panels. Kept
+declared because it is the only copy and it is easy to lose track of."""
+
+[[role]]
 name = "peint_cache"
 producer = "protevo's evaluate_peint_model_* cached computations, in the peint repo"
 path = "peint/_cache_peint"
@@ -533,9 +596,17 @@ name = "peint_checkpoints"
 producer = "PEINT training runs"
 path = "peint/model_checkpoints"
 source = "{peint_repo}/model_checkpoints"
+exclude = ["*.full.bak", "esmc-biohub"]
 tier = "on_request"
-blocks_mb = 6839
-apparent_mb = 6839
-files = 7
-panels = ["figure2_likelihood_eval", "figure2_simulation_generate"]
-note = "Model weights. Deposited separately from the data, as model artifacts."
+archive = "peint_checkpoints"
+probe = "peint.ckpt"
+blocks_mb = 3356
+apparent_mb = 3356
+files = 4
+panels = ["figure2_likelihood_eval", "figure2_simulation_generate", "vep_params", "vep_by_base_lm"]
+note = """The four canonical checkpoints: peint.ckpt and vep.ckpt (ESM2 backbones), plus
+peint_esmc.ckpt and vep_esmc.ckpt (Biohub ESM-C). Copied in as-is, optimizer state and all --
+the loader detects which backbone a checkpoint carries and pulls ESM2 from pretrained when the
+encoder weights are absent, so there is nothing to strip and nothing to get wrong.
+Excluded: the *.full.bak originals, and esmc-biohub/ (4.5 GB of alternate epochs and scoring
+runs kept for provenance)."""

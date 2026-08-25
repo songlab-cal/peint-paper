@@ -149,23 +149,34 @@ PEINT_CHECKPOINT = Path(os.environ.get(
     str(PEINT_REPO / "model_checkpoints" / "peint.ckpt"),
 ))
 
-# PEINT trained on the Biohub ESM-C backbone, used by the revision-2 simulation runs and
-# the Figure 2 likelihood panel. Not part of the paper data deposit — it lives on a
-# collaborator's scratch — so there is no usable public default; set the env var.
-ESMC_SIM_CHECKPOINT = os.environ.get(
-    "PEINT_PAPER_ESMC_CHECKPOINT",
+# PEINT trained on the Biohub ESM-C backbone, used by the revision-2 simulation runs and the
+# Figure 2 likelihood panel. Now kept alongside the other checkpoints in the peint repo as
+# peint_esmc.ckpt; the collaborator's scratch path it was trained at is the fallback, so runs
+# predating the copy still resolve.
+ESMC_SIM_CHECKPOINT = str(_first_existing(
+    PEINT_REPO / "model_checkpoints" / "peint_esmc.ckpt",
     "/scratch/users/yufan.cao/protevo_ablations/esmc/"
     "20260729-5e5d20h960d-esmc-14498fams-esmc/epoch=4-step=60000.ckpt",
-)
+    env="PEINT_PAPER_ESMC_CHECKPOINT",
+))
+
+# The ESM-C VEP head, likewise copied in as vep_esmc.ckpt. This is the checkpoint behind the
+# peint_esmc300m run directory under local_data/vep.
+ESMC_VEP_CHECKPOINT = str(_first_existing(
+    PEINT_REPO / "model_checkpoints" / "vep_esmc.ckpt",
+    PEINT_REPO / "model_checkpoints" / "esmc-biohub" / "1e1d-ep_13-step_4130.ckpt",
+    env="PEINT_PAPER_ESMC_VEP_CHECKPOINT",
+))
 
 # Transitions (x, y, t triples) behind the time-estimation panel.
 # PROVISIONAL: this default is the 192-leaf subset that was used to keep runtimes down,
 # not the full 1024-leaf set. Point PEINT_PAPER_TRANSITIONS_DIR at the full set before
 # generating the final figure.
-TRANSITIONS_DIR = Path(os.environ.get(
-    "PEINT_PAPER_TRANSITIONS_DIR",
+TRANSITIONS_DIR = _first_existing(
     "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l",
-))
+    LOCAL_DATA / "transitions_192l",
+    env="PEINT_PAPER_TRANSITIONS_DIR",
+)
 NONTRAIN_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
     LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",

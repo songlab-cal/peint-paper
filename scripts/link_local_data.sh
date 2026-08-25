@@ -32,7 +32,16 @@ case "${1:-}" in
 esac
 
 # rel|target, one per directory-backed role in the shipped tiers.
-LINKS="$("$PY" -m paper.manifest --links)"
+# $PY defaults to whatever python3 is first on PATH, which is not guaranteed to read TOML --
+# on this cluster the bare python3 in a non-interactive shell is a 3.8. Say so plainly
+# instead of letting an ImportError traceback stand in for the explanation.
+if ! LINKS="$("$PY" -m paper.manifest --links 2>&1)"; then
+  echo "Could not read data/MANIFEST.toml with '$PY':" >&2
+  echo "$LINKS" | tail -3 >&2
+  echo "Set PEINT_PAPER_PY_ESMC (or PEINT_PAPER_PY) to an interpreter that can read TOML" >&2
+  echo "(3.11+, or 3.10 with tomli) and import this repo." >&2
+  exit 5
+fi
 [[ -n "$LINKS" ]] || { echo "empty link plan from paper.manifest" >&2; exit 1; }
 
 # The benchmarks WRITE into these two, so they point at the warm caches this machine already
