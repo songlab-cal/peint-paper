@@ -15,6 +15,7 @@ from protevo.vep._vep_utils import (
     _discover_time_dirs,
 )
 from paper.plot_style import _set_publication_style
+import paper_config as cfg
 from paper.model_style import base_lm_pair_colors, model_colors
 from paper import vep
 
@@ -36,7 +37,9 @@ apply Illustrator-friendly, publication-ready defaults before plotting.
 # repo's ProteinGym3, which PEINT is meant to be used in conjunction with.
 PAPER_ROOT = Path(__file__).resolve().parents[1]
 FIG_DIR = PAPER_ROOT / "figures"
-VEP_RESULTS_DIR = PAPER_ROOT / "local_data" / "vep" / "test_lls" / "production"
+# Via cfg.LOCAL_DATA rather than PAPER_ROOT/local_data: the two are the same by default, but
+# only the former moves when someone unpacks the deposit somewhere else.
+VEP_RESULTS_DIR = Path(cfg.LOCAL_DATA) / "vep" / "test_lls" / "production"
 
 
 def _fig_path(category, filename):

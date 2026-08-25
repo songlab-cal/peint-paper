@@ -32,6 +32,13 @@ scripts/render_panels.py --from-csv
 This is the tier to hand someone who wants to check a number, restyle a figure, or
 confirm that the plotted values match the paper.
 
+### Everything from one directory
+
+Both tiers resolve out of `local_data/`. Set `PEINT_PAPER_LOCAL_DATA_ONLY=1` to make that
+binding rather than best-effort — see the README. Model checkpoints are included: they land
+at `local_data/peint/model_checkpoints/`, which is where `paper_config` looks when the peint
+repo does not have them.
+
 ## 2. Recompute the metrics — the archives, ~14 GB packed / ~46 GB unpacked
 
 ```bash

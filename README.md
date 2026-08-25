@@ -69,6 +69,27 @@ local_data/
   derived/       everything the benchmarks WRITE, incl. computation caches
 ```
 
+### One directory, if you want it
+
+Unpack the deposit into `local_data/` and set one variable:
+
+```bash
+export PEINT_PAPER_LOCAL_DATA_ONLY=1        # optional, but makes it deterministic
+scripts/render_panels.py
+```
+
+By default each input resolves to the authoritative source tree when that exists and to
+`local_data/` otherwise, so the same config serves the machine that produced the data and
+someone who just downloaded it. On a machine that has both, "otherwise" never fires — which
+also means you cannot tell whether the deposit is self-sufficient. `PEINT_PAPER_LOCAL_DATA_ONLY=1`
+makes `local_data/` win outright: every input, including the model checkpoints, then comes
+from that one directory, and anything missing fails at its deposit path instead of quietly
+resolving to a local tree the deposit does not contain. Verified: with it set, no config path
+escapes `local_data/` or the repo.
+
+`PEINT_PAPER_LOCAL_DATA` moves the whole tree somewhere else if you would rather not put it
+under the checkout.
+
 `local_data/` is git-ignored, with one exception: `local_data/vep/` is 250 KB of per-run
 ProteinGym Spearman tables that the three VEP panels cannot render without, so it is tracked
 and the deposit neither carries nor overwrites it. Override any location with the

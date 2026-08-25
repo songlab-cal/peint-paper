@@ -49,6 +49,15 @@ DATA_ROOT = Path(os.environ.get(
 LOCAL_DATA = Path(os.environ.get("PEINT_PAPER_LOCAL_DATA", str(REPO_ROOT / "local_data")))
 
 
+# Deposit mode. Normally a path resolves to the authoritative tree when that exists and to
+# LOCAL_DATA otherwise, which is what lets one config serve both the machine that produced
+# the data and someone who just unpacked it. On a machine that has BOTH -- this one, and
+# anyone who keeps a copy of the source trees around -- "otherwise" never fires, so there is
+# no way to check that the deposit is self-sufficient. Setting PEINT_PAPER_LOCAL_DATA_ONLY=1
+# makes LOCAL_DATA win outright: every input then comes from one directory, deterministically.
+LOCAL_DATA_ONLY = os.environ.get("PEINT_PAPER_LOCAL_DATA_ONLY", "").lower() not in ("", "0", "false", "no")
+
+
 def _first_existing(*candidates, env=None):
     """First candidate that exists, else the last one, with an env var overriding all.
 
@@ -58,11 +67,19 @@ def _first_existing(*candidates, env=None):
     exact same string -- protevo cache keys hash absolute argument paths, and a "harmless"
     reordering here would cold-start every cached computation.
 
+    Under LOCAL_DATA_ONLY the first candidate *under LOCAL_DATA* wins whether or not it
+    exists, so a missing input fails loudly at the deposit path instead of silently falling
+    back to a local tree the deposit does not contain.
+
     Falling through to the last candidate rather than raising means a missing input is
     reported against the deposit path, which is the layout whoever hits that error is using.
     """
     if env and os.environ.get(env):
         return Path(os.environ[env])
+    if LOCAL_DATA_ONLY:
+        for c in candidates:
+            if str(c).startswith(str(LOCAL_DATA)):
+                return Path(c)
     for c in candidates:
         if Path(c).exists():
             return Path(c)
@@ -144,17 +161,30 @@ FIGURES_DIR = Path(os.environ.get("PEINT_PAPER_FIGURES_DIR", str(REPO_ROOT / "fi
 # (model_checkpoints/peint.ckpt, documented there for generation and time estimation).
 # The paper's time-estimation panel originally used a separate time-embedding checkpoint
 # from later experiments; the released model supersedes it.
-PEINT_CHECKPOINT = Path(os.environ.get(
-    "PEINT_PAPER_CHECKPOINT",
-    str(PEINT_REPO / "model_checkpoints" / "peint.ckpt"),
-))
+def _checkpoint(name, *extra, env=None):
+    """A model checkpoint: the peint repo first, then an unpacked deposit.
+
+    Checkpoints are gitignored in the peint repo and absent from this one, so the only ways
+    anyone else gets them are the shared account or the data deposit -- both of which land
+    them under LOCAL_DATA/peint/model_checkpoints/, matching the manifest's peint_checkpoints
+    role. Repo first so this machine resolves unchanged.
+    """
+    return _first_existing(
+        PEINT_REPO / "model_checkpoints" / name,
+        LOCAL_DATA / "peint" / "model_checkpoints" / name,
+        *extra, env=env,
+    )
+
+
+PEINT_CHECKPOINT = _checkpoint("peint.ckpt", env="PEINT_PAPER_CHECKPOINT")
+VEP_CHECKPOINT = _checkpoint("vep.ckpt", env="PEINT_PAPER_VEP_CHECKPOINT")
 
 # PEINT trained on the Biohub ESM-C backbone, used by the revision-2 simulation runs and the
 # Figure 2 likelihood panel. Now kept alongside the other checkpoints in the peint repo as
 # peint_esmc.ckpt; the collaborator's scratch path it was trained at is the fallback, so runs
 # predating the copy still resolve.
-ESMC_SIM_CHECKPOINT = str(_first_existing(
-    PEINT_REPO / "model_checkpoints" / "peint_esmc.ckpt",
+ESMC_SIM_CHECKPOINT = str(_checkpoint(
+    "peint_esmc.ckpt",
     "/scratch/users/yufan.cao/protevo_ablations/esmc/"
     "20260729-5e5d20h960d-esmc-14498fams-esmc/epoch=4-step=60000.ckpt",
     env="PEINT_PAPER_ESMC_CHECKPOINT",
@@ -162,8 +192,8 @@ ESMC_SIM_CHECKPOINT = str(_first_existing(
 
 # The ESM-C VEP head, likewise copied in as vep_esmc.ckpt. This is the checkpoint behind the
 # peint_esmc300m run directory under local_data/vep.
-ESMC_VEP_CHECKPOINT = str(_first_existing(
-    PEINT_REPO / "model_checkpoints" / "vep_esmc.ckpt",
+ESMC_VEP_CHECKPOINT = str(_checkpoint(
+    "vep_esmc.ckpt",
     PEINT_REPO / "model_checkpoints" / "esmc-biohub" / "1e1d-ep_13-step_4130.ckpt",
     env="PEINT_PAPER_ESMC_VEP_CHECKPOINT",
 ))
