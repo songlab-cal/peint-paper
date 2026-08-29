@@ -24,11 +24,15 @@
 
 version = 1
 
+# Source roots on the machine that PRODUCED the data. They are only used when staging or
+# archiving from that machine; a downloader never reads them, because every role resolves under
+# local_data/. paper_config takes precedence, then the PEINT_PAPER_* environment variables named
+# below, and these placeholders are the last fallback.
 [defaults]
-data_root = "/scratch/users/akoehl/protein-evolution"
-sim_root = "/scratch/users/akoehl/old/protein-evolution/local_data/simulation/final_simulation_512_leaves/ratio_0-1_nucleus_1-0"
-gt_pdb_root = "/scratch/users/matthew_liu/input_data/pdb"
-peint_repo = "/scratch/users/akoehl/peint"
+data_root = "/path/to/results"          # PEINT_PAPER_DATA_ROOT
+sim_root = "/path/to/simulation"        # PEINT_PAPER_SIM_ROOT
+gt_pdb_root = "/path/to/ground_truth_pdb"   # PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR
+peint_repo = "/path/to/peint"           # PEINT_PAPER_PEINT_REPO
 
 
 # =====================================================================================
@@ -125,7 +129,7 @@ note = "Per-panel tables. The whole replot tier, ~5 MB packed."
 
 [[role]]
 name = "vep"
-producer = "protevo.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The PEINT VEP checkpoints and their raw scoring output live on the shared account: checkpoints/vep/ and results/vep/ under spa-evolution-yss/protevo."
+producer = "protevo.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The VEP checkpoints ship in peint_checkpoints.tar.zst; the raw per-variant scoring output behind these tables is not redistributed."
 path = "vep"
 source = "{repo_root}/local_data/vep"
 tier = "figure_data"
@@ -587,7 +591,7 @@ panels = ["figure2_likelihood_eval"]
 name = "transitions_192l"
 producer = "upstream of this repo: the 192-leaf scale test used to keep time-estimation runtimes down"
 path = "transitions_192l"
-source = "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l"
+source = "{sim_root}/../../15k_gapless_scale_test_192l"
 tier = "on_request"
 archive = "transitions_192l"
 probe = "13gs_1_A.txt"

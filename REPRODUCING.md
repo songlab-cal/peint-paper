@@ -159,9 +159,3 @@ twice and joined by protevo's computation cache: the model load sits *inside* th
 function, so on a cache hit it is never reached. `installation.md` has the full account,
 including the one failure mode worth recognising — a cache miss in the folding pass surfaces
 as `model type 'esmc' not recognized`, which means *miss*, not *broken install*.
-
-## Sharing the data on a shared cluster account
-
-If you are handing this to someone on the same filesystem rather than via the deposit, see
-the README's "Copying the data to another account" — `scripts/stage_shared_data.sh` moves
-the roles between accounts and `--verify` proves the copy is complete.
