@@ -18,10 +18,11 @@ landing page -- rather than into this file.
 
 # PEINT paper — figure data and simulation results
 
-Everything needed to reproduce the figures in <FILL: paper title / preprint link>.
+Everything needed to reproduce the figures in *Deep models of protein evolution in time
+generate realistic evolutionary trajectories and functional proteins*.
 
-Code: <FILL: link to the peint-paper repo> (commit `<FILL>`)
-Model library: <FILL: link to the peint repo> (commit `<FILL>`)
+Code: https://github.com/songlab-cal/peint-paper
+Model library: https://github.com/songlab-cal/peint
 
 ## What this is
 
@@ -34,29 +35,32 @@ It is organised in two tiers, because most people want the first one.
 
 | tier | download | unpacked | what you can do |
 |---|---|---|---|
-| `figure_data.tar.zst` | ~5 MB | 21 MB | re-render **every** panel exactly. No models, no GPU, nothing else. |
-| \+ `r1`, `r2`, `sim`, `aux`, `peint_checkpoints` | ~11 GB | ~53 GB | recompute the metrics from the simulated alignments themselves. |
-| \+ `r1_af2`, `r1_omegafold` | ~22 GB | ~151 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
+| `figure_data.tar.zst` | 19 MB | 21 MB | re-render **every** panel exactly. No models, no GPU, nothing else. |
+| \+ `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` | ~11 GB | ~52 GB | recompute the metrics from the simulated alignments themselves. |
+| \+ `peint_transitions_aligned`, `..._unaligned` | ~14 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
+| \+ `r1_af2`, `r1_omegafold` | ~24 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
 
 ## Quick start
 
 ```bash
-git clone <FILL: peint-paper repo>
+git clone https://github.com/songlab-cal/peint-paper
 cd peint-paper
 ```
 
 Then fetch the data. From this record, each archive unpacks relative to `local_data/`:
 
 ```bash
-RECORD=<the record id in this page's URL>        # zenodo.org/records/<RECORD>
+RECORD=22151902       # zenodo.org/records/<RECORD>
 ZENODO=https://zenodo.org/records/$RECORD/files
 mkdir -p local_data
 curl -L -O "$ZENODO/figure_data.tar.zst?download=1"
 tar --use-compress-program=unzstd -xf figure_data.tar.zst -C local_data/
 ```
 
-Add `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` the same way for the recompute tier. The two
-structure archives take `-C local_data/r1/` instead — see the note under the file table below.
+Add `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` the same way for the recompute tier, and
+`peint_transitions_aligned` / `peint_transitions_unaligned` if you want to rerun the per-site
+likelihood evaluation. The two structure archives take `-C local_data/r1/` instead — see the
+note under the file table below.
 Verify first if you like: `curl -L -O "$ZENODO/CHECKSUMS.sha256?download=1"` then
 `sha256sum -c CHECKSUMS.sha256 --ignore-missing`.
 
@@ -83,7 +87,7 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
 | file | unpacked | files | what it is |
 |---|---|---|---|
-| `figure_data/` | 25 MB | 20 | per-panel tables — the values actually plotted |
+| `figure_data.tar.zst` | 21 MB | 20 | per-panel tables — the values actually plotted |
 | `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
@@ -180,11 +184,3 @@ arguments *including absolute input paths*, so a copy is only ever valid at the 
 was built — shipping it would be shipping something inert. The Figure 2 likelihood panel runs
 without it, recomputing from the transitions above; the cache only makes it faster.
 
-## Citation
-
-<FILL: BibTeX for the paper, then the dataset DOI once minted>
-
-## Licence
-
-<FILL: confirm>. Code in the companion repo is licensed separately; the vendored
-`paper/vendor/lm_design/` is MIT (see its `NOTICE.md`).
