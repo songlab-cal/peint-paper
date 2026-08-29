@@ -147,11 +147,6 @@ consume `af2rank_comparisons.csv` and `omegafold_plddt.csv`, 750 KB combined, wh
 `r1.tar.zst`. They are deposited so the structures behind those two summaries are citable, not
 because anything needs them: skipping both saves 11 GB of download and 99 GB on disk.
 
-Two things are worth knowing before you plan a download. The checkpoints are **more than half the
-packed deposit** despite being 13% of the unpacked bytes — model weights are float tensors and
-compress at only 1.08x, while the sequence trees compress 8-18x. And if you only want to redraw
-figures, `figure_data.tar.zst` alone is ~5 MB and needs no model, no GPU, and none of the rest.
-
 **Verify before unpacking.** The record ships `CHECKSUMS.sha256` covering every archive:
 
 ```bash
@@ -216,12 +211,10 @@ once both interpreters are pointed at (see [Wiring](#wiring-the-two-environments
 
 ## How the two environments hand off
 
-The obvious worry is that the simulations need PEINT (so, the ESM-C stack) while the benchmarks
-need the JAX/folding stack, and no environment has both. It works because **what crosses the
-boundary is amino-acid sequences in text files, not models or tensors** — so nothing
-torch-shaped or JAX-shaped ever has to be version-compatible across the two.
-
-There are two mechanisms, and it is worth knowing which one you are relying on.
+The simulations need PEINT (so, the ESM-C stack) while the benchmarks
+need the JAX/folding stack, and no environment has both. Typically just
+use the ESM-C env for the simulations, and then the benchmarks can be run
+using the different enviornment.
 
 ### 1. File handoff — the main pipeline
 
@@ -275,29 +268,12 @@ $PEINT_PAPER_PY_PROTEVO -m figures.figure2_simulation
 `figure2_simulation_plddt`, the latter with `depends_on`), so asking for the pLDDT panel runs the
 generate pass first, in the right interpreter.
 
-**What the cache key is built from:** every argument except `exclude_args`, `output_dirs`, and
+The cache key is built from every argument except `exclude_args`, `output_dirs`, and
 any `exclude_args_if_default` left at its default. `device` is excluded, so cuda/cpu is free —
 but `model_checkpoint_path` **is** in the key, as a string. The two passes must pass the
 byte-identical path. Keys also hash absolute input paths, so a cache copied from another machine
 never hits; this is the same constraint `REPRODUCING.md` flags for `pcp_panels`.
 
-### The failure mode this produces
-
-`figures/figure2_simulation.py` calls `protevo_caching.set_read_only(False)` for both caches in
-both passes. So a key mismatch during the folding pass does **not** report a cache miss — it
-falls into the function body and tries to build ESM-C inside `protevo-env`, where transformers
-4.45.2 raises:
-
-```
-ValueError: The checkpoint you are trying to load has model type `esmc` but Transformers
-does not recognize this architecture.
-```
-
-**If you see that during the folding pass, it means cache miss, not broken install.** The usual
-causes are a different checkpoint path string between the two passes, a moved cache directory, or
-a changed non-default keyword argument. Switching pass 2 to `set_read_only(True)` would turn that
-silent fallthrough into an immediate `CacheUsageError` naming the miss; that is a one-line change
-in `figure2_simulation.py`, not an existing flag.
 
 ## Prerequisites
 
@@ -492,8 +468,8 @@ export HF_HOME=/path/to/hf_cache
 
 ## Verifying the install
 
-`protevo-env` — the fragile one, because torch and JAX must both see the GPU **in the same
-process**:
+`protevo-env` is the tough one, as it requires both torch and jax (and a specific version of jax) to be 
+in the same environment with the same CUDA libraries.
 
 ```bash
 conda activate protevo-env
@@ -526,7 +502,7 @@ scripts/render_panels.py --check      # which outputs are missing
 scripts/check_local_data.py           # which data roles are present
 ```
 
-## Known gotchas
+## Known issues
 
 - **`biotite>=1.0` renamed `filter_backbone`**, which `fair-esm` 2.0.0 imports at module load.
   `paper/esmif.py` shims it before importing `esm.inverse_folding`. If you import
@@ -541,7 +517,7 @@ scripts/check_local_data.py           # which data roles are present
 
 ## Minimal: plotting only
 
-`REPRODUCING.md` describes a tier that redraws panels from the shipped tables with no models and
+`REPRODUCING.md` describes a way to redraw panels from the shipped tables with no models and
 no GPU. A light environment covers that, but read the caveat below before assuming it covers the
 whole sweep:
 
