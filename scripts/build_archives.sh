@@ -13,6 +13,20 @@
 # without a checkout: the archive plan and the two metadata files are fetched over ssh.
 #   scripts/build_archives.sh --root <staged> --src-host akoehl@beren --apply
 #
+# ssh between accounts is gated by pam_slurm_adopt on compute nodes ("no active jobs on this
+# node"), which would otherwise force you to hold a job as BOTH accounts on the same node for
+# the whole build. --plan-file / --metadata-dir avoid ssh entirely: the repo side writes the
+# three inputs into a directory the staging account can read, once, and the build reads them
+# locally. Needs no checkout, no python and no network on the staging side.
+#
+#   # as the repo account, into a drop directory the staging account can read:
+#   python -m paper.manifest --archive-plan > <drop>/archive-plan.tsv
+#   cp data/MANIFEST.toml data/DATASET_CARD.md <drop>/
+#
+#   # as the staging account:
+#   scripts/build_archives.sh --root <staged> --plan-file <drop>/archive-plan.tsv \
+#       --metadata-dir <drop> --apply
+#
 # Produces, in --out (default <root>/_upload):
 #   figure_data.tar.zst     the replot tier
 #   r1.tar.zst r2.tar.zst sim.tar.zst aux.tar.zst peint_checkpoints.tar.zst
@@ -47,6 +61,8 @@ SSH_CM=(-o ControlMaster=auto -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p" -o Control
 on_src() { if [[ -n "$SRC_HOST" ]]; then ssh -n "${SSH_CM[@]}" "$SRC_HOST" "$@"; else bash -c "$*" </dev/null; fi; }
 ROOT=""
 OUT=""
+PLAN_FILE=""
+META_DIR=""
 APPLY=0
 ONLY=""
 LEVEL="${PEINT_PAPER_ZSTD_LEVEL:-19}"
@@ -61,6 +77,8 @@ while [[ $# -gt 0 ]]; do
     --out)   OUT="${2:?}"; shift ;;
     --apply) APPLY=1 ;;
     --only)  ONLY="${ONLY:+$ONLY }${2:?--only needs an archive name, or 'loose'}"; shift ;;
+    --plan-file)    PLAN_FILE="${2:?--plan-file needs a path}"; shift ;;
+    --metadata-dir) META_DIR="${2:?--metadata-dir needs a path}"; shift ;;
     --src-host)   SRC_HOST="${2:?--src-host needs user@host}"; shift ;;
     --src-repo)   SRC_REPO="${2:?--src-repo needs a path}"; shift ;;
     --src-python) SRC_PYTHON="${2:?--src-python needs a path}"; shift ;;
@@ -100,9 +118,17 @@ fi
 # A bare username means "same host, other account" -- the only thing this hop is ever for.
 [[ -n "$SRC_HOST" && "$SRC_HOST" != *@* ]] && SRC_HOST="$SRC_HOST@$THIS_HOST"
 
-if ! PLAN="$(manifest --archive-plan 2>&1)"; then
+if [[ -n "$PLAN_FILE" ]]; then
+  [[ -r "$PLAN_FILE" ]] || { echo "cannot read --plan-file $PLAN_FILE" >&2; exit 2; }
+  PLAN="$(cat "$PLAN_FILE")"
+  echo "plan         $PLAN_FILE (pre-generated; the manifest is not consulted here)"
+elif ! PLAN="$(manifest --archive-plan 2>&1)"; then
   echo "Could not generate the archive plan${SRC_HOST:+ on $SRC_HOST}:" >&2
   echo "$PLAN" >&2
+  echo >&2
+  echo "If this is pam_slurm_adopt refusing the ssh hop, skip ssh altogether: have the repo" >&2
+  echo "account write the plan and metadata into a directory this account can read, then use" >&2
+  echo "  --plan-file <drop>/archive-plan.tsv --metadata-dir <drop>" >&2
   exit 5
 fi
 [[ -n "$PLAN" ]] || { echo "empty archive plan from paper.manifest" >&2; exit 1; }
@@ -174,7 +200,14 @@ if [[ -n "$ONLY" ]]; then
 fi
 
 echo "  metadata MANIFEST.toml, README.md"
-if [[ -n "$SRC_HOST" ]]; then
+if [[ -n "$META_DIR" ]]; then
+  for f in MANIFEST.toml DATASET_CARD.md; do
+    [[ -r "$META_DIR/$f" ]] || { echo "  MISSING  $META_DIR/$f (needed by --metadata-dir)" >&2; exit 1; }
+  done
+  run mkdir -p "$OUT"
+  run cp "$META_DIR/MANIFEST.toml"   "$OUT/MANIFEST.toml"
+  run cp "$META_DIR/DATASET_CARD.md" "$OUT/README.md"
+elif [[ -n "$SRC_HOST" ]]; then
   # `cat` over the existing ssh master; no checkout needed on this side.
   run_pipe() { if [[ $APPLY -eq 1 ]]; then on_src "cat '$1'" > "$2"; else printf '    would: ssh %s cat %s > %s\n' "$SRC_HOST" "$1" "$2"; fi; }
   run mkdir -p "$OUT"
