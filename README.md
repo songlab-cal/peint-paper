@@ -182,9 +182,13 @@ are citable. Both are marked `prebuilt` in the manifest — already tarred by
 both unpack into `local_data/r1/` rather than `local_data/`, which `fetch_local_data.py`
 handles via their `unpack_into` field.
 
+The held-out transition trees ship too (`peint_transitions_aligned`,
+`peint_transitions_unaligned`, ~26 GB unpacked), so `figure2_likelihood_eval` is rerunnable
+from the deposit given a checkpoint and a GPU.
+
 Still absent by design (`tier = "on_request"`): the ground-truth PDBs, the a3m alignments,
-`Pfam-A.hmm`, the held-out transition trees, and the `peint` repo's evaluation cache — see
-each role's note for why.
+`Pfam-A.hmm`, and the `peint` repo's evaluation cache — the last because it is keyed on
+absolute paths and would be inert anywhere else. See each role's note for why.
 
 ### Not redistributed
 

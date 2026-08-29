@@ -89,6 +89,8 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
 | `aux.tar.zst` | 0.1 GB | 30,117 | Pfam/SCOPe/ECOD labels, per-site rates, split lists |
 | `peint_checkpoints.tar.zst` | 6.9 GB | 5 | the PEINT / VEP model checkpoints |
+| `peint_transitions_aligned.tar.zst` | 13 GB | 90,312 | held-out transitions, alignment frame |
+| `peint_transitions_unaligned.tar.zst` | 13 GB | 60,208 | held-out transitions, unaligned + alignment masks |
 | `r1_af2.tar.zst` | 52 GB | 481,316 | raw rev1 AF2Rank structures (unpacks into `local_data/r1/`) |
 | `r1_omegafold.tar.zst` | 46 GB | 607,696 | raw rev1 OmegaFold structures (unpacks into `local_data/r1/`) |
 
@@ -161,22 +163,22 @@ compute, not missing data.
 | figure | what a full rerun takes |
 |---|---|
 | Figure 2 simulation (mutations, pLDDT) | a checkpoint + GPU to regenerate the sequences, then OmegaFold over ~1,200 structures (~1.5 h) |
+| Figure 2 per-site likelihood vs. time | a checkpoint + GPU (~15 min warm). Scores the held-out transitions, which are deposited here |
 | ESM-MCMC spectrum | a checkpoint + GPU. The original was a multi-day study; its driver ships in the code repo |
 | Parent-child-pair mutation counts | no model needed — a cold AliSim re-simulation over ~500 families × 3 models, with `iqtree2` and MAFFT on `PATH` (~30–45 min warm, hours cold) |
 | ESM-C indel arm | no model needed — a 64-process MAFFT + Historian job over the shipped sequences |
 
-Two figures depend on things that are genuinely not in this record, which is worth saying
-outright rather than leaving you to discover it:
+One dependency is genuinely outside this record, which is worth saying outright: **the
+variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ~13 external
+models. Those are third-party and not ours to redistribute. The per-assay Spearman tables
+derived from them are here, and the public ProteinGym release they come from is the original
+source.
 
-- **Figure 2 per-site likelihood** also needs the held-out transition datasets and the model
-  repo's evaluation cache. Both are declared in `MANIFEST.toml` as `tier = "on_request"` — the
-  cache is keyed on a hash of absolute input paths, so a copy of it is only ever valid at the
-  path where it was built, and shipping it would be shipping something inert. Contact us for
-  the transition datasets.
-- **The variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ~13
-  external models. Those are third-party and not ours to redistribute; the per-assay Spearman
-  tables derived from them are here, and the public ProteinGym release they come from is the
-  original source.
+The only other thing left out is the model repo's evaluation cache (`_cache_peint`), and that
+is a warm-start rather than an input: protevo keys a cached computation on a hash of its
+arguments *including absolute input paths*, so a copy is only ever valid at the path where it
+was built — shipping it would be shipping something inert. The Figure 2 likelihood panel runs
+without it, recomputing from the transitions above; the cache only makes it faster.
 
 ## Citation
 

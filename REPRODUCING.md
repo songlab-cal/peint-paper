@@ -115,8 +115,10 @@ role's `producer` field — including the checkpoint path and the shard list.
   and unpack into `local_data/r1/`. No panel reads them — the two summary CSVs they produce,
   750 KB combined, are what the pLDDT ECDFs actually consume — so they are there for
   inspection and citation, and skipping both leaves every figure reproducible.
-- **The Figure 2 likelihood panel** needs the model repo's `_cache_peint` and a GPU. That
-  cache has the same absolute-path keying problem as above, so it is valid only in place.
+- **The Figure 2 likelihood panel** needs a checkpoint and a GPU. Its inputs — the held-out
+  transitions, aligned and unaligned — are deposited. The model repo's `_cache_peint` is not,
+  because it has the same absolute-path keying problem as above and is valid only in place;
+  it is a warm start, not an input, so the panel recomputes without it.
 - **The ESM-MCMC spectrum** summarises a multi-day GPU study; its driver ships for
   provenance, its five result CSVs ship as data, and re-running it is not expected.
 
