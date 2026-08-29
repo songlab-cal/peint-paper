@@ -126,12 +126,28 @@ scripts/check_local_data.py                      # what is present, what is miss
 | `r2` | 2.4 GB | 26 GB | revision 2: the ESM-C rerun |
 | `peint_checkpoints` | 5.0 GB | 6.9 GB | the model checkpoints |
 | `peint_transitions_{,un}aligned` | 4.5 GB | 26 GB | held-out transitions for the likelihood panel |
+| `transitions_192l` | 319 MB | 1.3 GB | reduced 192-leaf transition set (see below) |
 | `r1_af2`, `r1_omegafold` | 11 GB | 99 GB | raw rev1 structures; no panel reads them |
 
 To unpack by hand: `tar --use-compress-program=unzstd -xf <archive>.tar.zst -C local_data/`.
 The two structure archives are the exception — they take `-C local_data/r1/`.
 
 `PEINT_PAPER_LOCAL_DATA=/big/disk/...` puts the tree elsewhere.
+
+### A smaller input set
+
+The published figures use a 512-leaf-per-family simulation. `transitions_192l` is the same
+kind of data at 192 leaves per family — 319 MB instead of tens of GB — and is worth using if
+you want to exercise the transition and time-estimation machinery without the full download or
+runtime:
+
+```bash
+scripts/fetch_local_data.py --archives transitions_192l
+export PEINT_PAPER_TRANSITIONS_DIR=local_data/transitions_192l   # already the default
+```
+
+It backs `figures/figure2_time_estimation.py`, which is not one of the released panels. It is
+not a drop-in for the held-out likelihood panel, which reads its own transition archives.
 
 ### trRosetta training set (optional)
 

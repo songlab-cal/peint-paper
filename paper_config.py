@@ -203,7 +203,6 @@ ESMC_VEP_CHECKPOINT = str(_checkpoint(
 # not the full 1024-leaf set. Point PEINT_PAPER_TRANSITIONS_DIR at the full set before
 # generating the final figure.
 TRANSITIONS_DIR = _first_existing(
-    "/scratch/users/akoehl/old/protein-evolution/local_data/15k_gapless_scale_test_192l",
     LOCAL_DATA / "transitions_192l",
     env="PEINT_PAPER_TRANSITIONS_DIR",
 )

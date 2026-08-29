@@ -99,7 +99,8 @@ note = "held-out transitions, unaligned. 60,208 files; feeds figure2_likelihood_
 [[archive]]
 name = "transitions_192l"
 file = "transitions_192l.tar.zst"
-note = "optional: the 192-leaf transition scale test. 30,104 files -- use --as-archive."
+prebuilt = true
+note = "the 192-leaf transition set. 30,104 files; prebuilt, tarred from its source directory."
 
 [[archive]]
 name = "r1_omegafold"
@@ -591,15 +592,18 @@ panels = ["figure2_likelihood_eval"]
 name = "transitions_192l"
 producer = "upstream of this repo: the 192-leaf scale test used to keep time-estimation runtimes down"
 path = "transitions_192l"
-source = "{sim_root}/../../15k_gapless_scale_test_192l"
-tier = "on_request"
+source = "{data_root}/local_data/15k_gapless_scale_test_192l"
+tier = "full"
 archive = "transitions_192l"
 probe = "13gs_1_A.txt"
 blocks_mb = 1396
 apparent_mb = 1289
 files = 30104
 panels = []
-note = """Behind figure2_time_estimation, which is not one of the released panels. Kept
+note = """Transitions (x, y, t) from a 192-leaf-per-family run -- the reduced set, against the
+512-leaf simulation behind the main figures. Behind figure2_time_estimation, which is not one of
+the released panels, but small enough (319 MB packed) to be useful for exercising the
+transition/time machinery cheaply. Kept
 declared because it is the only copy and it is easy to lose track of."""
 
 [[role]]
