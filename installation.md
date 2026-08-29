@@ -528,12 +528,6 @@ scripts/check_local_data.py           # which data roles are present
 
 ## Known gotchas
 
-- **`pyproject.toml` says `transformers==4.52.2`; the tested env has 4.45.2.** The env is what
-  produced the results. This discrepancy is flagged in the README and should be resolved one way
-  or the other before release.
-- **ProstT5 is the only thing pinning `protevo-env` to old `transformers`,** and it uses just
-  `T5EncoderModel` / `T5Tokenizer`, which are stable well past 4.57. Bumping that pin would
-  likely collapse the two environments into one. Worth trying; not yet done.
 - **`biotite>=1.0` renamed `filter_backbone`**, which `fair-esm` 2.0.0 imports at module load.
   `paper/esmif.py` shims it before importing `esm.inverse_folding`. If you import
   `esm.inverse_folding` yourself, apply the same shim or pin `biotite<1.0`.

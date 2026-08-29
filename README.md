@@ -40,12 +40,6 @@ needs both and is therefore run twice: first in `peint-esmc` with `--skip-struct
 and cache the sequences, then in `protevo-env` without the flag, where those simulations are
 cache hits (no ESM-C model is ever constructed there) and only the folding runs.
 
-Worth revisiting before release: the only thing keeping `protevo-env` on the old transformers is
-the ProstT5 pin, and ProstT5 uses just `T5EncoderModel` / `T5Tokenizer`, which are stable well
-past 4.57. Bumping it would likely collapse this into one environment. Note also that
-`pyproject.toml` currently declares `transformers==4.52.2` while the env actually has 4.45.2 —
-that discrepancy should be resolved either way.
-
 Point the renderer at both:
 
 ```bash
