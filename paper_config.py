@@ -217,7 +217,8 @@ NONTRAIN_FAMILIES_FILE = _first_existing(
 # family. Originally produced by cherryml's treewise train/test split
 # (``train_site_rates_4cat_dir``); shipped as data rather than recomputed here.
 SITE_RATES_DIR = Path(os.environ.get(
-    "PEINT_PAPER_SITE_RATES_DIR", str(LOCAL_DATA / "output_site_rates_dir"),
+    "PEINT_PAPER_SITE_RATES_DIR",
+    str(LOCAL_DATA / "peint" / "local_data" / "output_site_rates_dir"),
 ))
 
 # --- Structure prediction (Figure 2 pLDDT + the TM-score benchmarks) ---

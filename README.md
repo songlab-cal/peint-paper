@@ -5,6 +5,11 @@ Figures and benchmarks for the PEINT paper. Depends on the model library
 
 ## Setup
 
+**`installation.md` is the full, tested recipe** — the ordered setup checklist (both repos,
+both environments, the data and checkpoints, where to unpack and symlink them), the JAX/PyTorch
+install order, the external tools, and how the two environments hand off to each other. The
+short version:
+
 ```bash
 # 1. Install the model library (editable) + this repo's benchmarking extras
 pip install -e ../peint
@@ -168,11 +173,18 @@ refuse to clobber anything already in place.
 ### Deliberately excluded
 
 Two subtrees of revision 1 — `r1/af2` (481,316 files) and `r1/omegafold` (607,696) — hold
-**1.09 million files and ~100 GB** between them, and no panel reads either: the ECDFs read
-`af2rank_comparisons.csv` and `omegafold_plddt.csv`, 750 KB combined, which do ship. They are
-declared in the manifest as `tier = "on_request"` so `--check` reports them as absent by
-design rather than missing. The same applies to the ground-truth PDBs, the a3m alignments,
-`Pfam-A.hmm`, and the `peint` repo's evaluation cache — see each role's note for why.
+**1.09 million files and ~99 GB** between them, and no panel reads either: the ECDFs read
+`af2rank_comparisons.csv` and `omegafold_plddt.csv`, 750 KB combined, which ship inside
+`r1.tar.zst`. They are nonetheless **deposited**, as `r1_af2.tar.zst` and
+`r1_omegafold.tar.zst` (5.6 and 5.3 GB packed), so the structures behind those two summaries
+are citable. Both are marked `prebuilt` in the manifest — already tarred by
+`stage_shared_data.sh --as-archive`, linked rather than rebuilt by `build_archives.sh` — and
+both unpack into `local_data/r1/` rather than `local_data/`, which `fetch_local_data.py`
+handles via their `unpack_into` field.
+
+Still absent by design (`tier = "on_request"`): the ground-truth PDBs, the a3m alignments,
+`Pfam-A.hmm`, the held-out transition trees, and the `peint` repo's evaluation cache — see
+each role's note for why.
 
 ### Not redistributed
 
@@ -180,8 +192,12 @@ Fetched separately, with scripts where possible: the trRosetta training set (a3m
 and ground-truth PDBs, ~20 GB — `https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`),
 AlphaFold weights and TM-align (`scripts/fetch_af2rank_assets.sh`), ProstT5
 (`scripts/fetch_3di_weights.sh`), the lm-design assets (`scripts/fetch_lmdesign_assets.sh`),
-Pfam-A/ECOD/CATH/SCOPe (fetched on demand by `paper.generalization`), ProteinGym, and the
-model checkpoints.
+Pfam-A/ECOD/CATH/SCOPe (fetched on demand by `paper.generalization`), and ProteinGym.
+
+The **model checkpoints do ship**: `peint_checkpoints` is a `full`-tier role, so
+`fetch_local_data.py --tier full` unpacks the four canonical checkpoints to
+`local_data/peint/model_checkpoints/` and no clone of the model repo is needed to run a panel
+that simulates or scores.
 
 ## Reproducing the figures
 

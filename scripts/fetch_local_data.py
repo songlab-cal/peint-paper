@@ -1,22 +1,20 @@
 #!/usr/bin/env python
-"""Download the paper's data from the Hugging Face Hub into local_data/.
+"""Download the paper's data from its Zenodo record into local_data/.
 
 Two tiers, because most people want the first one:
 
-  figure_data  ~26 MB   every table needed to re-render all the panels. No model
-                        weights, no GPU, no network beyond this download.
-  full         ~14 GB   the inputs behind those tables (~46 GB unpacked), so the
+  figure_data  ~5 MB    every table needed to re-render all the panels. No model
+                        weights, no GPU, no other download.
+  full         ~22 GB   the inputs behind those tables (~151 GB unpacked), so the
                         metrics can be recomputed rather than replotted.
 
     scripts/fetch_local_data.py --tier figure_data
-    scripts/fetch_local_data.py --tier full --repo <org>/peint-paper-data
+    scripts/fetch_local_data.py --tier full --record 1234567
     scripts/fetch_local_data.py --tier full --archives r1 sim    # just these
     scripts/fetch_local_data.py --verify-only                    # re-check checksums
 
-`figure_data` is stored as loose files so it can be browsed on the Hub; the bulk roles are
-one `.tar.zst` each. Tarring them is deliberate -- the Hub caps a folder at 10,000 entries
-and `output_site_rates_dir` alone holds 30,104, which would also make the download tens of
-thousands of separate requests.
+Every role is a `.tar.zst`: a Zenodo record is a flat list of files with no directories,
+and several roles hold tens of thousands of small per-family files.
 
 What to fetch is read from data/MANIFEST.toml, the same inventory the staging and archive
 scripts use, so this cannot drift from what was actually deposited.
@@ -28,6 +26,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -35,8 +35,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from paper import manifest  # noqa: E402
 
-DEFAULT_REPO = os.environ.get("PEINT_PAPER_HF_REPO", "TODO-org/peint-paper-data")
+DEFAULT_RECORD = os.environ.get("PEINT_PAPER_ZENODO_RECORD", "")
+ZENODO_BASE = os.environ.get("PEINT_PAPER_ZENODO_BASE", "https://zenodo.org")
 CHECKSUMS = "CHECKSUMS.sha256"
+METADATA = ["MANIFEST.toml", "README.md", CHECKSUMS]
 
 
 def _sha256(path, chunk=1 << 20):
@@ -72,13 +74,42 @@ def _verify(local, names=None):
     return bad
 
 
-def _unpack(archive, dest):
-    dest.mkdir(parents=True, exist_ok=True)
+def _download(record, name, dest, required=True):
+    """Fetch one file from the record. Zenodo serves files at a stable per-record path."""
+    url = f"{ZENODO_BASE}/records/{record}/files/{name}?download=1"
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    print(f"  downloading {name}")
+    try:
+        with urllib.request.urlopen(url) as r, open(tmp, "wb") as fh:
+            shutil.copyfileobj(r, fh, 1 << 20)
+    except urllib.error.HTTPError as e:
+        tmp.unlink(missing_ok=True)
+        if e.code == 404 and not required:
+            print(f"    not in this record; skipping {name}")
+            return False
+        sys.exit(f"could not fetch {name} from record {record}: HTTP {e.code}")
+    except urllib.error.URLError as e:
+        tmp.unlink(missing_ok=True)
+        sys.exit(f"could not reach {ZENODO_BASE}: {e.reason}")
+    tmp.replace(dest)
+    return True
+
+
+def _unpack(archive, dest, into=""):
+    """Unpack one archive under `dest`, honouring the archive's `unpack_into` prefix.
+
+    Almost every archive's members are already destination-relative, so `into` is empty and
+    they land directly in local_data/. The two prebuilt rev1 structure archives are the
+    exception: they were tarred from their source directories, so their members start at
+    `af2/` / `omegafold/` and must be extracted into local_data/r1/ instead.
+    """
+    target = dest / into if into else dest
+    target.mkdir(parents=True, exist_ok=True)
     if shutil.which("tar") is None:
         sys.exit("need `tar` (with zstd support) to unpack")
-    print(f"  unpacking {archive.name} -> {dest}")
+    print(f"  unpacking {archive.name} -> {target}")
     subprocess.run(["tar", "--use-compress-program=unzstd", "-xf", str(archive),
-                    "-C", str(dest)], check=True)
+                    "-C", str(target)], check=True)
 
 
 def main(argv=None):
@@ -87,11 +118,8 @@ def main(argv=None):
     ap.add_argument("--tier", choices=("figure_data", "full"), default="figure_data")
     ap.add_argument("--archives", nargs="+",
                     help="Override the tier's archive list (implies --tier full).")
-    ap.add_argument("--repo", default=DEFAULT_REPO,
-                    help=f"HF dataset repo id (default {DEFAULT_REPO}, "
-                         f"or $PEINT_PAPER_HF_REPO).")
-    ap.add_argument("--revision", default=None,
-                    help="Pin a git revision or tag -- use the one the paper cites.")
+    ap.add_argument("--record", default=DEFAULT_RECORD,
+                    help="Zenodo record id (or $PEINT_PAPER_ZENODO_RECORD).")
     ap.add_argument("--local-dir", default=None)
     ap.add_argument("--keep-archives", action="store_true",
                     help="Do not delete the .tar.zst files after unpacking.")
@@ -108,61 +136,61 @@ def main(argv=None):
         for name, arc in arcs.items():
             rs = manifest.roles(archive=name)
             t = manifest.totals(rs)
-            print(f"  {name:12s} {arc['file']:16s} {t['apparent_mb'] / 1024:5.1f} G unpacked  "
-                  f"{t['files']:>7,} files")
+            print(f"  {name:12s} {arc['file']:28s} {t['apparent_mb'] / 1024:5.1f} G unpacked  "
+                  f"{t['files']:>9,} files")
             print(f"      {arc.get('note', '')}")
-            print(f"      roles: {', '.join(r.name for r in rs)}")
-        loose = [r for r in manifest.roles(tier="figure_data") if not r.in_repo]
-        print(f"  {'(loose)':12s} {'figure_data/':16s} "
-              f"{manifest.totals(loose)['apparent_mb']} M unpacked  "
-              f"{manifest.totals(loose)['files']:>7,} files")
+            print(f"      roles: {', '.join(r.name for r in rs) or '(none shipped)'}")
         return 0
 
     if args.verify_only:
         return 1 if _verify(local) else 0
 
-    if args.repo.startswith("TODO"):
-        sys.exit("Set --repo (or $PEINT_PAPER_HF_REPO) to the published dataset repo id.")
-
-    try:
-        from huggingface_hub import snapshot_download
-    except ImportError:
-        sys.exit("pip install huggingface_hub")
+    if not args.record:
+        sys.exit("Set --record (or $PEINT_PAPER_ZENODO_RECORD) to the published record id.")
 
     if args.archives:
         unknown = [a for a in args.archives if a not in arcs]
         if unknown:
             sys.exit(f"unknown archive(s) {unknown}; known: {sorted(arcs)}")
         wanted = list(args.archives)
-    elif args.tier == "full":
-        wanted = list(arcs)
     else:
-        wanted = []
-
-    # The loose figure_data tier always comes along: it is small and it is what makes every
-    # panel replottable regardless of which bulk archives were chosen.
-    patterns = [f"{r['path']}/**" for r in manifest.roles(tier="figure_data")
-                if not r.in_repo]
-    patterns += ["README.md", "MANIFEST.toml", CHECKSUMS]
-    patterns += [arcs[a]["file"] for a in wanted]
+        # The archives this tier actually deposits, in manifest order. on_request roles
+        # declare archives too; those are staged on demand and are not in the record.
+        shipped = {r.get("archive") for r in manifest.roles(tier="full")}
+        full = [a for a in arcs if a in shipped]
+        figure = [a for a in arcs
+                  if a in {r.get("archive") for r in manifest.roles(tier="figure_data")}]
+        # figure_data always comes along: it is small and it is what makes every panel
+        # replottable regardless of which bulk archives were chosen.
+        wanted = full if args.tier == "full" else figure
+    for a in [x for x in arcs if x in {r.get("archive")
+                                       for r in manifest.roles(tier="figure_data")}]:
+        if a not in wanted:
+            wanted.insert(0, a)
 
     local.mkdir(parents=True, exist_ok=True)
-    print(f"repo    {args.repo}" + (f" @ {args.revision}" if args.revision else ""))
+    print(f"record  {ZENODO_BASE}/records/{args.record}")
     print(f"into    {local}")
-    print(f"tier    {args.tier}" + (f"  archives={','.join(wanted)}" if wanted else ""))
-    snapshot_download(repo_id=args.repo, repo_type="dataset", revision=args.revision,
-                      local_dir=str(local), allow_patterns=patterns)
+    print(f"tier    {args.tier}  archives={','.join(wanted)}")
+
+    for name in METADATA:
+        _download(args.record, name, local / name, required=(name != "README.md"))
+
+    got = []
+    for a in wanted:
+        f = arcs[a]["file"]
+        if _download(args.record, f, local / f):
+            got.append(f)
 
     if not args.no_verify:
-        if _verify(local):
+        if _verify(local, names=set(got) | set(METADATA)):
             sys.exit("checksum verification failed; not unpacking. Re-run the download.")
 
     for a in wanted:
         arc = local / arcs[a]["file"]
         if not arc.exists():
-            print(f"  WARNING {arcs[a]['file']} was not downloaded; skipping")
             continue
-        _unpack(arc, local)              # every archive is relative to local_data/
+        _unpack(arc, local, arcs[a].get("unpack_into", ""))
         if not args.keep_archives:
             arc.unlink()
 

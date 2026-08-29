@@ -14,9 +14,14 @@
 #   scripts/build_archives.sh --root <staged> --src-host akoehl@beren --apply
 #
 # Produces, in --out (default <root>/_upload):
-#   figure_data/            loose, so the Hub can browse it
-#   r1.tar.zst r2.tar.zst sim.tar.zst aux.tar.zst
+#   figure_data.tar.zst     the replot tier
+#   r1.tar.zst r2.tar.zst sim.tar.zst aux.tar.zst peint_checkpoints.tar.zst
+#   r1_af2.tar.zst r1_omegafold.tar.zst   (prebuilt: linked from the staged tree, not re-tarred)
 #   MANIFEST.toml  README.md  CHECKSUMS.sha256
+#
+# Every role is tarred, including figure_data: a Zenodo record is a flat list of files with no
+# directories, so a loose figure_data/ would upload as 20 files with their subdirectory
+# structure (annotations/, esm_mcmc/eval/, ...) lost, and nothing would unpack correctly.
 #
 # Each archive unpacks relative to local_data/, so `tar -xf r1.tar.zst -C local_data/` is the
 # whole instruction. Dry-run by default; never deletes the staged tree.
@@ -121,15 +126,35 @@ run() { if [[ $APPLY -eq 1 ]]; then "$@"; else printf '    would: %s\n' "$*"; fi
 LOOSE="$(awk -F'\t' '$1=="" {print $3}' <<<"$PLAN")"
 for rel in $LOOSE; do
   if [[ ! -e "$ROOT/$rel" ]]; then echo "  MISSING  $rel" >&2; exit 1; fi
-  echo "  loose    $rel"
-  run mkdir -p "$OUT/$(dirname "$rel")"
-  run cp -r "$ROOT/$rel" "$OUT/$(dirname "$rel")/"
+  # Every shipped role declares an archive, so nothing should reach here. Kept as a guard:
+  # a role added without an `archive` would otherwise be dropped from the deposit silently.
+  echo "  WARNING  $rel has no archive in the manifest; it cannot be deposited to a" >&2
+  echo "           flat-file repository as a directory. Give its role an \`archive\`." >&2
+  exit 1
 done
 
 # ---------------------------------------------------------------- archives
+# Same filesystem, so a hardlink costs nothing and the upload dir still holds a real file.
+# cp is the fallback for the case where $OUT was pointed at another mount.
+link_or_copy() { ln -f "$1" "$2" 2>/dev/null || cp "$1" "$2"; }
+
 for arc in $(awk -F'\t' '$1!="" {print $1}' <<<"$PLAN" | awk '!seen[$0]++'); do
   file="$(awk -F'\t' -v a="$arc" '$1==a {print $2; exit}' <<<"$PLAN")"
   mapfile -t paths < <(awk -F'\t' -v a="$arc" '$1==a {print $3}' <<<"$PLAN")
+  prebuilt="$(awk -F'\t' -v a="$arc" '$1==a {print $4; exit}' <<<"$PLAN")"
+
+  # A prebuilt archive is already a finished .tar.zst in the staged tree, put there by
+  # stage_shared_data.sh --as-archive. Its role paths (r1/af2, r1/omegafold) were never
+  # staged as loose directories, so there is nothing to tar and nothing to check for -- the
+  # two rev1 structure trees are ~100 GB and 1.09 M files each, and rebuilding them would
+  # change nothing but the clock. Link the existing file into the upload directory instead.
+  if [[ -n "$prebuilt" ]]; then
+    [[ -e "$ROOT/$file" ]] || { echo "  MISSING  $file (declared prebuilt in the manifest)" >&2; exit 1; }
+    echo "  prebuilt $file  <- already staged ($(du -h "$ROOT/$file" | cut -f1)); linking, not re-tarring"
+    run mkdir -p "$OUT"
+    run link_or_copy "$ROOT/$file" "$OUT/$file"
+    continue
+  fi
 
   for rel in "${paths[@]}"; do
     [[ -e "$ROOT/$rel" ]] || { echo "  MISSING  $rel (needed by $file)" >&2; exit 1; }

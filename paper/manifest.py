@@ -222,23 +222,30 @@ def _cmd_rsync_plan(args):
 
 
 def _cmd_archive_plan(args):
-    """Tab-separated: archive name, archive filename, one destination-relative path per line.
+    """Tab-separated: archive name, filename, destination-relative path, prebuilt flag.
 
     figure_data-tier roles have no archive and are emitted with an empty archive name -- they
     ship loose so they stay browsable on the Hub.
+
+    The fourth field is "prebuilt" when the archive already exists as a finished .tar.zst in
+    the staged tree (streamed there by stage_shared_data.sh --as-archive) and must be linked
+    rather than rebuilt. Its third field is then not a path to tar, so consumers must skip the
+    existence check for it. Appending rather than inserting keeps older $1/$2/$3 readers valid.
     """
     arcs = archives()
     for r in roles(shipped=True):
         if r.in_repo:                   # ships with the code; not part of the deposit
             continue
         arc = r.get("archive")
-        file = arcs.get(arc, {}).get("file", "")
+        meta = arcs.get(arc, {})
+        file = meta.get("file", "")
+        prebuilt = "prebuilt" if meta.get("prebuilt") else ""
         # A file-list role must contribute its individual files, never its directory: several
         # roles share r1/, and tarring the directory would sweep in the on_request ones.
         paths = ([f"{r['path']}/{f.name}" for f in r.source_files]
                  if r.get("source_files") else [r["path"]])
         for path in paths:
-            print(f"{arc or ''}\t{file}\t{path}")
+            print(f"{arc or ''}\t{file}\t{path}\t{prebuilt}")
     return 0
 
 

@@ -1,19 +1,12 @@
----
-license: cc-by-nc-4.0
-pretty_name: PEINT paper — figure data and simulation results
-tags:
-  - protein-evolution
-  - phylogenetics
-  - protein-language-model
-  - reproducibility
-configs: []
----
-
 <!--
-Template for the Hugging Face dataset repo that accompanies the PEINT paper.
-Copy this to the dataset repo as README.md, fill in every <FILL:...>, and mint the DOI
-LAST — a DOI locks the repo, after which renaming, deleting, or changing visibility all
-require a support request.
+Template for the data deposit that accompanies the PEINT paper. `build_archives.sh` copies
+this file into the upload directory as README.md, so edit it HERE, not there.
+
+Fill in every <FILL:...> before publishing, and mint the DOI LAST — a DOI locks the record,
+after which renaming, deleting, or changing visibility all require a support request.
+
+Zenodo takes its own metadata (title, authors, license, DOI) from the deposit form, not from
+this file. This is the landing-page prose only.
 -->
 
 # PEINT paper — figure data and simulation results
@@ -32,24 +25,50 @@ per-family metrics behind every published panel.
 
 It is organised in two tiers, because most people want the first one.
 
-| tier | size | what you can do |
-|---|---|---|
-| `figure_data/` | ~10 MB | re-render **every** panel exactly. No models, no GPU, no other downloads. |
-| the `*.tar.zst` archives | ~4 GB | recompute the metrics from the simulated alignments themselves. |
+| tier | download | unpacked | what you can do |
+|---|---|---|---|
+| `figure_data.tar.zst` | ~5 MB | 21 MB | re-render **every** panel exactly. No models, no GPU, nothing else. |
+| \+ `r1`, `r2`, `sim`, `aux`, `peint_checkpoints` | ~11 GB | ~53 GB | recompute the metrics from the simulated alignments themselves. |
+| \+ `r1_af2`, `r1_omegafold` | ~22 GB | ~151 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
 
 ## Quick start
 
 ```bash
 git clone <FILL: peint-paper repo>
-cd peint-paper && pip install -e .
+cd peint-paper
+```
 
-python scripts/fetch_local_data.py --tier figure_data --repo <FILL: org/repo>
+Then fetch the data. From this record, each archive unpacks relative to `local_data/`:
+
+```bash
+ZENODO=<FILL: https://zenodo.org/records/NNNNNNN/files>
+mkdir -p local_data
+curl -L -O "$ZENODO/figure_data.tar.zst?download=1"
+tar --use-compress-program=unzstd -xf figure_data.tar.zst -C local_data/
+```
+
+Add `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` the same way for the recompute tier. The two
+structure archives take `-C local_data/r1/` instead — see the note under the file table below.
+Verify first if you like: `curl -L -O "$ZENODO/CHECKSUMS.sha256?download=1"` then
+`sha256sum -c CHECKSUMS.sha256 --ignore-missing`.
+
+The repo automates all of that — download, checksum, unpack — given the record id:
+
+```bash
+python scripts/fetch_local_data.py --tier figure_data --record <FILL: record id>
+python scripts/fetch_local_data.py --tier full        --record <FILL: record id>
+```
+
+Then:
+
+```bash
+python scripts/check_local_data.py          # what is present; what supplies the rest
 python scripts/render_panels.py --list
 python scripts/render_panels.py --group main
 ```
 
-For the recompute tier, `--tier full` instead, and see the repo README for the two conda
-environments involved.
+Installing the code is its own job — two conda environments, because the folding stack and the
+ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
 ## Contents
 
@@ -60,6 +79,9 @@ environments involved.
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
 | `aux.tar.zst` | 0.1 GB | 30,117 | Pfam/SCOPe/ECOD labels, per-site rates, split lists |
+| `peint_checkpoints.tar.zst` | 6.9 GB | 5 | the PEINT / VEP model checkpoints |
+| `r1_af2.tar.zst` | 52 GB | 481,316 | raw rev1 AF2Rank structures (unpacks into `local_data/r1/`) |
+| `r1_omegafold.tar.zst` | 46 GB | 607,696 | raw rev1 OmegaFold structures (unpacks into `local_data/r1/`) |
 
 ```
 r1/  mafft_add/     realigned real + PEINT leaves (shared column frame)
@@ -70,21 +92,29 @@ r2/  mafft_add/, 3di/, af2/, omegafold/
      simulations/historian_progressive/  ESM-C Historian, refine and norefine
 aux  annotations/   derived Pfam domain + family labels
      splits/        the 14,498 train / 553 held-out family lists
-     output_site_rates_dir/   4-category per-site rates
+     peint/local_data/output_site_rates_dir/   4-category per-site rates (beside the held-out transitions)
 ```
 
 Each archive unpacks relative to `local_data/`, so `tar -xf X.tar.zst -C local_data/` is
 the whole instruction. `fetch_local_data.py` does this for you, and verifies every file
 against `CHECKSUMS.sha256` before unpacking.
 
+**Two exceptions:** `r1_af2.tar.zst` and `r1_omegafold.tar.zst` were tarred from their source
+directories, so their members begin at `af2/` and `omegafold/` and they unpack into
+`local_data/r1/` instead. Each archive's `unpack_into` field in `MANIFEST.toml` records this,
+and `fetch_local_data.py` reads it; it only matters if you unpack by hand:
+
+```
+tar -xf r1_af2.tar.zst -C local_data/r1/
+```
+
 `MANIFEST.toml` is the machine-readable inventory: one entry per role, with its path, the
 archive that carries it, a probe file, measured sizes, and the panels that need it. Roles
 marked `in_repo` ship with the code instead and are deliberately absent here.
 
 Bulk roles are tarred rather than stored as loose files on purpose: several hold tens of
-thousands of small per-family text files, which would exceed the Hub's 10,000-entries-per-folder
-limit and turn a download into thousands of requests. `figure_data/` stays loose so it can
-be browsed here.
+thousands of small per-family text files. A Zenodo record is also a flat list of files with a
+100-file limit, so a directory cannot be deposited as such: everything is an archive.
 
 ## What is deliberately **not** here
 
@@ -95,11 +125,15 @@ These are third-party or too large to redistribute; the code fetches them:
 - **Pfam-A HMMs, ECOD, CATH, SCOPe** — fetched on demand by `paper.generalization`. The
   *derived* labels are in `aux.tar.zst`, so the generalization panels work offline.
 - **AlphaFold weights, TM-align, ProstT5, ProteinGym** — see the repo's `scripts/fetch_*.sh`.
-- **Model checkpoints** — <FILL: where PEINT checkpoints live, if released>.
-- **Raw AF2Rank/OmegaFold structure predictions for revision 1** — `r1/af2` (481,316 files)
-  and `r1/omegafold` (607,696), **1.09 million files and ~100 GB**. Only the two per-family
-  pLDDT summaries they produce are included, and those are the only thing any panel reads
-  out of them. Both are declared in `MANIFEST.toml` as `tier = "on_request"`.
+- **The held-out transition trees and the `peint` evaluation cache** — declared in
+  `MANIFEST.toml` as `tier = "on_request"`. The cache is keyed on absolute paths, so a copy is
+  only valid where it was built; see the repo's `REPRODUCING.md`.
+
+Model checkpoints and the raw revision-1 structure trees **are** included — see the archive
+table above. No panel reads the structure trees (the two per-family pLDDT summaries they
+produce are what the figures consume, and those live in `r1.tar.zst`); they are deposited so
+the structures behind those summaries can be inspected and cited. Skipping both saves 11 GB of
+download and 99 GB on disk, and leaves every figure reproducible.
 
 ## Reproducibility, honestly
 

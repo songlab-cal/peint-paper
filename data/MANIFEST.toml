@@ -18,7 +18,7 @@
 # 30,104 files averaging 1 KB, so it is 33 MB of content in 78 MB of blocks.
 #
 # Tiers:
-#   figure_data  every table needed to re-render all panels; loose files on the Hub
+#   figure_data  every table needed to re-render all panels; one small archive
 #   full         the inputs behind those tables, so metrics recompute rather than replot
 #   on_request   real data, deliberately NOT transferred or deposited (see each note)
 
@@ -35,6 +35,11 @@ peint_repo = "/scratch/users/akoehl/peint"
 #  Archives. Each unpacks relative to local_data/, so `tar -xf X.tar.zst -C local_data/`
 #  is the whole instruction.
 # =====================================================================================
+
+[[archive]]
+name = "figure_data"
+file = "figure_data.tar.zst"
+note = "per-panel tables. Tarred like everything else: a Zenodo record is a flat list of files, so a directory cannot be deposited."
 
 [[archive]]
 name = "r1"
@@ -56,18 +61,26 @@ name = "aux"
 file = "aux.tar.zst"
 note = "annotation labels, per-site rates, family split lists"
 
-# The two rev1 structure trees. Declared so they can be transferred or deposited on demand
-# without inventing names for them at the time; they stay out of every tier that ships until
-# their roles' `tier` is changed from on_request to full.
+# The two rev1 structure trees. These SHIP -- but unlike every other archive they are not built
+# by build_archives.sh. stage_shared_data.sh --as-archive already streamed each one into the
+# staged tree as a finished .tar.zst (re-tarring ~100 GB apiece to change nothing would be
+# absurd), so they are marked `prebuilt` and simply linked into the upload directory.
+#
+# `unpack_into` is the price of that: --as-archive tarred each role from its SOURCE directory,
+# so members are prefixed `af2/` and `omegafold/` rather than `r1/af2/` and `r1/omegafold/`.
+# They therefore unpack into local_data/r1/, not local_data/. Every consumer reads this field,
+# so the one-line unpack instruction still holds -- it just has a different -C for these two.
 [[archive]]
 name = "r1_af2"
 file = "r1_af2.tar.zst"
-note = "optional: raw rev1 AF2Rank output, 481,316 files. Only af2rank_comparisons.csv is needed by any panel."
+prebuilt = true
+unpack_into = "r1"
+note = "raw rev1 AF2Rank output, 481,316 files. Prebuilt; unpacks into local_data/r1/. Only af2rank_comparisons.csv is needed by any panel."
 
 [[archive]]
 name = "peint_checkpoints"
 file = "peint_checkpoints.tar.zst"
-note = "optional: the four model checkpoints. Four big files -- plain rsync, not --as-archive."
+note = "the four model checkpoints; ships in the full tier. Four big files -- plain rsync, not --as-archive."
 
 [[archive]]
 name = "peint_transitions_aligned"
@@ -87,7 +100,9 @@ note = "optional: the 192-leaf transition scale test. 30,104 files -- use --as-a
 [[archive]]
 name = "r1_omegafold"
 file = "r1_omegafold.tar.zst"
-note = "optional: raw rev1 OmegaFold structures, 607,696 files. Only omegafold_plddt.csv is needed by any panel."
+prebuilt = true
+unpack_into = "r1"
+note = "raw rev1 OmegaFold structures, 607,696 files. Prebuilt; unpacks into local_data/r1/. Only omegafold_plddt.csv is needed by any panel."
 
 
 # =====================================================================================
@@ -98,6 +113,7 @@ note = "optional: raw rev1 OmegaFold structures, 607,696 files. Only omegafold_p
 name = "figure_data"
 producer = "the panel scripts themselves (each writes its own table next to its figure)"
 path = "figure_data"
+archive = "figure_data"
 source = "{repo_root}/local_data/figure_data"
 tier = "figure_data"
 probe = "figure3_conservation_jsd.csv"
@@ -105,7 +121,7 @@ blocks_mb = 29
 apparent_mb = 40
 files = 25
 panels = ["all"]
-note = "Per-panel tables. Shipped loose rather than tarred so they can be browsed on the Hub."
+note = "Per-panel tables. The whole replot tier, ~5 MB packed."
 
 [[role]]
 name = "vep"
@@ -361,8 +377,8 @@ different benchmarks expect. Tiny, and nothing reproduces without it."""
 [[role]]
 name = "site_rates"
 producer = "cherryml's treewise train/test split (train_site_rates_4cat_dir)"
-path = "output_site_rates_dir"
-source = "{repo_root}/local_data/output_site_rates_dir"
+path = "peint/local_data/output_site_rates_dir"
+source = "{repo_root}/local_data/peint/local_data/output_site_rates_dir"
 tier = "full"
 archive = "aux"
 probe = "1a2t_1_A.txt"
@@ -371,8 +387,13 @@ apparent_mb = 33
 files = 30104
 panels = ["figure2_simulation_generate"]
 note = """4-category per-site rates for the LG arm of the Figure 2 simulation. 30,104 flat
-files -- over the Hub's hard limit of 10,000 entries per folder, which is the specific
-reason the bulk roles are tarred rather than uploaded loose."""
+files, which is one reason every role is tarred rather than deposited as loose files.
+
+Lives beside the held-out transitions it is evaluated against, in
+peint/local_data/ next to aligned/ and unaligned/, which is what the LG arm needs it for.
+Grouping them keeps every peint-derived input in one subtree instead of scattering one
+30k-file directory across the deposit root. Note the source is this repo's local_data, not the
+peint checkout's -- unlike its two neighbours, which mirror {peint_repo}/local_data."""
 
 
 # =====================================================================================
@@ -385,7 +406,7 @@ name = "r1_af2"
 producer = "benchmarks/generate_all_results.py --out_path <r1> --use_af2 (AF2Rank via ColabDesign, one directory per family)"
 path = "r1/af2"
 source = "{data_root}/local_data/results_revision1/af2"
-tier = "on_request"
+tier = "full"
 archive = "r1_af2"
 probe = "."
 blocks_mb = 12775
@@ -394,14 +415,14 @@ files = 481316
 panels = []
 note = """Raw rev1 AF2Rank output. Needed only to regenerate af2rank_comparisons.csv, which
 is shipped. Excluded for file count as much as size: with this and r1_omegafold the deposit
-would be ~1.28 M files against the Hub's ~100 k recommendation."""
+would be ~1.28 M files against Zenodo's 100-file-per-record limit."""
 
 [[role]]
 name = "r1_omegafold"
 producer = "benchmarks/generate_all_results.py --out_path <r1> --include_plddt (OmegaFold, one directory per family)"
 path = "r1/omegafold"
 source = "{data_root}/local_data/results_revision1/omegafold"
-tier = "on_request"
+tier = "full"
 archive = "r1_omegafold"
 probe = "."
 blocks_mb = 12433
@@ -597,16 +618,32 @@ producer = "PEINT training runs"
 path = "peint/model_checkpoints"
 source = "{peint_repo}/model_checkpoints"
 exclude = ["*.full.bak", "esmc-biohub"]
-tier = "on_request"
+tier = "full"
 archive = "peint_checkpoints"
 probe = "peint.ckpt"
-blocks_mb = 3356
-apparent_mb = 3356
-files = 4
+blocks_mb = 6897
+apparent_mb = 6898
+files = 5
 panels = ["figure2_likelihood_eval", "figure2_simulation_generate", "vep_params", "vep_by_base_lm"]
-note = """The four canonical checkpoints: peint.ckpt and vep.ckpt (ESM2 backbones), plus
-peint_esmc.ckpt and vep_esmc.ckpt (Biohub ESM-C). Copied in as-is, optimizer state and all --
-the loader detects which backbone a checkpoint carries and pulls ESM2 from pretrained when the
-encoder weights are absent, so there is nothing to strip and nothing to get wrong.
+note = """Five checkpoints. The four canonical ones: peint.ckpt and vep.ckpt (ESM2 backbones),
+plus peint_esmc.ckpt and vep_esmc.ckpt (Biohub ESM-C). Copied in as-is, optimizer state and all
+-- the loader detects which backbone a checkpoint carries and pulls ESM2 from pretrained when
+the encoder weights are absent, so there is nothing to strip and nothing to get wrong.
+
+The fifth is vep_650.ckpt (3.5 GB), the ESM2-650M VEP model behind Figure 5's 650M arm:
+embed_dim 1280, 2+2 layers, 20 heads, epoch 12 / step 10000 -- i.e. the checkpoint named by the
+run "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0" in
+figures/figure5_vep.py. No panel loads it directly (the VEP panels read that run's scored CSVs
+from local_data/vep/), so it ships as provenance for a published number rather than as an input.
+Unlike its siblings it is a FULL checkpoint -- frozen ESM2-650M encoder weights and optimizer
+state included -- which is why one file is half this role. Stripping it to PEINT-only the way
+peint.ckpt was would cut the role by roughly 3 GB, if that is ever wanted.
 Excluded: the *.full.bak originals, and esmc-biohub/ (4.5 GB of alternate epochs and scoring
-runs kept for provenance)."""
+runs kept for provenance).
+
+Ships in the full tier, so the deposit is self-sufficient for every step that needs a model:
+unpacked they land at local_data/peint/model_checkpoints/, which is exactly where
+paper_config._checkpoint() looks after the peint checkout. That means a downloader who never
+clones the model repo still gets figure2_simulation_generate, figure2_likelihood_eval and both
+VEP panels. Anyone with the peint repo checked out keeps using its copies -- the repo wins the
+lookup -- so this archive is redundant for producers and essential for everyone else."""

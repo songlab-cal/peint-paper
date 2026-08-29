@@ -4,8 +4,8 @@ Three questions, answered separately, because conflating them is how reproducibi
 claims become untrue:
 
 1. **Can you redraw the published panels?** Yes, all of them, from ~40 MB.
-2. **Can you recompute the numbers behind them?** Most of them, from ~46 GB.
-3. **Can you regenerate that 46 GB from raw inputs?** Partly, and the parts you cannot
+2. **Can you recompute the numbers behind them?** Most of them, from ~53 GB.
+3. **Can you regenerate that 53 GB from raw inputs?** Partly, and the parts you cannot
    are named below rather than glossed.
 
 Everything here is driven by `data/MANIFEST.toml`. If a command and this document
@@ -39,12 +39,19 @@ binding rather than best-effort — see the README. Model checkpoints are includ
 at `local_data/peint/model_checkpoints/`, which is where `paper_config` looks when the peint
 repo does not have them.
 
-## 2. Recompute the metrics — the archives, ~14 GB packed / ~46 GB unpacked
+## 2. Recompute the metrics — the archives, ~22 GB packed / ~151 GB unpacked
+
+(~11 GB / ~53 GB if you skip the two rev1 structure trees, which no panel reads.)
 
 ```bash
-scripts/fetch_local_data.py --tier full
-scripts/render_panels.py
+scripts/fetch_local_data.py --tier full     # or the curl+tar loop in installation.md
+scripts/render_panels.py                    # for a Zenodo record, which speaks no Hub
 ```
+
+`installation.md` has the per-archive breakdown and the Zenodo recipe. Note that the model
+checkpoints are more than half the packed download (~6.2 of ~11 GB) because weights compress at
+1.08x while the sequence trees compress 8-18x — if you do not need to run a model, skip that one
+archive and everything except the simulating panels still recomputes.
 
 or, on a machine that already holds the source trees:
 
@@ -97,14 +104,17 @@ role's `producer` field — including the checkpoint path and the shard list.
 
 ### Not regenerable from this deposit
 
-- **PEINT checkpoints** are not redistributed here, so any step that simulates needs them.
+- **PEINT checkpoints** now ship in the `full` tier (`peint_checkpoints`, 3.3 GB, four
+  files), so a step that simulates or scores is covered by the deposit alone. What is still
+  not regenerable is the training that produced them.
 - **Ground-truth structures and a3m alignments** come from the trRosetta training set
   (~20 GB, third party). Only steps that fold or thread against experimental structures
   need them; every panel reads shipped output instead.
-- **The rev1 structure trees** (`r1/af2`, `r1/omegafold`) are 1,089,012 files and ~100 GB.
-  They are `tier = "on_request"`: available, not deposited by default. No panel reads them
-  — the two summary CSVs they produce, 750 KB combined, are shipped and are what the pLDDT
-  ECDFs actually consume.
+- **The rev1 structure trees** (`r1/af2`, `r1/omegafold`) are 1,089,012 files and ~99 GB.
+  They now **ship**, as `r1_af2.tar.zst` and `r1_omegafold.tar.zst` (5.6 and 5.3 GB packed),
+  and unpack into `local_data/r1/`. No panel reads them — the two summary CSVs they produce,
+  750 KB combined, are what the pLDDT ECDFs actually consume — so they are there for
+  inspection and citation, and skipping both leaves every figure reproducible.
 - **The Figure 2 likelihood panel** needs the model repo's `_cache_peint` and a GPU. That
   cache has the same absolute-path keying problem as above, so it is valid only in place.
 - **The ESM-MCMC spectrum** summarises a multi-day GPU study; its driver ships for
@@ -135,9 +145,18 @@ sentence is a field in the manifest.
 ## Two environments
 
 The benchmarks span stacks that do not pin together: JAX (AF2Rank), PyTorch (PEINT,
-OmegaFold, ESM-C), and the older `transformers` ProstT5 was pinned against. See the README;
+OmegaFold, ESM-C), and the older `transformers` ProstT5 was pinned against.
 `render_panels.py` subprocesses each panel with the right interpreter, so you only need to
 set `PEINT_PAPER_PY_ESMC` and `PEINT_PAPER_PY_PROTEVO`.
+
+The simulations need the ESM-C stack and the folding needs the JAX stack, and no environment
+has both — which works because what crosses the boundary is **sequences in text files, not
+models**. The folding benchmarks never construct a PEINT model; they read the simulated
+sequences off disk. The one exception is `figure2_simulation`, which is the same script run
+twice and joined by protevo's computation cache: the model load sits *inside* the cached
+function, so on a cache hit it is never reached. `installation.md` has the full account,
+including the one failure mode worth recognising — a cache miss in the folding pass surfaces
+as `model type 'esmc' not recognized`, which means *miss*, not *broken install*.
 
 ## Sharing the data on a shared cluster account
 
