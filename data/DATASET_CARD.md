@@ -2,11 +2,18 @@
 Template for the data deposit that accompanies the PEINT paper. `build_archives.sh` copies
 this file into the upload directory as README.md, so edit it HERE, not there.
 
-Fill in every <FILL:...> before publishing, and mint the DOI LAST — a DOI locks the record,
-after which renaming, deleting, or changing visibility all require a support request.
+Fill in every <FILL:...> BEFORE publishing. On Zenodo, published files cannot be changed at
+all -- adding, replacing or deleting one requires a support request -- so nothing that lands
+in the upload directory gets a second chance.
 
-Zenodo takes its own metadata (title, authors, license, DOI) from the deposit form, not from
-this file. This is the landing-page prose only.
+Use "Reserve DOI" in the deposit form to get the DOI before you publish, rather than after.
+That removes the only circular dependency here: the reserved DOI is 10.5281/zenodo.<record
+id>, so it gives you the record id too, and the BibTeX below can be filled in before upload.
+
+Metadata is different: title, authors, license, description can all be edited on a published
+record at any time, and editing them does not affect the DOI. So put anything you might want
+to revise into the deposit form's description field -- which is what actually renders on the
+landing page -- rather than into this file.
 -->
 
 # PEINT paper — figure data and simulation results
@@ -41,7 +48,8 @@ cd peint-paper
 Then fetch the data. From this record, each archive unpacks relative to `local_data/`:
 
 ```bash
-ZENODO=<FILL: https://zenodo.org/records/NNNNNNN/files>
+RECORD=<the record id in this page's URL>        # zenodo.org/records/<RECORD>
+ZENODO=https://zenodo.org/records/$RECORD/files
 mkdir -p local_data
 curl -L -O "$ZENODO/figure_data.tar.zst?download=1"
 tar --use-compress-program=unzstd -xf figure_data.tar.zst -C local_data/
@@ -52,11 +60,12 @@ structure archives take `-C local_data/r1/` instead — see the note under the f
 Verify first if you like: `curl -L -O "$ZENODO/CHECKSUMS.sha256?download=1"` then
 `sha256sum -c CHECKSUMS.sha256 --ignore-missing`.
 
-The repo automates all of that — download, checksum, unpack — given the record id:
+The repo automates all of that — download, checksum, unpack — given the same record id:
 
 ```bash
-python scripts/fetch_local_data.py --tier figure_data --record <FILL: record id>
-python scripts/fetch_local_data.py --tier full        --record <FILL: record id>
+export PEINT_PAPER_ZENODO_RECORD=$RECORD
+python scripts/fetch_local_data.py --tier figure_data
+python scripts/fetch_local_data.py --tier full
 ```
 
 Then:
