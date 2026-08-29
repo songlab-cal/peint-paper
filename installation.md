@@ -151,9 +151,13 @@ not a drop-in for the held-out likelihood panel, which reads its own transition 
 
 ### trRosetta training set (optional)
 
-Not in the deposit — it is third-party and ~30 GB. Needed only by the panels that compare
-against experimental structures or real alignments: ESM-IF self-consistency, AF2Rank, and the
+Not in the deposit as it is provided by third-party and ~30 GB. 
+Needed only by the panels that compare against experimental structures 
+or real alignments: ESM-IF self-consistency, AF2Rank, and the
 conservation JSD panels.
+
+**Also worth using if one wants to use this data to train a PEINT model, 
+using the dataset machinery in the peint repository**
 
 ```bash
 curl -O https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz
