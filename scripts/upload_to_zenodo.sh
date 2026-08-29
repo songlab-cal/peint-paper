@@ -79,7 +79,10 @@ for f in "$DIR"/*; do
     printf '  would    %-38s %8s\n' "$name" "$human"; continue
   fi
   printf '  upload   %-38s %8s\n' "$name" "$human"
-  curl -f --progress-bar "${AUTH[@]}" --upload-file "$f" "$BUCKET/$name" -o /dev/null || {
+  # Zenodo returns transient 502s on large uploads; retry the file rather than the run.
+  # No --continue-at: the bucket API does not support ranged PUT, so a retry restarts the file.
+  curl -f --progress-bar --retry 5 --retry-delay 15 --retry-all-errors \
+       "${AUTH[@]}" --upload-file "$f" "$BUCKET/$name" -o /dev/null || {
     echo "  FAILED   $name -- re-run to resume" >&2; rc=1; }
 done
 
