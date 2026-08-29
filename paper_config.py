@@ -245,7 +245,7 @@ HISTORIAN_PATH = Path(os.environ.get(
 # Download and extract it yourself, then point the two env vars at its pdb/ and a3m/
 # subdirectories. Deliberately not fetched by any script here given the size.
 GROUND_TRUTH_STRUCTURE_DIR = _first_existing(
-    "/scratch/users/matthew_liu/input_data/pdb",
+    DATA_ROOT / "input_data" / "pdb",
     LOCAL_DATA / "pdb",
     env="PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR",
 )

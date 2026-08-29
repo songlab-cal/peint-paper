@@ -133,6 +133,22 @@ The two structure archives are the exception — they take `-C local_data/r1/`.
 
 `PEINT_PAPER_LOCAL_DATA=/big/disk/...` puts the tree elsewhere.
 
+### trRosetta training set (optional)
+
+Not in the deposit — it is third-party and ~30 GB. Needed only by the panels that compare
+against experimental structures or real alignments: ESM-IF self-consistency, AF2Rank, and the
+conservation JSD panels.
+
+```bash
+curl -O https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz
+tar -xzf training_set.tar.gz -C <root>/input_data/    # gives a3m/, npy/, pdb/
+export PEINT_PAPER_DATA_ROOT=<root>
+```
+
+`paper_config` then finds `input_data/a3m` and `input_data/pdb` on its own; only those two are
+read. Point `PEINT_PAPER_INPUT_A3M_DIR` / `PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR` at them
+directly if you keep them somewhere else.
+
 ## Reproducing figures
 
 ```bash
@@ -201,6 +217,7 @@ recognized` — that means cache miss, not a broken install.
 | IQ-TREE 2 / AliSim | classical simulation | `peint`'s `iqtree2` submodule |
 | TM-align + AF2 weights | AF2Rank | `scripts/fetch_af2rank_assets.sh` |
 | ProstT5 weights | 3Di states | `scripts/fetch_3di_weights.sh` |
+| trRosetta training set | ESM-IF, AF2Rank, conservation JSD | see [above](#trrosetta-training-set-optional) |
 | Historian | ancestral reconstruction (regeneration only) | `scripts/build_historian.sh` |
 | OmegaFold / ESM-IF / ESM-C weights | — | downloaded on first use |
 
