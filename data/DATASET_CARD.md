@@ -144,23 +144,39 @@ produce are what the figures consume, and those live in `r1.tar.zst`); they are 
 the structures behind those summaries can be inspected and cited. Skipping both saves 11 GB of
 download and 99 GB on disk, and leaves every figure reproducible.
 
-## Reproducibility, honestly
+## What recomputes, and what needs a full rerun
 
-Not every panel can be recomputed from this deposit, and it is better to say which:
+**Every panel re-renders** from `figure_data.tar.zst` alone — no models, no GPU, nothing else
+downloaded.
 
-- **All panels re-render** from `figure_data/`.
-- **Most recompute** from the archives: the conservation JSD panels, the 3Di panel, the
-  pLDDT ECDFs, the generalization panels, and two of the three arms of the indel panels.
-- **These do not**, and the reasons are structural rather than fixable:
-  - The Figure 2 per-site likelihood panel needs a separate transition dataset and
-    evaluation cache from the model repo, plus a GPU.
-  - The parent-child-pair panels need a cold AliSim re-simulation (iqtree2 + MAFFT).
-  - The ESM-MCMC spectrum figure summarises a multi-day GPU study; its driver script is in
-    the repo for provenance.
-  - The variant-effect panels rest on ProteinGym zero-shot scores for ~13 external models
-    that we do not redistribute; only the resulting per-assay Spearman tables are here.
-  - The ESM-C arm of the indel panels is shipped as Historian event tables — regenerating
-    it is a 64-process MAFFT + Historian job.
+**Most panels also recompute** their statistic from the archives here rather than replotting a
+stored number: the conservation JSD panels, the 3Di panel, both pLDDT ECDFs, the generalization
+panels, the BLAST identity panel, the ESM-IF panels, and two of the three indel arms. Each reads
+shipped simulation output or shipped structures and derives its values fresh.
+
+**The remaining figures need a full rerun**, listed here so you can see exactly which. The model
+checkpoints are included in this deposit precisely so that is possible: what these cost is
+compute, not missing data.
+
+| figure | what a full rerun takes |
+|---|---|
+| Figure 2 simulation (mutations, pLDDT) | a checkpoint + GPU to regenerate the sequences, then OmegaFold over ~1,200 structures (~1.5 h) |
+| ESM-MCMC spectrum | a checkpoint + GPU. The original was a multi-day study; its driver ships in the code repo |
+| Parent-child-pair mutation counts | no model needed — a cold AliSim re-simulation over ~500 families × 3 models, with `iqtree2` and MAFFT on `PATH` (~30–45 min warm, hours cold) |
+| ESM-C indel arm | no model needed — a 64-process MAFFT + Historian job over the shipped sequences |
+
+Two figures depend on things that are genuinely not in this record, which is worth saying
+outright rather than leaving you to discover it:
+
+- **Figure 2 per-site likelihood** also needs the held-out transition datasets and the model
+  repo's evaluation cache. Both are declared in `MANIFEST.toml` as `tier = "on_request"` — the
+  cache is keyed on a hash of absolute input paths, so a copy of it is only ever valid at the
+  path where it was built, and shipping it would be shipping something inert. Contact us for
+  the transition datasets.
+- **The variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ~13
+  external models. Those are third-party and not ours to redistribute; the per-assay Spearman
+  tables derived from them are here, and the public ProteinGym release they come from is the
+  original source.
 
 ## Citation
 
