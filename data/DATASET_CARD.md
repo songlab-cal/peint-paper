@@ -1,21 +1,3 @@
-<!--
-Template for the data deposit that accompanies the PEINT paper. `build_archives.sh` copies
-this file into the upload directory as README.md, so edit it HERE, not there.
-
-Fill in every <FILL:...> BEFORE publishing. On Zenodo, published files cannot be changed at
-all -- adding, replacing or deleting one requires a support request -- so nothing that lands
-in the upload directory gets a second chance.
-
-Use "Reserve DOI" in the deposit form to get the DOI before you publish, rather than after.
-That removes the only circular dependency here: the reserved DOI is 10.5281/zenodo.<record
-id>, so it gives you the record id too, and the BibTeX below can be filled in before upload.
-
-Metadata is different: title, authors, license, description can all be edited on a published
-record at any time, and editing them does not affect the DOI. So put anything you might want
-to revise into the deposit form's description field -- which is what actually renders on the
-landing page -- rather than into this file.
--->
-
 # PEINT paper — figure data and simulation results
 
 Everything needed to reproduce the figures in *Deep models of protein evolution in time

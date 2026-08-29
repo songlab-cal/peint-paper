@@ -105,102 +105,15 @@ panels that need it. Four scripts read it, so the list cannot drift:
 scripts/check_local_data.py                      # what is present; what supplies the rest
 scripts/check_local_data.py --panels pcp_panels  # scoped to the figures you want
 scripts/link_local_data.sh --apply               # symlink the roles, on a machine that has them
-scripts/stage_shared_data.sh --plan              # rsync them to another account (see below)
+scripts/stage_shared_data.sh --plan              # rsync them to another account
 scripts/build_archives.sh --root <staged> --apply  # tar them for the deposit
 scripts/fetch_local_data.py --tier full          # download and unpack them again
 ```
 
-### Copying the data to another account
-
-`stage_shared_data.sh` runs in either direction, because which one is available depends on
-which account has a password. Both exist for the same reason: the source tree is mode 700 so
-the receiving account cannot read it directly, and the shared directory is owned by that
-account so the sending one cannot write it directly. rsync over ssh is what puts a reader on
-one side and a writer on the other — and the writer's identity decides whose quota the bytes
-land on.
-
-```bash
-# PULL — run as the receiving account; the source account is the one you can log into.
-scripts/stage_shared_data.sh --src-host akoehl@beren \
-    --dest /scratch/users/spa-evolution-yss/peint_paper_data --apply
-
-# PUSH — run as yourself, if the receiving account accepts your key.
-scripts/stage_shared_data.sh --apply
-```
-
-In pull mode the plan is generated on the source side and streamed back, so the receiving
-account needs nothing but this one script — no checkout, no conda, no python. Point
-`--src-python` at an interpreter over there that can read TOML; an ssh login shell will not
-have your conda environment on `PATH`.
-
-Dry-run is the default in both directions. `--plan` shows the role table without touching
-anything, `--verify` confirms the destination is complete, and `--only <role>` does one at a
-time. Nothing is ever written to the source side.
-
-The ssh hop switches *user*, not machine — `/scratch` is one NFS mount, so the source data is
-the same bytes from any node. Both scripts default to whichever host you are on, and
-`--src-host` accepts a bare username. Note that ssh between accounts may be gated by
-`pam_slurm_adopt` on compute nodes, which refuses unless you hold a job there.
-
-For roles too file-heavy to rsync sensibly — the two rev1 structure trees are 481,316 and
-607,696 files — `--as-archive` streams the role as a single `tar.zst` straight to the
-destination, writing nothing intermediate on either side:
-
-```bash
-scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --apply
-scripts/stage_shared_data.sh --src-host akoehl --only r1_af2 --as-archive --verify
-```
-
-`--only` reaches `on_request` roles by name, so asking for one is deliberate. Verification
-tests the zstd frame checksum and compares the archive's member count against the source's
-file count. The archive is named after the role's `archive` entry in the manifest, so
-deciding later to publish one is a `tier` change there rather than a rename.
-
-Sizes are measured, not estimated. Note that `blocks_mb` (what it costs on a compressing
-filesystem) can *exceed* `apparent_mb` for roles made of many tiny files — `site_rates` is
-30,104 files averaging 1 KB.
-
-Only `derived/` is written to; every other role is an input. `link_local_data.sh` and
-`stage_shared_data.sh` are both dry-run by default, only ever read from the source side, and
-refuse to clobber anything already in place.
-
-### Deliberately excluded
-
-Two subtrees of revision 1 — `r1/af2` (481,316 files) and `r1/omegafold` (607,696) — hold
-**1.09 million files and ~99 GB** between them, and no panel reads either: the ECDFs read
-`af2rank_comparisons.csv` and `omegafold_plddt.csv`, 750 KB combined, which ship inside
-`r1.tar.zst`. They are nonetheless **deposited**, as `r1_af2.tar.zst` and
-`r1_omegafold.tar.zst` (5.6 and 5.3 GB packed), so the structures behind those two summaries
-are citable. Both are marked `prebuilt` in the manifest — already tarred by
-`stage_shared_data.sh --as-archive`, linked rather than rebuilt by `build_archives.sh` — and
-both unpack into `local_data/r1/` rather than `local_data/`, which `fetch_local_data.py`
-handles via their `unpack_into` field.
-
-The held-out transition trees ship too (`peint_transitions_aligned`,
-`peint_transitions_unaligned`, ~26 GB unpacked), so `figure2_likelihood_eval` is rerunnable
-from the deposit given a checkpoint and a GPU.
-
-Still absent by design (`tier = "on_request"`): the ground-truth PDBs, the a3m alignments,
-`Pfam-A.hmm`, and the `peint` repo's evaluation cache — the last because it is keyed on
-absolute paths and would be inert anywhere else. See each role's note for why.
-
-### Not redistributed
-
-Fetched separately, with scripts where possible: the trRosetta training set (a3m alignments
-and ground-truth PDBs, ~20 GB — `https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`),
-AlphaFold weights and TM-align (`scripts/fetch_af2rank_assets.sh`), ProstT5
-(`scripts/fetch_3di_weights.sh`), the lm-design assets (`scripts/fetch_lmdesign_assets.sh`),
-Pfam-A/ECOD/CATH/SCOPe (fetched on demand by `paper.generalization`), and ProteinGym.
-
-The **model checkpoints do ship**: `peint_checkpoints` is a `full`-tier role, so
-`fetch_local_data.py --tier full` unpacks the four canonical checkpoints to
-`local_data/peint/model_checkpoints/` and no clone of the model repo is needed to run a panel
-that simulates or scores.
-
 ## Reproducing the figures
 
-`REPRODUCING.md` is the full account: what redraws from ~40 MB, what recomputes from ~46 GB,
-what cannot be regenerated from the deposit and why, and how each shipped intermediate traces
+`REPRODUCING.md` is the full account: what redraws from ~19 MB, what recomputes from ~11 GB,
+which figures need a full rerun from a checkpoint, and how each shipped intermediate traces
 back to the script that produced it.
 
 ## Rendering the figures
