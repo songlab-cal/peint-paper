@@ -21,14 +21,14 @@ from protevo.utils import read_msa
 from protevo.datasets._datasets import find_optimal_edge_split, split_tree_on_edge
 from paper.alignment import run_mafft
 from paper.historian import run_historian
+import paper_config as cfg
 
-SIM = ("/scratch/users/akoehl/old/protein-evolution/local_data/simulation/"
-       "final_simulation_512_leaves/ratio_0-1_nucleus_1-0")
+SIM = str(cfg.SIM_ROOT)
 TREE_DIR = f"{SIM}/trees"            # cherryml node-list trees (read_tree)
 MSA_DIR = f"{SIM}/empirical_msas"    # real leaves
 ROOT_DIR = f"{SIM}/root_sequences"
-OUT = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1/simulations/real_other_subtree"
-HISTORIAN = "/scratch/users/akoehl/peint-paper/historian/bin/historian"
+OUT = str(cfg.RESULTS_R1_DIR / "simulations" / "real_other_subtree")
+HISTORIAN = str(cfg.HISTORIAN_PATH)
 
 
 def prep(families, seq_out, tree_out):

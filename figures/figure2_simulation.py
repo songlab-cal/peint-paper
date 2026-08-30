@@ -8,18 +8,25 @@ A single starting sequence is evolved to a grid of evolutionary times, repeated
              so their counts are plain Hamming distances from the starting sequence.
 ``plddt``    OmegaFold pLDDT vs. time, against the starting sequence's pLDDT.
 
-GPU: the PEINT arm (``model.generate``) and all OmegaFold folding require CUDA. The
-classical WAG/LG arms are pure CPU, so ``--skip-peint --skip-structures`` produces the
-classical half of the mutations panel without a GPU.
+By default BOTH released PEINT backbones are simulated (ESM2 and ESM-C) alongside WAG and LG,
+so the panel shows PEINT as a family rather than one model. Override with ``--peint``.
 
-Also needs ``historian`` on PATH (for the PEINT arm) and ``omegafold`` on PATH.
+GPU: the PEINT arms (``model.generate``) and all OmegaFold folding require CUDA. The classical
+WAG/LG arms are pure CPU, so ``--skip-peint --skip-structures`` produces the classical half of
+the mutations panel without a GPU.
+
+Also needs Historian (``--historian-path``, defaults to the repo build) to split PEINT events
+into substitutions vs indels, and ``omegafold`` on PATH for the pLDDT panel.
 
 Run from the repo root::
 
+    python -m figures.figure2_simulation --skip-structures          # both PEINT arms + WAG/LG
     python -m figures.figure2_simulation --skip-peint --skip-structures
+    python -m figures.figure2_simulation --peint 'PEINT (ESM-C)=/path/to.ckpt' --skip-structures
 """
 
 import argparse
+import contextlib
 import hashlib
 import os
 import random
@@ -42,6 +49,7 @@ from protevo.simulation import load_model
 from protevo.simulation.classical import evolve_classical
 
 from paper.historian import analyze_star_topology
+from paper.model_style import model_colors
 from paper.structure_prediction import generate_omegafold_predictions
 import paper_config as cfg
 
@@ -50,6 +58,14 @@ HELD_OUT_CAS = ["5e2r_1_A", "1ekj_1_C"]
 NUM_TRAIN_FAMILIES = 14500
 
 ROOT_RECORD = "initial_sequence"
+
+# The PEINT arms to simulate, as display label -> checkpoint. Both backbones are shown so the
+# panel reads as "PEINT on either encoder" rather than one model; --peint overrides.
+def default_peint_arms():
+    return {
+        "PEINT (ESM2)": str(cfg.PEINT_CHECKPOINT),
+        "PEINT (ESM-C)": str(cfg.ESMC_SIM_CHECKPOINT),
+    }
 
 
 @protevo_caching.cached_computation(
@@ -84,14 +100,20 @@ def simulate_evolution_peint(
 
     all_outputs = {ROOT_RECORD: starting_sequence}
     for i in range(num_samples_per_time):
-        outputs = model.generate(
-            x=x_toks,
-            t=ts,
-            max_decode_steps=2 * len(starting_sequence),
-            device=device,
-            temperature=temperature,
-            p=p,
-        )
+        # bfloat16 autocast, matching protevo.simulation._simulate_on_tree: with Flash
+        # Attention the model is a PeintGenerator (cached decoder) and its kernels take only
+        # fp16/bf16, so generating in the ambient fp32 raises "FlashAttention only support
+        # fp16 and bf16 data type". Dropping to the Vanilla path instead would also throw
+        # away the decoder cache, so autocast here rather than passing use_flash=False.
+        with _generate_precision(device):
+            outputs = model.generate(
+                x=x_toks,
+                t=ts,
+                max_decode_steps=2 * len(starting_sequence),
+                device=device,
+                temperature=temperature,
+                p=p,
+            )
         all_outputs.update(
             {_record_id(family, i, t): output for t, output in zip(times, outputs)}
         )
@@ -147,6 +169,15 @@ def simulate_evolution_classical(
             )
 
     write_msa(all_outputs, os.path.join(output_sequences_dir, "result.txt"))
+
+
+def _generate_precision(device):
+    """bfloat16 autocast on CUDA, a no-op elsewhere (CPU falls back to the Vanilla fp32 path)."""
+    return (
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if str(device).startswith("cuda")
+        else contextlib.nullcontext()
+    )
 
 
 def _time_grid(max_time: float, delta_time: float) -> np.ndarray:
@@ -262,12 +293,13 @@ def _apply_paper_style() -> None:
     mpl.rcParams["pdf.fonttype"] = 42
 
 
-def _errorbar(ax, index, stats, color, label):
+def _errorbar(ax, index, stats, color, label, linestyle="-"):
     ax.errorbar(
         index,
         stats["mean"],
         yerr=stats["std"],
         fmt="o",
+        linestyle=linestyle,
         capsize=1,
         capthick=0.1,
         elinewidth=0.25,
@@ -279,24 +311,36 @@ def _errorbar(ax, index, stats, color, label):
 
 
 def plot_mutations(
-    peint_rates: Optional[pd.DataFrame],
+    peint_rates: Dict[str, pd.DataFrame],
     classical_rates: Dict[str, pd.DataFrame],
     output_dir: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(3, 2))
+    """Substitutions (solid) and indels (dashed) per site vs time.
+
+    ``peint_rates`` maps a PEINT arm's display label to its rate table, so more than one
+    backbone can be shown. Indels are the dashed twin of each arm's own color rather than a
+    separate hue, which keeps the legend readable once there are two PEINT arms.
+    """
+    fig, ax = plt.subplots(figsize=(3.4, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
-    if peint_rates is not None:
-        _errorbar(ax, peint_rates.index, peint_rates["substitution"], "green", "PEINT Substitutions")
-    for model, color in (("WAG", "blue"), ("LG", "orange")):
+    mc = model_colors()
+    for label, rates in (peint_rates or {}).items():
+        color = mc.get(label, "green")
+        _errorbar(ax, rates.index, rates["substitution"], color, f"{label} subs")
+    for model in ("WAG", "LG"):
         if model in classical_rates:
-            _errorbar(ax, classical_rates[model].index, classical_rates[model], color, model)
-    if peint_rates is not None:
-        _errorbar(ax, peint_rates.index, peint_rates["indel"], "lightblue", "PEINT Indels")
+            _errorbar(ax, classical_rates[model].index, classical_rates[model], mc[model], model)
+    for label, rates in (peint_rates or {}).items():
+        color = mc.get(label, "green")
+        _errorbar(ax, rates.index, rates["indel"], color, f"{label} indels", linestyle="--")
 
     ax.set_xlabel("Evolutionary Time", labelpad=0.1)
     ax.set_ylabel("Evolutionary Events / Site", labelpad=0.1)
-    ax.legend(frameon=False, handlelength=1, handletextpad=0.3, columnspacing=0.5, fontsize=7)
+    ax.set_ylim(bottom=0)   # counts per site; the default margin dipped below zero
+    # Outside the axes: with six series the in-axes legend covered the substitution curves.
+    ax.legend(frameon=False, handlelength=1, handletextpad=0.3, columnspacing=0.5,
+              fontsize=6.5, loc="upper left", bbox_to_anchor=(1.01, 1.0))
     sns.despine(ax=ax)
     ax.tick_params(width=0.5, length=2)
     for spine in ax.spines.values():
@@ -320,9 +364,9 @@ def plot_plddt(
     fig, ax = plt.subplots(figsize=(3, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
-    colors = {"PEINT": "green", "WAG": "blue", "LG": "orange"}
+    mc = model_colors()
     for model, stats in plddt_stats.items():
-        _errorbar(ax, stats.index, stats, colors[model], f"{model} pLDDT")
+        _errorbar(ax, stats.index, stats, mc.get(model, "green"), f"{model} pLDDT")
     ax.axhline(initial_plddt, color="red", linestyle="--", label="Initial pLDDT", linewidth=0.4)
 
     ax.set_yticks([0, 20, 40, 60, 80, 100])
@@ -349,16 +393,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--family", default=None, help="Family to simulate (default: the paper's).")
     parser.add_argument(
-        "--checkpoint",
+        "--peint",
+        action="append",
+        metavar="LABEL=PATH",
         default=None,
-        help="PEINT checkpoint. Defaults to cfg.PEINT_CHECKPOINT (the model shipped with peint); "
-             "point this at your own checkpoint to reproduce the figure with a different model.",
+        help="A PEINT arm to simulate, repeatable, e.g. --peint 'PEINT (ESM-C)=/path/to.ckpt'. "
+             "Defaults to both released backbones (see default_peint_arms).",
     )
     parser.add_argument("--num-repeats", type=int, default=10)
     parser.add_argument("--max-time", type=float, default=1.5)
     parser.add_argument("--delta-time", type=float, default=0.05)
     parser.add_argument("--random-seed", type=int, default=42)
-    parser.add_argument("--historian-path", default="historian")
+    parser.add_argument("--historian-path", default=str(cfg.HISTORIAN_PATH),
+                        help="Historian binary; needed only to split PEINT events into "
+                             "substitutions vs indels.")
     parser.add_argument("--skip-peint", action="store_true", help="Skip the PEINT arm (needs a GPU).")
     parser.add_argument(
         "--skip-structures", action="store_true", help="Skip OmegaFold + the pLDDT panel (needs a GPU)."
@@ -366,9 +414,11 @@ def main() -> None:
     parser.add_argument("--output-dir", default=str(cfg.FIGURES_DIR))
     args = parser.parse_args()
 
-    cherryml_caching.set_cache_dir("_cache_cherryml")
+    # Absolute, from config: these were relative, which tied the script to one working
+    # directory and silently missed the cache from anywhere else.
+    cherryml_caching.set_cache_dir(str(cfg.CHERRYML_CACHE_DIR))
     cherryml_caching.set_read_only(False)
-    protevo_caching.set_cache_dir("_cache_protevo")
+    protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
     protevo_caching.set_read_only(False)
 
     a3m_dir = str(cfg.require(cfg.INPUT_A3M_DIR))
@@ -399,15 +449,26 @@ def main() -> None:
         **sim_kwargs,
     )["output_sequences_dir"]
 
+    peint_arms = {}
     if not args.skip_peint:
-        checkpoint = args.checkpoint or str(cfg.require(cfg.PEINT_CHECKPOINT))
-        sequence_dirs["PEINT"] = simulate_evolution_peint(
-            model_checkpoint_path=checkpoint,
-            device="cuda:0" if torch.cuda.is_available() else "cpu",
-            temperature=1.0,
-            p=1.0,
-            **sim_kwargs,
-        )["output_sequences_dir"]
+        if args.peint:
+            for spec in args.peint:
+                if "=" not in spec:
+                    parser.error(f"--peint expects LABEL=PATH, got {spec!r}")
+                label, path = spec.split("=", 1)
+                peint_arms[label.strip()] = path.strip()
+        else:
+            peint_arms = default_peint_arms()
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        for label, checkpoint in peint_arms.items():
+            print(f"Simulating {label} from {checkpoint}")
+            sequence_dirs[label] = simulate_evolution_peint(
+                model_checkpoint_path=str(cfg.require(checkpoint)),
+                device=device,
+                temperature=1.0,
+                p=1.0,
+                **sim_kwargs,
+            )["output_sequences_dir"]
 
     sequences = {
         model: read_msa(os.path.join(d, "result.txt")) for model, d in sequence_dirs.items()
@@ -416,11 +477,10 @@ def main() -> None:
     classical_rates = {
         model: substitution_rates(sequences[model]) for model in ("WAG", "LG") if model in sequences
     }
-    peint_rates = (
-        peint_event_rates(sequences["PEINT"], args.historian_path)
-        if "PEINT" in sequences
-        else None
-    )
+    peint_rates = {
+        label: peint_event_rates(sequences[label], args.historian_path)
+        for label in peint_arms
+    }
 
     _apply_paper_style()
     plot_mutations(peint_rates, classical_rates, args.output_dir)
@@ -441,7 +501,8 @@ def main() -> None:
     }
 
     plddt_stats = {model: collect_plddt(d) for model, d in structure_dirs.items()}
-    reference = structure_dirs.get("PEINT") or next(iter(structure_dirs.values()))
+    reference = next((structure_dirs[k] for k in peint_arms if k in structure_dirs),
+                     next(iter(structure_dirs.values())))
     plot_plddt(plddt_stats, root_plddt(reference), args.output_dir)
     print(f"Wrote pLDDT panel to {args.output_dir}")
 

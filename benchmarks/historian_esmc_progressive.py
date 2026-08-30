@@ -33,18 +33,18 @@ from paper.historian import (
     remove_dummy_nodes_from_historian_output,
     get_all_evolutionary_counts_from_historian_output,
 )
+import paper_config as cfg
 
-SIM = ("/scratch/users/akoehl/old/protein-evolution/local_data/simulation/"
-       "final_simulation_512_leaves/ratio_0-1_nucleus_1-0")
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
-HISTORIAN = "/scratch/users/akoehl/peint-paper/historian/bin/historian"
+SIM = str(cfg.SIM_ROOT)
+R2 = str(cfg.RESULTS_R2_DIR)
+HISTORIAN = str(cfg.HISTORIAN_PATH)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--families_json",
-        default="/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json",
+        default=str(cfg.HELDOUT_FAMILIES_JSON),
     )
     ap.add_argument("--num_processes", type=int, default=64)
     ap.add_argument("--band", type=int, default=40)

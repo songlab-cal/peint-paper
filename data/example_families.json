@@ -1,0 +1,32 @@
+{
+  "_comment": "A reduced subset of the paper's family split (seed 42): 20 in-family and 5 held-out families. Enough to exercise every model arm end to end in minutes. The rate matrices fit on 20 families are not the published ones -- omit --families-path for the full 14,498 / 553 split.",
+  "in_family": [
+    "13gs_1_A",
+    "19hc_1_A",
+    "1a0b_1_A",
+    "1a0p_1_A",
+    "1a0t_1_A",
+    "1a12_1_A",
+    "1a17_1_A",
+    "1a27_1_A",
+    "1a2o_1_A",
+    "1a3a_1_A",
+    "1a40_1_A",
+    "1a41_1_A",
+    "1a45_1_A",
+    "1a4a_1_A",
+    "1a4m_1_A",
+    "1a4p_1_A",
+    "1a5k_1_B",
+    "1a5t_1_B",
+    "1a62_1_A",
+    "1a64_1_A"
+  ],
+  "held_out_family": [
+    "1a2t_1_A",
+    "1acf_1_A",
+    "1amx_1_A",
+    "1aq6_1_A",
+    "1bai_1_A"
+  ]
+}

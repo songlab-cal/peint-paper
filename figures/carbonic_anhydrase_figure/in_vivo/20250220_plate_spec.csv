@@ -1,0 +1,11 @@
+value_type,name,name,name,name,name,name,name,name,name,name,name,name
+column,1,2,3,4,5,6,7,8,9,10,11,12
+,,,,,,,,,,,,
+A,seq1738_sorted+ 0 ATC,seq2148_sorted+ 0 ATC,seq1496_unsorted+ 0 ATC,seq1904_sorted+ 0 ATC,seq1834_sorted+ 0 ATC,seq1513_unsorted+ 0 ATC,seq1729_sorted+ 0 ATC,seq376_unsorted+ 0 ATC,seq1420_unsorted+ 0 ATC,seq1789_sorted+ 0 ATC,seq1251_unsorted+ 0 ATC,seq1360_unsorted+ 0 ATC
+B,seq1670_sorted+ 0 ATC,seq771_unsorted+ 0 ATC,WT+ 0 ATC,seq1731_sorted+ 0 ATC,seq1287_unsorted+ 0 ATC,HCA+ 0 ATC,seq1944_sorted+ 0 ATC,seq1436_unsorted+ 0 ATC,C160A+ 0 ATC,seq1802_sorted+ 0 ATC,seq1363_unsorted+ 0 ATC,D152N+ 0 ATC
+C,seq1738_sorted+ 200 ATC,seq2148_sorted+ 200 ATC,seq1496_unsorted+ 200 ATC,seq1904_sorted+ 200 ATC,seq1834_sorted+ 200 ATC,seq1513_unsorted+ 200 ATC,seq1729_sorted+ 200 ATC,seq376_unsorted+ 200 ATC,seq1420_unsorted+ 200 ATC,seq1789_sorted+ 200 ATC,seq1251_unsorted+ 200 ATC,seq1360_unsorted+ 200 ATC
+D,seq1670_sorted+ 200 ATC,seq771_unsorted+ 200 ATC,WT+ 200 ATC,seq1731_sorted+ 200 ATC,seq1287_unsorted+ 200 ATC,HCA+ 200 ATC,seq1944_sorted+ 200 ATC,seq1436_unsorted+ 200 ATC,C160A+ 200 ATC,seq1802_sorted+ 200 ATC,seq1363_unsorted+ 200 ATC,D152N+ 200 ATC
+E,seq1738_sorted+ 200 ATC,seq2148_sorted+ 200 ATC,seq1496_unsorted+ 200 ATC,seq1904_sorted+ 200 ATC,seq1834_sorted+ 200 ATC,seq1513_unsorted+ 200 ATC,seq1729_sorted+ 200 ATC,seq376_unsorted+ 200 ATC,seq1420_unsorted+ 200 ATC,seq1789_sorted+ 200 ATC,seq1251_unsorted+ 200 ATC,seq1360_unsorted+ 200 ATC
+F,seq1670_sorted+ 200 ATC,seq771_unsorted+ 200 ATC,WT+ 200 ATC,seq1731_sorted+ 200 ATC,seq1287_unsorted+ 200 ATC,HCA+ 200 ATC,seq1944_sorted+ 200 ATC,seq1436_unsorted+ 200 ATC,C160A+ 200 ATC,seq1802_sorted+ 200 ATC,seq1363_unsorted+ 200 ATC,D152N+ 200 ATC
+G,seq1738_sorted+ 200 ATC,seq2148_sorted+ 200 ATC,seq1496_unsorted+ 200 ATC,seq1904_sorted+ 200 ATC,seq1834_sorted+ 200 ATC,seq1513_unsorted+ 200 ATC,seq1729_sorted+ 200 ATC,seq376_unsorted+ 200 ATC,seq1420_unsorted+ 200 ATC,seq1789_sorted+ 200 ATC,seq1251_unsorted+ 200 ATC,seq1360_unsorted+ 200 ATC
+H,seq1670_sorted+ 200 ATC,seq771_unsorted+ 200 ATC,WT+ 200 ATC,seq1731_sorted+ 200 ATC,seq1287_unsorted+ 200 ATC,HCA+ 200 ATC,seq1944_sorted+ 200 ATC,seq1436_unsorted+ 200 ATC,C160A+ 200 ATC,seq1802_sorted+ 200 ATC,seq1363_unsorted+ 200 ATC,D152N+ 200 ATC

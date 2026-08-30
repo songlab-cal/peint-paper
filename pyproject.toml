@@ -25,6 +25,8 @@ dependencies = [
     "ete3",
     "biotite",
     "logomaker",
+    # data/MANIFEST.toml. stdlib tomllib from 3.11; both project envs are still 3.10.
+    'tomli; python_version < "3.11"',
 ]
 
 [project.optional-dependencies]
@@ -40,7 +42,7 @@ model = ["torch>=2.5.0"]
 folding = [
     "torch>=2.5.0",
     "jax[cuda12]>=0.5.0",     # AF2Rank via ColabDesign
-    "transformers==4.52.2",   # ProstT5 (sequence -> 3Di states)
+    "transformers==4.45.2",   # ProstT5 (sequence -> 3Di states)
     "sentencepiece",          # ProstT5 tokenizer
 ]
 dev = [

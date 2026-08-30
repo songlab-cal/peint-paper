@@ -1,5 +1,7 @@
+import argparse
 import os
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Set, FrozenSet, Tuple
 import math
 
@@ -19,18 +21,17 @@ from protevo.simulation._alisim import _UDM_NEX_PATH
 from protevo import caching as protevo_caching
 
 from paper.alignment import run_mafft_add
+from paper.historian import esmc_historian_dirs
 from paper.model_style import model_colors
 import paper_config as cfg
 
 # ESM-C (rev2) PEINT progressive historian reconstruction (remove-dummy output), added as a
 # sixth model alongside the rev1 WAG/LG/LG+S256/PEINT-ESM2/Real. Projected into the empirical
-# frame exactly like PEINT-ESM2, then matched to the real branches.
-ESMC_RECON = (
-    "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc/"
-    "simulations/historian_progressive/_cache/remove_dummy_nodes_from_historian_output/0/e/2/"
-    "7848affe284d9acd102977c0d0f2f3dc441092610c895020ca28319a8da332aaa86e43d5d31b8b064e99a9d97e163d28c7b1f7997d8fc7dc2924a88db175a/"
-    "output_sequences_dir"
-)
+# frame exactly like PEINT-ESM2, then matched to the real branches. The "refine" run, the
+# same one the indel panels use. Resolved lazily so importing this module (for get_branches /
+# match_branches, which several benchmarks do) never depends on the rev2 data being present.
+def esmc_recon_dir():
+    return esmc_historian_dirs(cfg.RESULTS_R2_DIR, "refine")["reconstructions"]
 # Models whose trees are in the protevo (read_tree) format rather than AliSim .full.treefile.
 _PROTEVO_TREE_MODELS = ("PEINT", "PEINT_ESMC")
 
@@ -357,13 +358,275 @@ def get_branches(
     return branches
 
 
-if __name__ == "__main__":
+
+# ---------------------------------------------------------------------------
+# Plotting
+# ---------------------------------------------------------------------------
+# Split out of the __main__ block so the panels can be redrawn from the two tables the
+# aggregation writes (simulation_internal_analysis.csv, path_saturation.csv) instead of
+# repeating the ~30 minute branch-matching pass. `--replot` below does exactly that.
+
+# Internal simulator keys, their display names, and the plot order. The keys are what the
+# aggregation writes into the CSVs; the labels are what the paper shows, and they have to
+# match the other figures rather than leaking these internal spellings into a legend.
+MODEL_ORDER = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC', 'Real (Inferred)']
+SCATTER_ORDER = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC']
+MODEL_LABELS = {
+    'WAG': 'WAG',
+    'LG': 'LG',
+    'LG_S256': 'LG+S256',
+    'PEINT': 'PEINT (ESM2)',
+    'PEINT_ESMC': 'PEINT (ESM-C)',
+    'Real (Inferred)': 'Real (inferred)',
+}
+
+
+def model_palette():
+    """Internal simulator key -> color, via the shared canonical map."""
+    mc = model_colors()
+    return {
+        'WAG': mc['WAG'],
+        'LG': mc['LG'],
+        'LG_S256': mc['LG+S256'],
+        'PEINT': mc['PEINT (ESM2)'],
+        'PEINT_ESMC': mc['PEINT (ESM-C)'],
+        'Real (Inferred)': mc['Real'],
+    }
+
+
+def _save(fig, stem, dpi=300):
+    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
+    for ext in ('pdf', 'png'):
+        fig.savefig(os.path.join(str(cfg.FIGURES_DIR), f'{stem}.{ext}'),
+                    dpi=dpi, bbox_inches='tight')
+    print(f'  wrote {cfg.FIGURES_DIR}/{stem}.{{pdf,png}}')
+
+
+def plot_parent_child_pairs(df):
+    """Per-branch fraction of mutated sites, boxed by (per-model) branch length."""
+    df = df.copy()
+    df['branch_length_q'] = df['branch_length'].apply(lambda x: math.floor(x * 10) / 10)
+    subdf = df[df.branch_length < 1.1]   # very few longer, likely trouble with inference
+
+    mpl.rcParams['pdf.fonttype'] = 42
+    fig, ax = plt.subplots(figsize=(6, 4))
+    colors = model_palette()
+    branch_lengths = sorted(subdf['branch_length_q'].unique())
+    n_simulators = len(MODEL_ORDER)
+
+    # Keep the n-box group inside the unit-wide bin slot.
+    step = 0.9 / n_simulators
+    box_width = step * 0.8
+    positions, all_data, all_colors = [], [], []
+    for i, bl in enumerate(branch_lengths):
+        for j, sim in enumerate(MODEL_ORDER):
+            data = subdf[(subdf['branch_length_q'] == bl) & (subdf['simulator'] == sim)]['mutations']
+            if len(data) > 0:
+                positions.append(i + (j - n_simulators / 2 + 0.5) * step)
+                all_data.append(data)
+                all_colors.append(colors[sim])
+
+    bp = ax.boxplot(all_data, positions=positions, widths=box_width, patch_artist=True,
+                    boxprops=dict(linewidth=0.5),
+                    whiskerprops=dict(linewidth=0.5),
+                    flierprops={"marker": "o", "markersize": 0.3},
+                    medianprops=dict(linestyle='--', color='black', linewidth=0.5))
+    for patch, color in zip(bp['boxes'], all_colors):
+        patch.set_facecolor(color)
+
+    # Upper left: the boxes rise left-to-right, so 'best' put the legend over the widest bins.
+    ax.legend(handles=[Patch(facecolor=colors[sim], edgecolor='black', linewidth=0.5,
+                             label=MODEL_LABELS[sim]) for sim in MODEL_ORDER],
+              title='Model', fontsize=9, loc='upper left', framealpha=0.9)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+    sns.despine()
+    ax.tick_params(width=0.5, length=2, which='both')
+    ax.set_ylim(0, 1)
+    ax.set_xticks(ticks=range(len(branch_lengths)),
+                  labels=[f'{bl:.1f}' for bl in branch_lengths], fontsize=10)
+    ax.set_yticks(ticks=np.arange(0, 1, 0.1),
+                  labels=[f'{t:.1f}' for t in np.arange(0, 1, 0.1)], fontsize=10)
+    ax.set_xlabel('Branch Length (per-model)', fontsize=12)
+    ax.set_ylabel('Fraction Mutated Sites', fontsize=12)
+    _save(fig, 'parent_child_pairs_all_models')
+    plt.close(fig)
+
+
+def plot_per_family_scatter(df):
+    """Per-family median mutation rate, each simulator against real."""
+    colors = model_palette()
+    per_family_medians = df.groupby(['simulator', 'family']).agg({'mutations': 'median'}).reset_index()
+    medians = per_family_medians.pivot(index='family', columns='simulator', values='mutations')
+
+    fig, axs = plt.subplots(1, len(SCATTER_ORDER),
+                            figsize=(2.75 * len(SCATTER_ORDER), 2.5), sharey=True)
+    for ax, sim in zip(axs, SCATTER_ORDER):
+        x, y = medians['Real (Inferred)'], medians[sim]
+        keep = ~(x.isna() | y.isna())
+        ax.scatter(x[keep], y[keep], alpha=0.6, s=20, color=colors[sim])
+        ax.plot([0, 0.4], [0, 0.4], 'k-', linewidth=1, label='y=x')
+        ax.tick_params(width=0.5, length=2, which='both')
+        ax.set_xlim(0, 0.4)
+        ax.set_ylim(0, 0.4)
+        ax.set_xlabel(MODEL_LABELS['Real (Inferred)'], fontsize=10)
+        ax.set_ylabel(MODEL_LABELS[sim], fontsize=10)
+        ax.set_aspect('equal')
+        ax.grid(True, alpha=0.3)
+        sns.despine()
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.5)
+    fig.suptitle('Per family median mutation rate (Eval Subtrees)')
+    _save(fig, 'per_family_median_mutation_rate_all_models')
+    plt.close(fig)
+
+
+def _binned_mean(x, y, bins):
+    """Mean and SEM of y within each x-bin; only bins with data are returned."""
+    idx = np.digitize(x, bins) - 1
+    centers, means, sems = [], [], []
+    for b in range(len(bins) - 1):
+        sel = idx == b
+        n = int(sel.sum())
+        if n == 0:
+            continue
+        centers.append(0.5 * (bins[b] + bins[b + 1]))
+        means.append(float(np.mean(y[sel])))
+        sems.append(float(np.std(y[sel]) / math.sqrt(n)))
+    return np.array(centers), np.array(means), np.array(sems)
+
+
+def plot_back_mutation_and_root_leaf(df, path_df):
+    """Two companion panels, both read off each model's own simulated tree:
+
+    (a) per-branch reversal rate (A->B->A) vs the model's own branch length — the cycling
+        signal, a profile-shape property that persists at matched branch length;
+    (b) root->leaf saturation — substitutions summed along the path vs the net root->leaf
+        divergence (both per non-gap site). Distance above y=x is homoplasy: the reverted
+        or convergent substitutions hidden from an endpoint comparison.
+    """
+    colors = model_palette()
+    fig, axs = plt.subplots(1, 2, figsize=(9.5, 3.8))
+
+    # ---- (a) per-branch back-mutation rate vs (per-model) branch length ----
+    ax = axs[0]
+    bdf = df[df['back_num_sites'].notna() & (df['back_num_sites'] > 0)
+             & (df['branch_length'] < 1.1)].copy()
+    bdf['back_fraction'] = bdf['back_mutations'] / bdf['back_num_sites']
+    bl_bins = np.arange(0, 1.1 + 1e-9, 0.1)
+    for sim in MODEL_ORDER:
+        d = bdf[bdf['simulator'] == sim]
+        if d.empty:
+            continue
+        c, m, se = _binned_mean(d['branch_length'].to_numpy(), d['back_fraction'].to_numpy(), bl_bins)
+        ax.plot(c, m, '-o', ms=3, lw=1, color=colors[sim], label=MODEL_LABELS[sim])
+        ax.fill_between(c, m - se, m + se, color=colors[sim], alpha=0.2, lw=0)
+    ax.set_xlabel('Branch Length (per-model)', fontsize=11)
+    ax.set_ylabel('Back-mutations / scored triple', fontsize=11)
+    ax.legend(fontsize=8, frameon=False, title='Model')
+
+    # ---- (b) root->leaf saturation: path-summed vs net divergence ----
+    ax = axs[1]
+    # Require a minimum root<->leaf overlap: with only a handful of shared non-gap sites the
+    # per-site ratios blow up (root_leaf_sites down to 1 -> path/site in the hundreds). The
+    # 1st percentile of overlap is ~40 sites, so >=30 drops only degenerate near-empty paths.
+    # Then restrict to paths present for every simulator so all arms sum the same set.
+    n_sim = path_df['simulator'].nunique()
+    enough_overlap = path_df[path_df['root_leaf_sites'] >= 30].copy()
+    per_path_sims = enough_overlap.groupby(['family', 'leaf'])['simulator'].transform('nunique')
+    shared = enough_overlap[per_path_sims == n_sim].copy()
+    shared['net_per_site'] = shared['root_leaf_hamming'] / shared['root_leaf_sites']
+    shared['path_per_site'] = shared['path_mutations'] / shared['root_leaf_sites']
+    lim = float(shared['net_per_site'].quantile(0.99))
+    net_bins = np.linspace(0, lim, 16)
+    for sim in MODEL_ORDER:
+        d = shared[shared['simulator'] == sim]
+        if d.empty:
+            continue
+        c, m, se = _binned_mean(d['net_per_site'].to_numpy(), d['path_per_site'].to_numpy(), net_bins)
+        ax.plot(c, m, '-o', ms=3, lw=1, color=colors[sim], label=MODEL_LABELS[sim])
+        ax.fill_between(c, m - se, m + se, color=colors[sim], alpha=0.2, lw=0)
+    ax.plot([0, lim], [0, lim], 'k--', lw=0.8, label='y = x (no homoplasy)')
+    ax.set_xlim(0, lim)
+    ax.set_xlabel('Net root→leaf divergence / site', fontsize=11)
+    ax.set_ylabel('Path-summed substitutions / site', fontsize=11)
+    ax.legend(fontsize=8, frameon=False)
+
+    for ax in axs:
+        ax.tick_params(width=0.5, length=2, which='both')
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.5)
+    sns.despine()
+    fig.tight_layout()
+    _save(fig, 'back_mutation_and_root_leaf', dpi=160)
+    plt.close(fig)
+
+
+def render_all(df, path_df):
+    plot_parent_child_pairs(df)
+    plot_per_family_scatter(df)
+    plot_back_mutation_and_root_leaf(df, path_df)
+
+
+def _writable_out(base, name):
+    """Where a pipeline output goes: the authoritative tree if we own it, else DERIVED_DIR.
+
+    The data trees are inputs for everyone except the machine that produced them, and a
+    published/shared copy is read-only. Deciding on ``os.access(W_OK)`` rather than a config
+    flag keeps the producing machine bit-identical -- same output path, so every protevo
+    cache key stays warm -- while a read-only mirror diverts the writes instead of raising.
+    """
+    shipped = Path(base) / name
+    if shipped.is_dir() and os.access(shipped, os.W_OK):
+        return str(shipped)
+    out = Path(cfg.DERIVED_DIR) / name
+    out.mkdir(parents=True, exist_ok=True)
+    return str(out)
+
+
+def _find_table(dirs, stem):
+    """First existing <dir>/<stem>.csv{,.gz} across dirs, else None."""
+    for d in dirs:
+        for name in (f'{stem}.csv', f'{stem}.csv.gz'):
+            p = Path(d) / name
+            if p.exists():
+                return p
+    return None
+
+
+def replot_from_csv(distances_dir=None):
+    """Redraw all three panels from the saved aggregation tables (seconds, not ~30 min).
+
+    Looks in --distances-dir if given, then the shipped figure_data copies, then the
+    directory the full pipeline writes to. The figure_data copies are gzipped and carry
+    only the columns these panels read, which is why they are ~19 MB rather than ~400 MB.
+    """
+    search = ([distances_dir] if distances_dir else
+              [cfg.FIGURE_DATA_DIR / 'leaf_distances', cfg.LEAF_DISTANCES_DIR])
+    internal = _find_table(search, 'simulation_internal_analysis')
+    saturation = _find_table(search, 'path_saturation')
+    missing = [s for s, f in (('simulation_internal_analysis', internal),
+                              ('path_saturation', saturation)) if f is None]
+    if missing:
+        raise FileNotFoundError(
+            f"Could not find {', '.join(missing)} (.csv or .csv.gz) in "
+            f"{[str(s) for s in search]}. Run this module without --replot to build them, "
+            f"or point --distances-dir at a directory holding both.")
+    print(f'replotting from {internal.parent}')
+    render_all(pd.read_csv(internal), pd.read_csv(saturation))
+
+
+
+def _run_full_pipeline():
     
-    protevo_caching.set_cache_dir("_cache_protevo")
+    # Absolute, from config. These used to be relative, which silently tied the whole
+    # benchmark to one working directory: run it from anywhere else and the AliSim /
+    # mafft-add / copy_gap_pattern cache missed and everything recomputed.
+    protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
     protevo_caching.set_log_level(9)
     protevo_caching.set_dir_levels(3)
 
-    cherryml_caching.set_cache_dir("_cache_benchmarking")
+    cherryml_caching.set_cache_dir(str(cfg.CHERRYML_CACHE_DIR))
     cherryml_caching.set_log_level(9)
     cherryml_caching.set_dir_levels(3)
 
@@ -381,12 +644,8 @@ if __name__ == "__main__":
     simulation_dir = str(cfg.SIMULATIONS_DIR)
     rerooted_tree_dir = str(cfg.TREE_DIR)
 
-    distances_dir = os.path.join(output_dir, 'leaf_distances')
-    os.makedirs(distances_dir, exist_ok=True)
-    output_lg_dir = os.path.join(simulation_dir, 'lg_subtree_simulation')
-
-    if not os.path.exists(output_lg_dir):
-        os.makedirs(output_lg_dir)
+    distances_dir = _writable_out(output_dir, 'leaf_distances')
+    output_lg_dir = _writable_out(simulation_dir, 'lg_subtree_simulation')
 
     renamed_lg_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
@@ -405,10 +664,7 @@ if __name__ == "__main__":
         num_processes = 8
     )['output_msa_dir']
 
-    output_wag_dir = os.path.join(simulation_dir, 'wag_subtree_simulation')
-
-    if not os.path.exists(output_wag_dir):
-        os.makedirs(output_wag_dir)
+    output_wag_dir = _writable_out(simulation_dir, 'wag_subtree_simulation')
 
     renamed_wag_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
@@ -426,7 +682,7 @@ if __name__ == "__main__":
         num_processes = 8
     )['output_msa_dir']
 
-    output_lg_s256_dir = os.path.join(simulation_dir, 'lg_s256_subtree_simulation')
+    output_lg_s256_dir = _writable_out(simulation_dir, 'lg_s256_subtree_simulation')
 
     renamed_lg_s256_dir = simulate_alisim_evolution_subtree(
         tree_dir = historian_tree_dir,
@@ -484,12 +740,13 @@ if __name__ == "__main__":
     esmc_unaligned_dir = os.path.join(simulation_dir, 'esmc_msa_unaligned')
     if not os.path.exists(esmc_unaligned_dir):
         os.makedirs(esmc_unaligned_dir)
-    esmc_families = [f for f in families if os.path.exists(os.path.join(ESMC_RECON, f + '.txt'))]
+    esmc_recon = esmc_recon_dir()
+    esmc_families = [f for f in families if os.path.exists(os.path.join(esmc_recon, f + '.txt'))]
     for family in esmc_families:
         dst = os.path.join(esmc_unaligned_dir, family + '.txt')
         if os.path.exists(dst):
             continue
-        src_msa = read_msa(os.path.join(ESMC_RECON, family + '.txt'))
+        src_msa = read_msa(os.path.join(esmc_recon, family + '.txt'))
         with open(dst, 'w') as f:
             for name, seq in src_msa.items():
                 f.write(f'>{name}\n{seq.replace("-", "")}\n')
@@ -841,201 +1098,23 @@ if __name__ == "__main__":
         os.path.join(distances_dir, 'path_saturation.csv'),
         index=False,
     )
-
-    # branch_length is each model's OWN re-optimised length (AliSim re-fits branch lengths
-    # per model), so every arm is binned by the length it actually evolved along.
-    df['branch_length_q'] = df['branch_length'].apply(lambda x: math.floor(x * 10) / 10) #quantize
-    subdf = df[df.branch_length < 1.1] #very few longer, likely trouble with inference
-
-    ################### BOXPLOT ###############################
-    mpl.rcParams['pdf.fonttype'] = 42
-    fig, ax = plt.subplots(figsize=(6, 4))
+    render_all(df, path_df)
 
 
-    model_order = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC', 'Real (Inferred)']
+def _cli():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--replot', action='store_true',
+                    help='Redraw the panels from the saved aggregation tables instead of '
+                         'redoing the branch matching (seconds rather than ~30 minutes).')
+    ap.add_argument('--distances-dir', default=None,
+                    help='Where simulation_internal_analysis.csv / path_saturation.csv live '
+                         '(default: cfg.LEAF_DISTANCES_DIR).')
+    return ap.parse_args()
 
-    branch_lengths = sorted(subdf['branch_length_q'].unique())
 
-    n_simulators = len(model_order)
-    positions = []
-    all_data = []
-    all_colors = []
-
-    # Colors from the shared canonical map (paper.model_style) so this boxplot matches the
-    # conservation JSD boxplot and the structure-metrics ECDFs. Local keys -> canonical names.
-    mc = model_colors()
-    colors = {
-        'WAG': mc['WAG'],
-        'LG': mc['LG'],
-        'LG_S256': mc['LG+S256'],
-        'PEINT': mc['PEINT (ESM2)'],
-        'PEINT_ESMC': mc['PEINT (ESM-C)'],
-        'Real (Inferred)': mc['Real'],
-    }
-    color_order = [colors[model] for model in model_order]
-
-    # Keep the n-box group inside the unit-wide bin slot (n grew from 5 to 6).
-    step = 0.9 / n_simulators
-    box_width = step * 0.8
-    for i, bl in enumerate(branch_lengths):
-        for j, sim in enumerate(model_order):
-            data = subdf[(subdf['branch_length_q'] == bl) & (subdf['simulator'] == sim)]['mutations']
-            if len(data) > 0:
-                pos = i + (j - n_simulators/2 + 0.5) * step
-                positions.append(pos)
-                all_data.append(data)
-                all_colors.append(colors[sim])
-
-    bp = ax.boxplot(all_data, positions=positions, widths=box_width, patch_artist=True,
-                    boxprops = dict(linewidth=0.5),
-                    whiskerprops = dict(linewidth=0.5),
-                    flierprops={"marker": "o", "markersize": 0.3},
-                    medianprops=dict(linestyle='--', color='black', linewidth=0.5))
-
-    for patch, color in zip(bp['boxes'], all_colors):
-        patch.set_facecolor(color)
-
-    legend_elements = [Patch(facecolor=colors[sim], edgecolor='black', linewidth=0.5, label=sim) 
-                    for sim in model_order]
-    ax.legend(handles=legend_elements, title='Model', fontsize=9)
-
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.5)
-    sns.despine()
-
-    ax.tick_params(width = 0.5, length = 2, which = 'both')
-
-    ax.set_ylim(0, 1)
-
-    ax.set_xticks(ticks = range(len(branch_lengths)), labels=[f'{bl:.1f}' for bl in branch_lengths], fontsize=10)
-    ax.set_yticks(ticks = np.arange(0, 1, 0.1), labels = [f'{t:.1f}' for t in np.arange(0,1,0.1)], fontsize=10)
-
-    ax.set_xlabel('Branch Length (per-model)', fontsize=12)
-    ax.set_ylabel('Fraction Mutated Sites', fontsize=12)
-
-    # Main PCP figure -> the local paper figures/output (absolute; independent of the
-    # cwd-relative caches this script runs under). PNG twin for quick viewing.
-    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
-    for _ext in ('pdf', 'png'):
-        fig.savefig(
-            os.path.join(str(cfg.FIGURES_DIR), f'parent_child_pairs_all_models.{_ext}'),
-            dpi=300, bbox_inches='tight',
-        )
-
-    ####################### per-family scatter #########################
-
-    per_family_medians = df.groupby(['simulator', 'family']).agg({'mutations': 'median'}).reset_index()
-
-    medians = per_family_medians.pivot(index='family', columns='simulator', values = 'mutations')
-
-    # One panel per simulator vs Real, PEINT_ESMC (rev2) added alongside the rev1 arms.
-    scatter_order = ['WAG', 'LG', 'LG_S256', 'PEINT', 'PEINT_ESMC']
-    fig, axs = plt.subplots(1, len(scatter_order), figsize=(2.75 * len(scatter_order), 2.5), sharey=True)
-    for ax, sim in zip(axs, scatter_order):
-        x = medians['Real (Inferred)']
-        y = medians[sim]
-        x_clean = x[~(x.isna() | y.isna())]
-        y_clean = y[~(x.isna() | y.isna())]
-
-        ax.scatter(x_clean, y_clean, alpha=0.6, s=20, color=colors[sim])
-        ax.plot([0, 0.4], [0, 0.4], 'k-', linewidth=1, label='y=x')
-
-        ax.tick_params(width = 0.5, length = 2, which = 'both')
-        ax.set_xlim(0, 0.4)
-        ax.set_ylim(0, 0.4)
-        ax.set_xlabel('Real (Inferred)', fontsize=10)
-        ax.set_ylabel(f'{sim}', fontsize=10)
-        ax.set_aspect('equal')
-        ax.grid(True, alpha=0.3)
-        sns.despine()
-        for spine in ax.spines.values():
-            spine.set_linewidth(0.5)
-
-    fig.suptitle('Per family median mutation rate (Eval Subtrees)')
-
-    # -> local paper figures/output (next to parent_child_pairs_all_models), PNG twin included.
-    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
-    for _ext in ('pdf', 'png'):
-        fig.savefig(
-            os.path.join(str(cfg.FIGURES_DIR), f'per_family_median_mutation_rate_all_models.{_ext}'),
-            dpi=300, bbox_inches='tight',
-        )
-
-    ############### back-mutation + root->leaf figure ###############
-    # Companion to the per-branch figure, both reading each model's own simulated tree:
-    #  (a) per-branch reversal rate (A->B->A) vs the model's own branch length -- the
-    #      cycling signal, which is a profile-shape property and so persists at matched
-    #      branch length;
-    #  (b) root->leaf saturation -- substitutions summed along the path vs the net
-    #      root->leaf divergence (both per non-gap site). Distance above y=x is homoplasy
-    #      (the reverted/convergent substitutions hidden from the endpoint comparison).
-
-    def _binned_mean(x, y, bins):
-        '''Mean and SEM of y within each x-bin; only bins with data are returned.'''
-        idx = np.digitize(x, bins) - 1
-        centers, means, sems = [], [], []
-        for b in range(len(bins) - 1):
-            sel = idx == b
-            n = int(sel.sum())
-            if n == 0:
-                continue
-            centers.append(0.5 * (bins[b] + bins[b + 1]))
-            means.append(float(np.mean(y[sel])))
-            sems.append(float(np.std(y[sel]) / math.sqrt(n)))
-        return np.array(centers), np.array(means), np.array(sems)
-
-    fig, axs = plt.subplots(1, 2, figsize=(9.5, 3.8))
-
-    # ---- (a) per-branch back-mutation rate vs (per-model) branch length ----
-    ax = axs[0]
-    bdf = df[df['back_num_sites'].notna() & (df['back_num_sites'] > 0) & (df['branch_length'] < 1.1)].copy()
-    bdf['back_fraction'] = bdf['back_mutations'] / bdf['back_num_sites']
-    bl_bins = np.arange(0, 1.1 + 1e-9, 0.1)
-    for sim in model_order:
-        d = bdf[bdf['simulator'] == sim]
-        if d.empty:
-            continue
-        c, m, se = _binned_mean(d['branch_length'].to_numpy(), d['back_fraction'].to_numpy(), bl_bins)
-        ax.plot(c, m, '-o', ms=3, lw=1, color=colors[sim], label=sim)
-        ax.fill_between(c, m - se, m + se, color=colors[sim], alpha=0.2, lw=0)
-    ax.set_xlabel('Branch Length (per-model)', fontsize=11)
-    ax.set_ylabel('Back-mutations / scored triple', fontsize=11)
-    ax.legend(fontsize=8, frameon=False, title='Model')
-
-    # ---- (b) root->leaf saturation: path-summed vs net divergence ----
-    ax = axs[1]
-    # Require a minimum root<->leaf overlap: with only a handful of shared non-gap sites the
-    # per-site ratios blow up (root_leaf_sites down to 1 -> path/site in the hundreds). The
-    # 1st percentile of overlap is ~40 sites, so >=30 drops only degenerate near-empty paths.
-    # Then restrict to paths present for every simulator so all arms sum the same set.
-    n_sim = path_df['simulator'].nunique()
-    enough_overlap = path_df[path_df['root_leaf_sites'] >= 30].copy()
-    per_path_sims = enough_overlap.groupby(['family', 'leaf'])['simulator'].transform('nunique')
-    shared = enough_overlap[per_path_sims == n_sim].copy()
-    shared['net_per_site'] = shared['root_leaf_hamming'] / shared['root_leaf_sites']
-    shared['path_per_site'] = shared['path_mutations'] / shared['root_leaf_sites']
-    lim = float(shared['net_per_site'].quantile(0.99))
-    net_bins = np.linspace(0, lim, 16)
-    for sim in model_order:
-        d = shared[shared['simulator'] == sim]
-        if d.empty:
-            continue
-        c, m, se = _binned_mean(d['net_per_site'].to_numpy(), d['path_per_site'].to_numpy(), net_bins)
-        ax.plot(c, m, '-o', ms=3, lw=1, color=colors[sim], label=sim)
-        ax.fill_between(c, m - se, m + se, color=colors[sim], alpha=0.2, lw=0)
-    ax.plot([0, lim], [0, lim], 'k--', lw=0.8, label='y = x (no homoplasy)')
-    ax.set_xlim(0, lim)
-    ax.set_xlabel('Net root→leaf divergence / site', fontsize=11)
-    ax.set_ylabel('Path-summed substitutions / site', fontsize=11)
-    ax.legend(fontsize=8, frameon=False)
-
-    for ax in axs:
-        ax.tick_params(width=0.5, length=2, which='both')
-        for spine in ax.spines.values():
-            spine.set_linewidth(0.5)
-    sns.despine()
-    fig.tight_layout()
-    # -> local paper figures/output (next to parent_child_pairs_all_models).
-    os.makedirs(str(cfg.FIGURES_DIR), exist_ok=True)
-    fig.savefig(os.path.join(str(cfg.FIGURES_DIR), 'back_mutation_and_root_leaf.pdf'), bbox_inches='tight')
-    fig.savefig(os.path.join(str(cfg.FIGURES_DIR), 'back_mutation_and_root_leaf.png'), dpi=160, bbox_inches='tight')
+if __name__ == "__main__":
+    _args = _cli()
+    if _args.replot:
+        replot_from_csv(_args.distances_dir)
+    else:
+        _run_full_pipeline()

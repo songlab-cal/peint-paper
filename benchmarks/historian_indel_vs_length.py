@@ -19,7 +19,6 @@ Run from the repo root (env with protevo, e.g. protevo-env)::
 """
 
 import argparse
-import glob
 import json
 import os
 
@@ -35,23 +34,17 @@ from scipy.stats import pearsonr, spearmanr
 
 from protevo import caching as protevo_caching
 from protevo.utils import read_msa
-from paper.historian import get_all_evolutionary_counts_from_historian_output
+from paper.historian import (
+    esmc_historian_dirs,
+    get_all_evolutionary_counts_from_historian_output,
+)
 from paper.model_style import model_colors
+import paper_config as cfg
 
-R1 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1/simulations"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
-FAM_JSON = "/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json"
-FIG_OUT = "/scratch/users/akoehl/peint-paper/figures/output"
-
-# ESM-C cached event tables (rev2 historian job), sorted-glob [0] as in historian_compare.
-ESMC_EVENTS_DEFAULT = sorted(glob.glob(
-    f"{R2}/simulations/historian_progressive/_cache/"
-    "get_all_evolutionary_counts_from_historian_output/*/*/*/*/output_events_dir"))[0]
-# ESM-C remove-dummy reconstruction sequences (== figure3_pcp_mutation_counts ESMC_RECON).
-ESMC_RECON_DEFAULT = (
-    f"{R2}/simulations/historian_progressive/_cache/remove_dummy_nodes_from_historian_output/"
-    "0/e/2/7848affe284d9acd102977c0d0f2f3dc441092610c895020ca28319a8da332aaa86e43d5d31b8b064e99a9d97e163d28c7b1f7997d8fc7dc2924a88db175a/"
-    "output_sequences_dir")
+R1 = str(cfg.RESULTS_R1_DIR / "simulations")
+R2 = str(cfg.RESULTS_R2_DIR)
+FAM_JSON = str(cfg.HELDOUT_FAMILIES_JSON)
+FIG_OUT = str(cfg.FIGURES_DIR)
 
 
 def indel_events(events_dir, fam):
@@ -101,15 +94,26 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--real-recon", default=f"{R1}/real_msa_historian")
     ap.add_argument("--esm2-recon", default=f"{R1}/peint_msa_historian")
-    ap.add_argument("--esmc-recon", default=ESMC_RECON_DEFAULT)
+    ap.add_argument("--esmc_variant", default="refine", choices=("refine", "norefine"),
+                    help="Which ESM-C Historian run supplies BOTH the events and the "
+                         "reconstructions. Previously the events defaulted to the "
+                         "norefine run while the reconstructions were pinned to refine, "
+                         "so this panel mixed the two.")
+    ap.add_argument("--esmc-recon", default=None,
+                    help="Explicit ESM-C reconstruction dir, overriding --esmc_variant.")
     ap.add_argument("--tree-dir", default=f"{R1}/real_subtree_historian",
                     help="Eval-subtree trees for the real/ESM2 event recomputation.")
-    ap.add_argument("--esmc-events", default=ESMC_EVENTS_DEFAULT)
+    ap.add_argument("--esmc-events", default=None,
+                    help="Explicit ESM-C events dir, overriding --esmc_variant.")
     ap.add_argument("--families-path", default=FAM_JSON)
     ap.add_argument("--out-dir", default=FIG_OUT)
     ap.add_argument("--out-suffix", default="")
     ap.add_argument("--num-processes", type=int, default=16)
     args = ap.parse_args()
+
+    esmc = esmc_historian_dirs(R2, args.esmc_variant)
+    esmc_events_dir = args.esmc_events or esmc["events"]
+    esmc_recon_dir = args.esmc_recon or esmc["reconstructions"]
 
     families = json.load(open(args.families_path))["families"]
     protevo_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
@@ -130,7 +134,7 @@ def main():
     models = [
         ("real", real_events, args.real_recon, "Real (inferred)", mc["Real"]),
         ("esm2", esm2_events, args.esm2_recon, "PEINT (ESM2)", mc["PEINT (ESM2)"]),
-        ("esmc", args.esmc_events, args.esmc_recon, "PEINT (ESM-C)", mc["PEINT (ESM-C)"]),
+        ("esmc", esmc_events_dir, esmc_recon_dir, "PEINT (ESM-C)", mc["PEINT (ESM-C)"]),
     ]
 
     # Keep families present (events AND length) for ALL three models, so the panels share a set.

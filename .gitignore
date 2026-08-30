@@ -17,9 +17,13 @@ slurm_out/
 # Generated figures
 figures/output/
 
-# Large data inputs staged locally (e.g. site rates). Distributed separately
-# (Zenodo), never committed.
-local_data/
+# Large data inputs staged locally. Distributed separately (see data/MANIFEST.toml),
+# never committed -- except local_data/vep/, 329 KB of per-run ProteinGym Spearman
+# tables that the VEP panels cannot render without. The parent is excluded as
+# `local_data/*` rather than `local_data/`, because git will not descend into a
+# directory excluded with a trailing slash and the negation below would never fire.
+local_data/*
+!local_data/vep/
 
 # Fetched assets: AlphaFold weights + TM-align binary (scripts/fetch_af2rank_assets.sh)
 data/af2_params/

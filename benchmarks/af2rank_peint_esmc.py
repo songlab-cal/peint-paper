@@ -26,11 +26,10 @@ from paper.structure_prediction import generate_af2_predictions
 from benchmarks.generate_all_results import _subsample_selection
 import paper_config as cfg
 
-SIM = ("/scratch/users/akoehl/old/protein-evolution/local_data/simulation/"
-       "final_simulation_512_leaves/ratio_0-1_nucleus_1-0")
+SIM = str(cfg.SIM_ROOT)
 TREE_DIR = f"{SIM}/trees_newick"
 ROOT_SEQ_DIR = f"{SIM}/root_sequences"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
+R2 = str(cfg.RESULTS_R2_DIR)
 PEINT_ALIGN = f"{R2}/mafft_add/peint_progressive_dir"   # non-keeplength aligned PEINT leaves
 REAL_ALIGN = f"{R2}/mafft_add/old_sequences"            # non-keeplength aligned real (has seq1)
 MODEL_KEY = "PEINT (Progressive)"

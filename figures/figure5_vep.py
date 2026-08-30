@@ -15,6 +15,8 @@ from protevo.vep._vep_utils import (
     _discover_time_dirs,
 )
 from paper.plot_style import _set_publication_style
+import paper_config as cfg
+from paper.model_style import base_lm_pair_colors, model_colors
 from paper import vep
 
 # Scored results now live under test_lls/production/ (archived runs under test_lls/archive/).
@@ -35,7 +37,9 @@ apply Illustrator-friendly, publication-ready defaults before plotting.
 # repo's ProteinGym3, which PEINT is meant to be used in conjunction with.
 PAPER_ROOT = Path(__file__).resolve().parents[1]
 FIG_DIR = PAPER_ROOT / "figures"
-VEP_RESULTS_DIR = PAPER_ROOT / "local_data" / "vep" / "test_lls" / "production"
+# Via cfg.LOCAL_DATA rather than PAPER_ROOT/local_data: the two are the same by default, but
+# only the former moves when someone unpacks the deposit somewhere else.
+VEP_RESULTS_DIR = Path(cfg.LOCAL_DATA) / "vep" / "test_lls" / "production"
 
 
 def _fig_path(category, filename):
@@ -45,6 +49,46 @@ def _fig_path(category, filename):
     return out_dir / filename
 
 
+def _paired_bars(df_plot, hue_order, palette, group_size, alpha):
+    """Bars grouped into touching sub-groups of ``group_size`` within each assay type.
+
+    Layout per category: sub-groups of `group_size` bars with no gap inside a sub-group and
+    a small gap between sub-groups, so a (base pLM, PEINT) pair reads as one unit. Heights
+    are the mean over families and the error bars its standard error — the same statistics
+    seaborn's ``estimator=np.mean, errorbar="se"`` produces.
+    """
+    cats = list(dict.fromkeys(df_plot["assay_type"]))
+    stats = df_plot.groupby(["assay_type", "model"])["spearman"].agg(["mean", "sem"])
+
+    n = len(hue_order)
+    n_groups = int(np.ceil(n / group_size))
+    span = 0.8                      # fraction of the category slot the bars occupy
+    gap = 0.05                      # between sub-groups
+    bar_w = (span - gap * (n_groups - 1)) / n
+    start = -span / 2 + bar_w / 2
+
+    ax = plt.gca()
+    for i, model in enumerate(hue_order):
+        g, m = divmod(i, group_size)
+        off = start + g * (group_size * bar_w + gap) + m * bar_w
+        xs, ys, es = [], [], []
+        for c_i, cat in enumerate(cats):
+            if (cat, model) not in stats.index:
+                continue
+            row = stats.loc[(cat, model)]
+            xs.append(c_i + off)
+            ys.append(row["mean"])
+            es.append(0.0 if pd.isna(row["sem"]) else row["sem"])
+        color = palette[i] if isinstance(palette, (list, tuple)) else (
+            palette.get(model) if isinstance(palette, dict) else None)
+        ax.bar(xs, ys, width=bar_w, yerr=es, label=model, color=color, alpha=alpha,
+               linewidth=0.5, edgecolor="black",
+               error_kw={"linewidth": 1.0, "capsize": 2, "capthick": 1.0})
+    ax.set_xticks(range(len(cats)))
+    ax.set_xticklabels(cats)
+    return ax
+
+
 def _plot_proteingym_spearman_comparision(
     df_results_all: pd.DataFrame,
     model_names: dict | None = None,
@@ -52,8 +96,14 @@ def _plot_proteingym_spearman_comparision(
     figsize: tuple[int, int] = (12, 5),
     dpi: int = 240,
     alpha: float = 0.8,
+    group_size: int | None = None,
 ):
     """Plot ProteinGym average Spearman by assay type with model comparison.
+
+    ``group_size`` bundles consecutive hues into touching sub-groups separated by a small
+    gap — pass 2 to read the six-model chart as three (base pLM, PEINT) pairs instead of six
+    evenly spaced bars. Seaborn spaces hues uniformly with no hook for this, so that path
+    draws the bars itself; the aggregation (mean over families, SE error bars) is identical.
 
     Style is controlled externally via `_set_publication_style()`.
     """
@@ -68,21 +118,24 @@ def _plot_proteingym_spearman_comparision(
         hue_order = list(dict.fromkeys(df_plot["model"].tolist()))
 
     plt.figure(figsize=figsize, dpi=dpi)
-    ax = sns.barplot(
-        x="assay_type",
-        y="spearman",
-        hue="model",
-        hue_order=hue_order,
-        data=df_plot,
-        alpha=alpha,
-        estimator=np.mean,
-        errorbar="se",
-        capsize=0.15,
-        err_kws={"linewidth": 1.0},
-        linewidth=0.5,
-        edgecolor="black",
-        palette=palette,
-    )
+    if group_size:
+        ax = _paired_bars(df_plot, hue_order, palette, group_size, alpha)
+    else:
+        ax = sns.barplot(
+            x="assay_type",
+            y="spearman",
+            hue="model",
+            hue_order=hue_order,
+            data=df_plot,
+            alpha=alpha,
+            estimator=np.mean,
+            errorbar="se",
+            capsize=0.15,
+            err_kws={"linewidth": 1.0},
+            linewidth=0.5,
+            edgecolor="black",
+            palette=palette,
+        )
 
     ax.set_xlabel("Assay Type")
     ax.set_ylabel("Mean Spearman Correlation")
@@ -90,9 +143,10 @@ def _plot_proteingym_spearman_comparision(
     #     f'ProteinGym Average Spearman by Assay Type: {df_plot["family"].unique().size} Families'
     # )
     ax.set_title(f"Mean Spearman Correlation by Assay Type")
+    # Outside the axes: anchored inside (0.8) the box covered the last assay group.
     leg = ax.legend(
         title="Model: Mean Spearman",
-        bbox_to_anchor=(0.8, 1.1),
+        bbox_to_anchor=(1.01, 1.0),
         loc="upper left",
         frameon=True,
     )
@@ -117,6 +171,7 @@ def _make_spearman_plot(
     save_path: str | None = None,
     alpha: float = 0.8,
     save_spearman_path: str | None = None,
+    group_size: int | None = None,
 ):
     output_dir = VEP_RESULTS_DIR
     if save_spearman_path is None:
@@ -179,7 +234,8 @@ def _make_spearman_plot(
 
     # Now call the plotting function on the modified labels
     ax = _plot_proteingym_spearman_comparision(
-        df_plot, model_names=None, palette=palette, figsize=figsize, alpha=alpha
+        df_plot, model_names=None, palette=palette, figsize=figsize, alpha=alpha,
+        group_size=group_size,
     )
 
     # Standardize axis aesthetics
@@ -1570,135 +1626,6 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
 
 
 # ---------------------------------------------------------------------------
-# vESM-encoder comparison figures
-# ---------------------------------------------------------------------------
-# "Version of the paper plots" that adds PEINT-on-vESM alongside the paper's
-# ESM2 baseline and PEINT-on-ESM2, within each encoder tier. Paper generators
-# above are left untouched; these are additive.
-_VESM_TIER_CONFIG = {
-    "150M": {
-        "esm": "ESM2_150M",
-        "peint_esm": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        "peint_vesm": "20260606_122013-ft_217fams-esm2_vesm_150M-vesm_150M-epoch=6-step=5439-t_1_0",
-    },
-    "650M": {
-        "esm": "ESM2_650M",
-        "peint_esm": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0",
-        "peint_vesm": "20260606_123141-ft_217fams-esm2_vesm_650M-vesm_650M-epoch=4-step=3885-t_1_0",
-    },
-}
-
-
-def _vesm_run_and_model_names(tier: str):
-    """Build (run_names, model_names) for the 3-way vESM comparison at a tier."""
-    cfg = _VESM_TIER_CONFIG[tier]
-    run_names = {
-        "esm": {"run_name": cfg["esm"], "t_wag": None},
-        "peint_esm": {"run_name": cfg["peint_esm"], "t_wag": None},
-        "peint_vesm": {"run_name": cfg["peint_vesm"], "t_wag": None},
-    }
-    model_names = {
-        "esm": f"ESM2-{tier}",
-        "peint_esm": f"PEINT (ESM2-{tier})",
-        "peint_vesm": f"PEINT (vESM-{tier})",
-    }
-    return run_names, model_names
-
-
-def make_spearman_figure_vesm(tier: str = "650M"):
-    """Aggregate Spearman-by-assay-type bar chart including PEINT-on-vESM."""
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    save_path = _fig_path("spearman_agg", f"spearman_plot_vesm_{tier}.png")
-    return _make_spearman_plot(
-        run_names=run_names,
-        model_names=model_names,
-        palette=palettes,
-        save_path=save_path,
-        figsize=(10, 4),
-        save_spearman_path=_fig_path(
-            "spearman_agg", f"spearman_results_vesm_{tier}.csv"
-        ),
-    )
-
-
-def make_per_family_spearman_figure_vesm(tier: str = "650M"):
-    """Per-family OrganismalFitness Spearman scatter including PEINT-on-vESM."""
-    output_root = VEP_RESULTS_DIR
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    plt.rcParams.update(
-        {
-            "axes.labelsize": 12,
-            "axes.titlesize": 12,
-            "xtick.labelsize": 6,
-            "ytick.labelsize": 8,
-            "legend.title_fontsize": 12,
-            "legend.fontsize": 10,
-        }
-    )
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    save_path = _fig_path("per_family", f"per_family_spearman_plot_vesm_{tier}.png")
-    return _make_per_family_spearman_plot(
-        run_names=run_names,
-        model_names=model_names,
-        output_dir=Path(output_root),
-        assay_type="OrganismalFitness",
-        sort_by_model=f"PEINT (ESM2-{tier})",
-        save_path=save_path,
-        palette=palettes,
-        dot_size=50,
-        figsize=(12, 5),
-        display_full_family_name=True,
-    )
-
-
-def make_spearman_by_mutational_depth_figure_vesm(tier: str = "650M"):
-    """Spearman-by-mutational-depth pointplot including PEINT-on-vESM."""
-    palettes_all = sns.color_palette()
-    palettes = [palettes_all[4], palettes_all[2], palettes_all[1]]
-    run_names, model_names = _vesm_run_and_model_names(tier)
-    save_path = _fig_path(
-        "mutational_depth", f"spearman_by_mutational_depth_vesm_{tier}.png"
-    )
-    output_dir = VEP_RESULTS_DIR
-
-    df_results_all = []
-    for name, info in run_names.items():
-        depth_fpath = output_dir / info["run_name"] / "spearman_by_mutation_depth.csv"
-        if not depth_fpath.exists():
-            print(f"{name}: {depth_fpath} not found, skipping")
-            continue
-        df = pd.read_csv(depth_fpath)
-        df["model"] = name
-        df_results_all.append(df)
-    if not df_results_all:
-        raise ValueError("No valid mutation depth data files found")
-    df_results_all = pd.concat(df_results_all, ignore_index=True)
-
-    ax = _plot_spearman_by_mutational_depth(
-        df_results_all=df_results_all,
-        model_names=model_names,
-        palette=palettes,
-        figsize=(8, 5),
-        alpha=0.8,
-    )
-    ax.set_title(f"Mean Spearman by Mutational Depth (vESM vs ESM2, {tier})")
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.5)
-    ax.tick_params(width=0.5, length=2)
-    ax.grid(True, alpha=0.3, which="both", linewidth=0.25)
-    fig = ax.get_figure()
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=400, bbox_inches="tight")
-    fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
-    print(f"Plot saved to: {save_path} and {save_path.with_suffix('.pdf')}")
-    plt.show()
-    return ax
-
-
-# ---------------------------------------------------------------------------
 # Official-release baselines + base-vs-PEINT / multi-model comparisons
 # ---------------------------------------------------------------------------
 # Baselines come from ProteinGym's released per-variant zero-shot scores via
@@ -1731,7 +1658,8 @@ def materialize_official_baselines(columns, overwrite=False):
     return list(columns)
 
 
-def _spearman_bar_figure(run_names, model_names, save_name, palette=None, figsize=(11, 5)):
+def _spearman_bar_figure(run_names, model_names, save_name, palette=None, figsize=(11, 5),
+                         group_size=None):
     """Shared driver: materialize any official baselines referenced, then draw the
     side-by-side-by-assay-type bar chart (SE error bars, class-avg in the legend).
 
@@ -1753,6 +1681,7 @@ def _spearman_bar_figure(run_names, model_names, save_name, palette=None, figsiz
         save_path=save_path,
         figsize=figsize,
         save_spearman_path=_fig_path("spearman_agg", save_name.replace(".png", ".csv")),
+        group_size=group_size,
     )
 
 
@@ -1776,7 +1705,8 @@ def make_base_vs_peint_spearman_figure(
     )
 
 
-def make_multimodel_spearman_figure(methods, save_name="multimodel_spearman.png", palette=None):
+def make_multimodel_spearman_figure(methods, save_name="multimodel_spearman.png", palette=None,
+                                    group_size=None):
     """N-model bar chart: side-by-side bars per assay type (SE error bars).
 
     `methods` is an ordered list of dicts, each either
@@ -1791,7 +1721,8 @@ def make_multimodel_spearman_figure(methods, save_name="multimodel_spearman.png"
         else:
             run_names[key] = {"run_name": m["run"]}
         model_names[key] = m["label"]
-    return _spearman_bar_figure(run_names, model_names, save_name, palette=palette, figsize=(12, 5))
+    return _spearman_bar_figure(run_names, model_names, save_name, palette=palette,
+                                figsize=(12, 5), group_size=group_size)
 
 
 # Our comparison: raw ESM-C / ESM2-150M (released) vs PEINT trained on each.
@@ -1814,8 +1745,9 @@ def make_esmc_esm2_comparison():
             peint_label=f"PEINT ({cfg['label']})",
             save_name=f"base_vs_peint_{tier}.png",
         )
-    # Pair each backbone's hue: ESM-C blues, ESM2 oranges (raw = light, PEINT = dark).
-    palette = ["#9ecae1", "#08519c", "#fdae6b", "#d94801"]
+    # One hue family per backbone (raw = light, PEINT = dark), from the shared map.
+    pairs = base_lm_pair_colors()
+    palette = [*pairs["ESM-C 300M"], *pairs["ESM2-150M"]]
     methods = [
         {"label": "ESM-C 300M", "official": "ESMC-300M"},
         {"label": "PEINT (ESM-C 300M)", "run": "peint_esmc300m"},
@@ -1864,7 +1796,7 @@ def make_multimodel_by_base_lm(save_name="multimodel_by_base_lm.png"):
         order=lm_order, hue_order=["Base pLM", "PEINT"],
         estimator=np.mean, errorbar="se", capsize=0.15,
         err_kws={"linewidth": 1.0}, linewidth=0.5, edgecolor="black",
-        palette=["#9a9a9a", "#08519c"], alpha=0.85, ax=ax,
+        palette=[_BASE_GRAY, model_colors()["PEINT (ESM2)"]], alpha=0.85, ax=ax,
     )
     class_avg = per_assay.groupby(["base_lm", "kind"])["spearman"].mean()
     for c in ax.containers:
@@ -1892,9 +1824,11 @@ def make_multimodel_by_base_lm(save_name="multimodel_by_base_lm.png"):
     for lm, base_col, peint_run in vep.BASE_LM_CONFIG:
         methods.append({"label": lm, "official": base_col})
         methods.append({"label": f"PEINT ({lm})", "run": peint_run})
+    # group_size=2: BASE_LM_CONFIG emits (base pLM, PEINT) consecutively, so pairing
+    # adjacent hues puts each backbone and the PEINT model built on it side by side.
     make_multimodel_spearman_figure(
         methods, save_name="multimodel_esm2_150_650_esmc.png",
-        palette=vep.base_lm_palette(),
+        palette=vep.base_lm_palette(), group_size=2,
     )
     return ax
 
@@ -1945,35 +1879,70 @@ def make_mutational_depth_by_base_lm(save_name="mutational_depth_by_base_lm.png"
 
 
 # ---------------------------------------------------------------------------
-# Overall Spearman vs pretrained-backbone size (params scatter)
+# Overall Spearman vs total model size (params scatter)
 # ---------------------------------------------------------------------------
-# Class-averaged Spearman on the common core set of assays vs the parameter count of the
-# frozen pretrained LM each method leverages (log x). Base single-sequence pLMs in gray;
-# PEINT models colored by backbone family (Okabe-Ito, CVD-safe), with a connector showing
-# each backbone's base->PEINT lift. Data sources: ESM2 / ESM-C / VESPA / VespaG from the
-# ProteinGym release (official_baselines); vESM via zero_shot.py --marginals wt (its
-# distilled protocol); PEINT via compute_fitness. VESPA (ProtT5-3B) and VespaG (ESM-3B),
-# like PEINT, add small heads on frozen LMs, so backbone size is the fair x for all.
+# Class-averaged Spearman on the common core set of assays vs TOTAL parameter count
+# (log x). Base single-sequence pLMs in gray; PEINT models colored by backbone family,
+# with a connector from each base pLM to the PEINT model built on it — the connector's
+# horizontal run is the parameter cost of PEINT's head, its rise is the accuracy lift.
+#
+# x is the whole model, not just the frozen backbone. For PEINT that is
+# backbone + (2 encoder + 2 decoder layers + lm_head + time embedding); the head adds
+# only 8-16%, which is the point of the panel. The three ESM2/ESM-C counts below were
+# measured off the checkpoints rather than taken from the published round numbers, so a
+# base pLM and the PEINT model built on it are counted the same way:
+#
+#     peint_150m      ckpt vep/peint_150m/epoch=5-step=4000.ckpt
+#                     148,161,274 frozen +  23,432,353 head = 171,593,627   (+15.8%)
+#     peint_650m      ckpt vep/peint_650m/epoch=12-step=10000.ckpt
+#                     651,085,494 frozen +  93,559,073 head = 744,644,567   (+14.4%)
+#     peint_esmc300m  ckpt esmc-biohub/1e1d-ep_13-step_4130.ckpt (1 enc + 1 dec)
+#                     332,997,184 frozen +  26,882,944 head = 359,880,128    (+8.1%)
+#
+# (summed over state_dict, split on the "model.esm." prefix; do NOT infer these from
+# checkpoint file size — the encoder-stripped checkpoints of the vESM runs, since dropped,
+# carried optimizer state and implied a head about 3x too large.) ProGen2 / Tranception keep
+# their published counts.
+#
+# Data sources: ESM2 / ESM-C from the ProteinGym release (official_baselines); PEINT via
+# compute_fitness.
 _PARAMS_MODELS = [
-    # (label, run_dir_in_local_data, backbone_params, is_peint, family)
-    ("ESM2-150M", "ESM2_150M", 150e6, False, "esm2"),
-    ("ESM2-650M", "ESM2_650M", 650e6, False, "esm2"),
-    ("ESM-C 300M", "ESMC-300M", 300e6, False, "esmc"),
-    ("VESPA", "VESPA", 3e9, False, "other"),
-    ("VespaG", "VespaG", 3e9, False, "other"),
-    ("ProGen2-small", "Progen2_small", 151e6, False, "progen"),
-    ("ProGen2-medium", "Progen2_medium", 764e6, False, "progen"),
-    ("ProGen2-large", "Progen2_large", 2.7e9, False, "progen"),
-    ("ProGen2-xlarge", "Progen2_xlarge", 6.4e9, False, "progen"),
-    ("Tranception-S", "Tranception_S_no_retrieval", 85e6, False, "tranception"),
-    ("Tranception-M", "Tranception_M_no_retrieval", 300e6, False, "tranception"),
-    ("Tranception-L", "Tranception_L_no_retrieval", 700e6, False, "tranception"),
-    ("PEINT (ESM2-150M)", "peint_150m", 150e6, True, "esm2"),
-    ("PEINT (ESM2-650M)", "peint_650m", 650e6, True, "esm2"),
-    ("PEINT (ESM-C 300M)", "peint_esmc300m", 300e6, True, "esmc"),
+    # (label, run_dir_in_local_data, total_params, is_peint, family, pair_key)
+    ("ESM2-150M", "ESM2_150M", 148_161_274, False, "esm2", "esm2-150"),
+    ("ESM2-650M", "ESM2_650M", 651_085_494, False, "esm2-650", "esm2-650"),
+    ("ESM-C 300M", "ESMC-300M", 332_997_184, False, "esmc", "esmc-300"),
+    ("ProGen2-small", "Progen2_small", 151e6, False, "progen", None),
+    ("ProGen2-medium", "Progen2_medium", 764e6, False, "progen", None),
+    ("ProGen2-large", "Progen2_large", 2.7e9, False, "progen", None),
+    ("ProGen2-xlarge", "Progen2_xlarge", 6.4e9, False, "progen", None),
+    ("Tranception-S", "Tranception_S_no_retrieval", 85e6, False, "tranception", None),
+    ("Tranception-M", "Tranception_M_no_retrieval", 300e6, False, "tranception", None),
+    ("Tranception-L", "Tranception_L_no_retrieval", 700e6, False, "tranception", None),
+    ("PEINT (ESM2-150M)", "peint_150m", 171_593_627, True, "esm2", "esm2-150"),
+    ("PEINT (ESM2-650M)", "peint_650m", 744_644_567, True, "esm2-650", "esm2-650"),
+    ("PEINT (ESM-C 300M)", "peint_esmc300m", 359_880_128, True, "esmc", "esmc-300"),
 ]
-_FAMILY_COLOR = {"esm2": "#0072B2", "vesm": "#009E73", "esmc": "#D55E00"}  # Okabe-Ito
 _BASE_GRAY = "#9a9a9a"
+
+# Label placement overrides, (dx, dy) in points, plus optional horizontal alignment.
+# The ESM-C pair and ESM2-650M sit close together in both x and y, so their default
+# right-of-marker labels overlap; these push them apart.
+_PARAMS_LABEL_OFFSET = {
+    "PEINT (ESM-C 300M)": (-8, 7, "right"),
+    "ESM-C 300M": (-8, -12, "right"),
+    "ESM2-650M": (7, -13, "left"),
+    "PEINT (ESM2-650M)": (8, 2, "left"),
+}
+
+
+def _family_color():
+    """Backbone family -> PEINT marker color, from the shared model_style map."""
+    c = model_colors()
+    return {
+        "esm2": c["PEINT (ESM2)"],
+        "esm2-650": c["PEINT (ESM2-650M)"],
+        "esmc": c["PEINT (ESM-C)"],
+    }
 
 
 def _core_overall_spearman(models, aggregate="class", assay_type=None):
@@ -2005,8 +1974,9 @@ def _core_overall_spearman(models, aggregate="class", assay_type=None):
 
 
 def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type=None):
-    """Scatter of overall Spearman vs pretrained-backbone params (log x), gray base pLMs
-    vs color-by-family PEINT, connectors showing the base->PEINT lift at each scale.
+    """Scatter of overall Spearman vs total model params (log x), gray base pLMs vs
+    color-by-family PEINT, with a connector from each base pLM to the PEINT model built
+    on it: the run is the head's parameter cost, the rise is the accuracy lift.
 
     assay_type restricts to one ProteinGym function class (e.g. 'OrganismalFitness')."""
     from matplotlib.lines import Line2D
@@ -2014,27 +1984,31 @@ def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type
     vals, common = _core_overall_spearman(_PARAMS_MODELS, aggregate, assay_type)
     if assay_type is not None:
         ylab = f"Spearman ρ ({assay_type})"
-        title = f"VEP {assay_type} vs backbone size — ProteinGym DMS ({len(common)} assays)"
+        title = f"VEP {assay_type} vs model size — ProteinGym DMS ({len(common)} assays)"
         save_name = save_name or f"params_vs_spearman_{assay_type}.png"
     else:
         ylab = "Class-averaged Spearman ρ" if aggregate == "class" else "Mean Spearman ρ"
-        title = f"VEP vs backbone size — ProteinGym DMS ({len(common)} core assays)"
+        title = f"VEP vs model size — ProteinGym DMS ({len(common)} core assays)"
         save_name = save_name or "params_vs_spearman.png"
     fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    family_color = _family_color()
 
-    # base -> PEINT connectors at matching (family, params)
-    base = {(fam, p): vals[l] for l, _, p, ip, fam in _PARAMS_MODELS if not ip}
-    peint = {(fam, p): vals[l] for l, _, p, ip, fam in _PARAMS_MODELS if ip}
-    for fam, p in set(base) & set(peint):
-        ax.plot([p, p], [base[(fam, p)], peint[(fam, p)]], color="0.8", lw=1.0, zorder=1)
+    # base -> PEINT connectors, paired by pair_key. Base and PEINT now sit at different
+    # x (the head's cost), so these slope up and to the right.
+    base = {k: (p, vals[l]) for l, _, p, ip, _f, k in _PARAMS_MODELS if not ip and k}
+    peint = {k: (p, vals[l]) for l, _, p, ip, _f, k in _PARAMS_MODELS if ip and k}
+    for k in set(base) & set(peint):
+        (xb, yb), (xp, yp) = base[k], peint[k]
+        ax.plot([xb, xp], [yb, yp], color="0.8", lw=1.0, zorder=1)
 
-    for label, _, p, is_peint, fam in _PARAMS_MODELS:
+    for label, _, p, is_peint, fam, _k in _PARAMS_MODELS:
         y = vals[label]
-        color = _FAMILY_COLOR[fam] if is_peint else _BASE_GRAY
+        color = family_color[fam] if is_peint else _BASE_GRAY
         ax.scatter(p, y, s=190 if is_peint else 120, marker="o", color=color,
                    edgecolor="white", linewidth=0.8, zorder=3 if is_peint else 2)
+        dx, dy, ha = _PARAMS_LABEL_OFFSET.get(label, (6, 5 if is_peint else -11, "left"))
         ax.annotate(label, (p, y),
-                    xytext=(6, 5 if is_peint else -11), textcoords="offset points",
+                    xytext=(dx, dy), textcoords="offset points", ha=ha,
                     fontsize=7, color=color if is_peint else "0.45",
                     fontweight="bold" if is_peint else "normal")
 
@@ -2042,13 +2016,14 @@ def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type
     ax.set_xticks([1e8, 3e8, 1e9, 3e9, 1e10])
     ax.set_xticklabels(["100M", "300M", "1B", "3B", "10B"])
     ax.set_xlim(7.0e7, 8.5e9)
-    ax.set_xlabel("Pretrained backbone parameters")
+    ax.set_xlabel("Total parameters (frozen backbone + task head)")
     ax.set_ylabel(ylab)
     ax.set_title(title)
     handles = [
         Line2D([0], [0], marker="o", color="w", markerfacecolor=_BASE_GRAY, markersize=8, label="base pLM (zero-shot)"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=_FAMILY_COLOR["esm2"], markersize=8, label="PEINT / ESM2"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=_FAMILY_COLOR["esmc"], markersize=8, label="PEINT / ESM-C"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=family_color["esm2"], markersize=8, label="PEINT / ESM2-150M"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=family_color["esmc"], markersize=8, label="PEINT / ESM-C"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=family_color["esm2-650"], markersize=8, label="PEINT / ESM2-650M"),
     ]
     ax.legend(handles=handles, frameon=False, fontsize=8, loc="lower right")
     ax.spines[["top", "right"]].set_visible(False)
@@ -2059,11 +2034,12 @@ def make_params_vs_spearman_figure(save_name=None, aggregate="class", assay_type
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     fig.savefig(save_path.with_suffix(".pdf"), bbox_inches="tight")
     pd.DataFrame(
-        [(l, int(p), "PEINT" if ip else "base", fam, vals[l]) for l, _, p, ip, fam in _PARAMS_MODELS],
-        columns=["model", "backbone_params", "type", "family", "spearman"],
+        [(l, int(p), "PEINT" if ip else "base", fam, vals[l])
+         for l, _, p, ip, fam, _k in _PARAMS_MODELS],
+        columns=["model", "total_params", "type", "family", "spearman"],
     ).to_csv(save_path.with_suffix(".csv"), index=False)
     print(f"wrote {save_path} | {len(common)} core assays")
-    for l, _, _p, _ip, _f in _PARAMS_MODELS:
+    for l, _, _p, _ip, _f, _k in _PARAMS_MODELS:
         print(f"  {l:22s} {vals[l]:.4f}")
     return ax
 
@@ -2086,9 +2062,6 @@ def main():
             "esm_vs_peint",
             "mutant_depth",
             "time_family_best_vs_default",
-            "agg_vesm",
-            "family_vesm",
-            "mutant_depth_vesm",
             "esmc_esm2",
             "by_base_lm",
             "params",
@@ -2124,18 +2097,6 @@ def main():
 
     elif args.plot == "time_family_best_vs_default":
         make_per_family_spearman_time_figure_best_vs_default()
-
-    elif args.plot == "agg_vesm":
-        for tier in ("150M", "650M"):
-            make_spearman_figure_vesm(tier=tier)
-
-    elif args.plot == "family_vesm":
-        for tier in ("150M", "650M"):
-            make_per_family_spearman_figure_vesm(tier=tier)
-
-    elif args.plot == "mutant_depth_vesm":
-        for tier in ("150M", "650M"):
-            make_spearman_by_mutational_depth_figure_vesm(tier=tier)
 
     elif args.plot == "esmc_esm2":
         make_esmc_esm2_comparison()

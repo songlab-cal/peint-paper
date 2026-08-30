@@ -15,19 +15,14 @@ mutational-depth curves are derived from the ProteinGym release on demand
 
 import pandas as pd
 
+from paper.model_style import base_lm_pair_colors
+
 # (base_lm_label, released_baseline_column, peint_run_dir)
 BASE_LM_CONFIG = [
     ("ESM2-150M", "ESM2_150M", "peint_esm2_150m"),
     ("ESM-C 300M", "ESMC-300M", "peint_esmc300m"),
     ("ESM2-650M", "ESM2_650M", "peint_650m"),
 ]
-
-# One hue family per backbone; base = light, PEINT = dark.
-BASE_LM_PAIR_COLORS = {
-    "ESM2-150M": ("#9ecae1", "#08519c"),
-    "ESM-C 300M": ("#fdae6b", "#d94801"),
-    "ESM2-650M": ("#a1d99b", "#238b45"),
-}
 
 
 def base_lm_run_and_model_names():
@@ -46,10 +41,15 @@ def base_lm_run_and_model_names():
 
 
 def base_lm_palette():
-    """Six colors in the paired config order (base light, PEINT dark)."""
+    """Six colors in the paired config order (base light, PEINT dark).
+
+    Colors come from ``paper.model_style`` so the VEP bars match the same models
+    wherever else they appear.
+    """
+    pairs = base_lm_pair_colors()
     palette = []
     for lm, _, _ in BASE_LM_CONFIG:
-        palette.extend(BASE_LM_PAIR_COLORS[lm])
+        palette.extend(pairs[lm])
     return palette
 
 

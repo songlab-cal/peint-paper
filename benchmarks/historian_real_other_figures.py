@@ -22,12 +22,14 @@ from scipy.stats import pearsonr, spearmanr
 
 from protevo import caching as pc
 from paper.historian import get_all_evolutionary_counts_from_historian_output as gac
+from paper.model_style import model_colors
+import paper_config as cfg
 
-R1 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision1/simulations"
-R2 = "/scratch/users/akoehl/protein-evolution/local_data/results_revision2_esmc"
+R1 = str(cfg.RESULTS_R1_DIR / "simulations")
+R2 = str(cfg.RESULTS_R2_DIR)
 ROS = f"{R1}/real_other_subtree"
-FAM_JSON = "/scratch/users/akoehl/protein-evolution/local_data/final_sim_held_out_family.json"
-FIG = "/scratch/users/akoehl/peint-paper/figures/output"
+FAM_JSON = str(cfg.HELDOUT_FAMILIES_JSON)
+FIG = str(cfg.FIGURES_DIR)
 
 
 def esmc_refine_events():
@@ -73,9 +75,10 @@ def main():
     esmc = esmc_refine_events()
 
     # ---- Figure A: indel-length CDF with Real(other) as gray dotted ----
-    series = [("Real (eval subtree)", real, "purple", "-"),
-              ("PEINT ESM-C", esmc, "#55a868", "-"),
-              ("PEINT ESM2", esm2, "#d95f02", "-"),
+    _mc = model_colors()
+    series = [("Real (eval subtree)", real, _mc["Real"], "-"),
+              ("PEINT ESM-C", esmc, _mc["PEINT (ESM-C)"], "-"),
+              ("PEINT ESM2", esm2, _mc["PEINT (ESM2)"], "-"),
               ("Real (other subtree)", realo, "gray", ":")]
     fig, ax = plt.subplots(figsize=(4.2, 3.2))
     print("indel length (median / P90 / n):")

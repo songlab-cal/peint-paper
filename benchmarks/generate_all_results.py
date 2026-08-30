@@ -78,6 +78,24 @@ logger = logging.getLogger(__name__)
 BASE_SEQUENCE_TYPES = [REAL, REAL_OTHER_SPLIT, "PEINT (Progressive)", "PEINT (Single Shot)"]
 
 
+def peint_encoder_backbone(checkpoint_path):
+    """Read a checkpoint's encoder backbone, for labelling only.
+
+    The arms are named by sampling mode and the output directories are the same whichever
+    backbone ran, so the backbone can only come from the checkpoint itself. mmap keeps this to
+    a header read rather than loading multi-GB of weights. Returns None if it cannot be read --
+    a label is never worth failing a run over.
+    """
+    try:
+        import torch
+        ckpt = torch.load(checkpoint_path, map_location="cpu", mmap=True, weights_only=False)
+        hp = ckpt.get("hyper_parameters", {})
+        return hp.get("encoder_backbone") or hp.get("which_esm")
+    except Exception as e:  # noqa: BLE001 - labelling must not break the pipeline
+        logger.warning("Could not read the encoder backbone from %s: %s", checkpoint_path, e)
+        return None
+
+
 def _seq_type_key(model: str, mode: str) -> str:
     """Bare model name for inference mode (preserves existing cache keys + downstream
     pattern-matching); parenthesized form for new prior modes."""
@@ -528,11 +546,14 @@ def write_jsd_boxplots(all_jsd, training_fams_map, output_path):
     in_family = jsd_df.loc[[f for f in jsd_df.index if training_fams_map[f]]]
     held_out = jsd_df.loc[[f for f in jsd_df.index if not training_fams_map[f]]]
 
-    plot_jsd_boxplot(jsd_df, output_path, filename_stem="all")
+    backbone = peint_encoder_backbone(args.peint_checkpoint_path)
+    plot_jsd_boxplot(jsd_df, output_path, filename_stem="all", peint_backbone=backbone)
     if not in_family.empty:
-        plot_jsd_boxplot(in_family, output_path, filename_stem="in_family")
+        plot_jsd_boxplot(in_family, output_path, filename_stem="in_family",
+                         peint_backbone=backbone)
     if not held_out.empty:
-        plot_jsd_boxplot(held_out, output_path, filename_stem="held_out")
+        plot_jsd_boxplot(held_out, output_path, filename_stem="held_out",
+                         peint_backbone=backbone)
 
 
 if __name__ == "__main__":
