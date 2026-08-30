@@ -222,8 +222,7 @@ Have MAFFT, `iqtree2` and the environments' `bin/` on `PATH` (OmegaFold is a con
 in `protevo-env/bin`, so calling the interpreter directly is not enough).
 
 **0. Pick families.** Both entry points take the same JSON: `in_family` are families seen in
-training, `held_out_family` are not. Passing the list explicitly is what makes a reduced run
-reproducible — the file is the record, so nothing depends on directory order.
+training, `held_out_family` are not. This list of families allows you to subset.
 
 `data/example_families.json` is a fixed 20 + 5 subset of the paper's split, ready to use:
 
@@ -231,7 +230,7 @@ reproducible — the file is the record, so nothing depends on directory order.
 {"in_family": ["13gs_1_A", "..."], "held_out_family": ["1a2t_1_A", "..."]}
 ```
 
-**1. Simulate** (`peint-esmc`, GPU, ~1 h for five families). Loads the checkpoint, evolves each
+**1. Simulate** (`peint-esmc`, GPU). Loads the checkpoint, evolves each
 root sequence down its tree, runs the WAG/LG baselines alongside, and scores amino-acid
 conservation JSD against the real alignments:
 
@@ -299,17 +298,6 @@ $PEINT_PAPER_PY_ESMC -m figures.figure2_time_estimation \
 | pLDDT, per sequence and aggregated | `runs/example/results/<family>/plddt.csv`, `results/omegafold_plddt/all_plddt.csv` |
 | held-out likelihood vs. time | `out/figure2_likelihood_eval_{test,train_held_out}_esmc.pdf` |
 | time-estimation panels | `out/` |
-
-The five curves the likelihood panel produces, on this five-family subset — the expected
-ordering, reproduced from the deposit with no warm cache:
-
-| Model | mean per-site log-likelihood |
-|---|---|
-| Random guess | −2.618 |
-| WAG | −1.133 |
-| LG (4 rate categories) | −1.096 |
-| PEINT (ESM2) | −0.923 |
-| PEINT (ESM-C) | −0.873 |
 
 Swap the checkpoint to compare models; swap the family list to change the split.
 
