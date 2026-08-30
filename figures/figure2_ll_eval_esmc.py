@@ -23,6 +23,9 @@ Env: ``peint-esmc`` (has the Biohub ESM-C backbone + sentencepiece). Needs a GPU
 
 import argparse
 import glob
+import shutil
+import subprocess
+import json
 import os
 import random
 
@@ -36,6 +39,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
+from cherryml import caching as cherryml_caching
 from protevo import caching as protevo_caching
 from protevo.evaluation import (
     evaluate_peint_model_transitions_log_likelihood__cached,
@@ -66,9 +70,11 @@ def _p(*parts):
     hashes -- which key on absolute argument paths -- stay warm.
     """
     here = os.path.join(PEINT_REPO, *parts)
+    shipped = os.path.join(str(cfg.LOCAL_DATA), "peint", *parts)
+    if cfg.LOCAL_DATA_ONLY:
+        return shipped
     if os.path.exists(here):
         return here
-    shipped = os.path.join(str(cfg.LOCAL_DATA), "peint", *parts)
     return shipped if os.path.exists(shipped) else here
 
 
@@ -76,6 +82,9 @@ def _p(*parts):
 ALIGNED_TEST_TRANSITIONS_DIR = _p("local_data/aligned/test_transitions_dir")
 UNALIGNED_TEST_TRANSITIONS_DIR = _p("local_data/unaligned/test_transitions_dir/output_transitions_dir")
 UNALIGNED_TEST_ALIGNMENT_MASK_DIR = _p("local_data/unaligned/test_alignment_mask_dir")
+ALIGNED_TRAIN_TRANSITIONS_DIR = _p("local_data/aligned/train_transitions_dir")
+ALIGNED_TRAIN_SITE_RATES_4CAT_DIR = _p(
+    "local_data/aligned/train_site_rates_4cat_dir/output_site_rates_dir")
 CACHE_DIR = _p("_cache_peint")
 CHERRYML_CACHE_DIR = _p("_cache_cherryml")
 
@@ -169,17 +178,88 @@ def discover_cached_per_site_dir(func_subdir, needed_families, exclude=()):
     return covering[0][0]
 
 
-def esmc_per_site_dir(families, device, batch_size):
-    """Compute (cached) the ESM-C PEINT per-site log-likelihoods for these families."""
+def usable_mpi_processes(requested):
+    """Largest process count `mpirun` will actually accept here, at most `requested`.
+
+    cherryml fits the WAG/LG rate matrices by shelling out to `mpirun -np N`. If the machine
+    or the Slurm allocation has fewer slots than N, Open MPI refuses to launch, `os.system`
+    swallows the message, the counting step writes nothing, and the run dies much later with
+    a CacheUsageError about a missing result.txt. That is a miserable thing to debug, so probe
+    for it up front and step down instead.
+    """
+    if requested <= 1:
+        return 1
+    if shutil.which("mpirun") is None:
+        return 1
+    n = requested
+    while n > 1:
+        probe = subprocess.run(["mpirun", "-np", str(n), "true"],
+                               capture_output=True, timeout=120)
+        if probe.returncode == 0:
+            break
+        n //= 2
+    if n != requested:
+        print(f"  NOTE: mpirun cannot allocate {requested} slots here; using {n}. "
+              f"Ask for more cores, or pass --num-processes {n} to skip this probe.")
+    return n
+
+
+def compute_baseline_per_site_dir(name, families, families_train, num_processes):
+    """Fit and score a classical baseline, rather than looking one up in a warm cache.
+
+    Everything these need is in the deposit: the rate matrices are fit on
+    aligned/train_transitions_dir (LG additionally on train_site_rates_4cat_dir), then scored
+    on the held-out test transitions. Cached like everything else, so this is paid once.
+    """
+    from protevo import models
+
+    num_processes = usable_mpi_processes(num_processes)
+
+    if name == "Random guess":
+        return models.evaluate_uniform_random_guess_model_transitions_log_likelihood__cached(
+            transitions_dir=ALIGNED_TEST_TRANSITIONS_DIR, families=families,
+        )["output_transitions_log_likelihood_per_site_dir"]
+
+    if name == "WAG":
+        model_dir = models.train_wag_model__cached(
+            train_transitions_dir=ALIGNED_TRAIN_TRANSITIONS_DIR,
+            families=families_train, num_processes=num_processes,
+        )["output_model_dir"]
+        return models.evaluate_wag_model_transitions_log_likelihood__cached(
+            transitions_dir=ALIGNED_TEST_TRANSITIONS_DIR, families=families,
+            model_dir=model_dir, num_processes=num_processes, condition_on_non_gap=True,
+        )["output_transitions_log_likelihood_per_site_dir"]
+
+    if name == "LG (4 rate categories)":
+        model_dir = models.train_lg_model__cached(
+            train_transitions_dir=ALIGNED_TRAIN_TRANSITIONS_DIR,
+            train_site_rates_dir=ALIGNED_TRAIN_SITE_RATES_4CAT_DIR,
+            families=families_train, num_processes=num_processes,
+        )["output_model_dir"]
+        return models.evaluate_lg_model_transitions_log_likelihood__cached(
+            transitions_dir=ALIGNED_TEST_TRANSITIONS_DIR,
+            site_rates_dir=ALIGNED_TRAIN_SITE_RATES_4CAT_DIR, families=families,
+            model_dir=model_dir, num_processes=num_processes, condition_on_non_gap=True,
+        )["output_transitions_log_likelihood_per_site_dir"]
+
+    raise KeyError(f"no compute path for baseline {name!r}")
+
+
+def peint_per_site_dir(checkpoint, families, device, batch_size):
+    """Compute (cached) PEINT per-site log-likelihoods for these families."""
     return evaluate_peint_model_transitions_log_likelihood__cached(
         transitions_dir=UNALIGNED_TEST_TRANSITIONS_DIR,
         aligned_transitions_dir=ALIGNED_TEST_TRANSITIONS_DIR,
         alignment_mask_dir=UNALIGNED_TEST_ALIGNMENT_MASK_DIR,
-        model_checkpoint_path=ESMC_CHECKPOINT,
+        model_checkpoint_path=checkpoint,
         families=families,
         device=device,
         batch_size=batch_size,
     )["output_transitions_log_likelihood_per_site_dir"]
+
+
+def esmc_per_site_dir(families, device, batch_size):
+    return peint_per_site_dir(ESMC_CHECKPOINT, families, device, batch_size)
 
 
 def accumulate_by_time_bin(families, per_site_dirs, quantization_points):
@@ -262,6 +342,12 @@ def main():
     ap.add_argument("--limit-families", type=int, default=None,
                     help="Use only the first N families of each set (smoke test).")
     ap.add_argument("--no-esmc", action="store_true", help="Base models only (skip ESM-C).")
+    ap.add_argument("--num-processes", type=int, default=4,
+                    help="Processes for fitting/scoring the WAG and LG baselines.")
+    ap.add_argument("--families-path", default=None,
+                    help="JSON with explicit in_family / held_out_family lists, in the same "
+                         "shape as generate_all_results --families_path. Omit to use the "
+                         "paper's derived split (14,498 / 553).")
     ap.add_argument("--peint-esm2-per-site-dir", default=None,
                     help="Pin the ESM2 PEINT cached per-site dir instead of discovering it. "
                          "Needed with --no-esmc, where the ESM-C dir cannot be excluded "
@@ -270,9 +356,29 @@ def main():
     args = ap.parse_args()
 
     protevo_caching.set_cache_dir(CACHE_DIR)
+    # cherryml has its own cache, and fitting the WAG/LG rate matrices goes through it. Without
+    # this its cached functions hand back None output dirs and training dies in os.stat.
+    cherryml_caching.set_cache_dir(CHERRYML_CACHE_DIR)
+    cherryml_caching.set_read_only(False)
     protevo_caching.set_read_only(False)
 
-    _, families_test, train_held_out_subset = build_family_split(ALIGNED_TEST_TRANSITIONS_DIR)
+    if args.families_path:
+        # Same JSON convention as benchmarks/generate_all_results --families_path:
+        #   in_family        seen in training -> the matrices are fit on these, and they are
+        #                    the "train held-out subset" curve
+        #   held_out_family  never seen -> the held-out curve
+        # Giving the families explicitly is what makes a reduced run reproducible: the file
+        # is the record, so nothing depends on directory order or a subsample rule.
+        with open(cfg.require(args.families_path)) as fh:
+            spec = json.load(fh)
+        families_train = sorted(spec["in_family"])
+        families_test = sorted(spec["held_out_family"])
+        train_held_out_subset = families_train
+        print(f"Using {args.families_path}: {len(families_train)} in-family, "
+              f"{len(families_test)} held-out.")
+    else:
+        families_train, families_test, train_held_out_subset = build_family_split(
+            ALIGNED_TEST_TRANSITIONS_DIR)
     if args.limit_families is not None:
         families_test = families_test[: args.limit_families]
         train_held_out_subset = train_held_out_subset[: args.limit_families]
@@ -294,9 +400,18 @@ def main():
         if name == "PEINT (ESM2)" and args.peint_esm2_per_site_dir:
             d = args.peint_esm2_per_site_dir
         else:
-            d = discover_cached_per_site_dir(
-                subdir, all_families, exclude=[esmc_dir] if esmc_dir else ()
-            )
+            try:
+                d = discover_cached_per_site_dir(
+                    subdir, all_families, exclude=[esmc_dir] if esmc_dir else ()
+                )
+            except FileNotFoundError:
+                print(f"  {name}: no cached per-site dir; computing from the transitions ...")
+                if name == "PEINT (ESM2)":
+                    d = peint_per_site_dir(str(cfg.PEINT_CHECKPOINT), all_families,
+                                           args.device, args.batch_size)
+                else:
+                    d = compute_baseline_per_site_dir(
+                        name, all_families, families_train, args.num_processes)
         per_site_dirs[name] = d
         print(f"  {name:24s} <- {d[len(CACHE_DIR) + 1:][:64]}...")
 

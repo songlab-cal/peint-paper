@@ -192,23 +192,11 @@ No model is loaded — these read files.
 
 ### Tier 3 — rerun from a checkpoint
 
-Regenerating the simulations themselves needs a checkpoint (`peint_checkpoints`) and a GPU.
-This is where the two environments hand off.
-
-**The handoff.** Simulation needs ESM-C; folding needs the JAX/OmegaFold stack. What crosses
-between them is **sequences in text files**, so nothing has to be version-compatible:
-
-```bash
-# peint-esmc: load the checkpoint, simulate, write sequences
-$PEINT_PAPER_PY_ESMC -m benchmarks.generate_all_results --out_path <dir>
-
-# protevo-env: read those sequences off disk, fold and score them
-$PEINT_PAPER_PY_PROTEVO -m benchmarks.omegafold_peint_esmc --out_path <dir>
-$PEINT_PAPER_PY_PROTEVO -m benchmarks.threedi_jsd_all_models
-```
-
-`omegafold_peint_esmc.py` imports only `read_msa` / `write_msa` / the caching decorator — it
-never constructs a model. Running the halves as separate jobs is the designed path.
+Regenerating the simulations needs a checkpoint and a GPU. Simulation runs in `peint-esmc`,
+folding in `protevo-env`, and what crosses between them is **sequences in text files** — so
+nothing has to be version-compatible across the two. Running the halves as separate jobs is
+the designed path, not a workaround. Full recipe in
+[Running from a checkpoint](#running-from-a-checkpoint-end-to-end) below.
 
 **What that buys you.** From one set of simulated sequences:
 
@@ -219,6 +207,111 @@ never constructs a model. Running the halves as separate jobs is the designed pa
 | conservation JSD; 3Di JSD | column entropies of simulated vs. real alignments | `figure3_jsd_boxplot`, `threedi_jsd_boxplot` |
 | indel length distributions | Historian ancestral reconstruction | `historian_indel_*` |
 | ESM-IF self-consistency | inverse-folding the predicted structures | `esmif_validation` |
+
+### Running from a checkpoint, end to end
+
+Everything below was run against the deposit alone (`PEINT_PAPER_LOCAL_DATA_ONLY=1`), on five
+held-out families. You need three archives — about 12 GB — and no `r1`/`r2`:
+
+```bash
+scripts/fetch_local_data.py --archives peint_checkpoints sim aux \
+    peint_transitions_aligned peint_transitions_unaligned
+```
+
+Have MAFFT, `iqtree2` and the environments' `bin/` on `PATH` (OmegaFold is a console script
+in `protevo-env/bin`, so calling the interpreter directly is not enough).
+
+**0. Pick families.** Both entry points take the same JSON: `in_family` are families seen in
+training, `held_out_family` are not. Passing the list explicitly is what makes a reduced run
+reproducible — the file is the record, so nothing depends on directory order.
+
+`data/example_families.json` is a fixed 20 + 5 subset of the paper's split, ready to use:
+
+```json
+{"in_family": ["13gs_1_A", "..."], "held_out_family": ["1a2t_1_A", "..."]}
+```
+
+**1. Simulate** (`peint-esmc`, GPU, ~1 h for five families). Loads the checkpoint, evolves each
+root sequence down its tree, runs the WAG/LG baselines alongside, and scores amino-acid
+conservation JSD against the real alignments:
+
+```bash
+$PEINT_PAPER_PY_ESMC -m benchmarks.generate_all_results \
+    --families_path data/example_families.json \
+    --peint_checkpoint_path local_data/peint/model_checkpoints/peint_esmc.ckpt \
+    --tree_dir local_data/sim/trees_newick \
+    --root_sequences_dir local_data/sim/root_sequences \
+    --real_sequences_dir local_data/sim/empirical_msas \
+    --out_path runs/example --include_conservation
+```
+
+Use `sim/trees_newick`, not `sim/trees` — the latter is a different node-list format and fails
+with `NewickError`.
+
+**2. Structures and 3Di** (`protevo-env`, GPU). The same command, different interpreter and
+flags. The simulations are cache hits, so no model is built here; only folding and ProstT5
+run. This is the whole handoff — what crosses between the environments is sequences in files:
+
+```bash
+$PEINT_PAPER_PY_PROTEVO -m benchmarks.generate_all_results \
+    --families_path data/example_families.json \
+    --tree_dir local_data/sim/trees_newick \
+    --root_sequences_dir local_data/sim/root_sequences \
+    --real_sequences_dir local_data/sim/empirical_msas \
+    --out_path runs/example \
+    --subsample_msa_size 3 --include_plddt --include_3di
+```
+
+`--subsample_msa_size` is how many leaves per family to fold; the paper uses 30, `-1` folds
+everything. Add `--use_af2` for AF2Rank instead of OmegaFold.
+
+**3. Held-out per-site likelihood** (`peint-esmc`, GPU). Scores the deposited transitions and
+fits the WAG / LG rate matrices from the deposited training transitions:
+
+```bash
+$PEINT_PAPER_PY_ESMC -m figures.figure2_ll_eval_esmc \
+    --esmc-checkpoint local_data/peint/model_checkpoints/peint_esmc.ckpt \
+    --families-path data/example_families.json \
+    --num-processes 1 --out-dir out
+```
+
+`--num-processes` becomes `mpirun -np` inside cherryml's counting step. Ask for more than your
+machine or Slurm allocation has slots for and Open MPI refuses to launch silently — so the
+script probes first and steps down, printing what it settled on. Omit `--families-path` for the
+published 14,498 / 553 split.
+
+**4. Time estimation** (`peint-esmc`, GPU). Uses the reduced transition set:
+
+```bash
+$PEINT_PAPER_PY_ESMC -m figures.figure2_time_estimation \
+    --checkpoint local_data/peint/model_checkpoints/peint_esmc.ckpt \
+    --num-families 5 --output-dir out
+```
+
+**What you get.** From one checkpoint:
+
+| Output | Where |
+|---|---|
+| simulated MSAs, per model | `runs/example/simulations/{peint_progressive,peint_single_shot,wag,lg}_*` |
+| predicted structures | `runs/example/omegafold/<family>/<model>/structures/*.pdb` |
+| amino-acid conservation JSD | `runs/example/results/<family>/jsd_vs_real_aa.csv` |
+| 3Di (structural alphabet) JSD | `runs/example/results/<family>/jsd_vs_real_foldseek.csv` |
+| pLDDT, per sequence and aggregated | `runs/example/results/<family>/plddt.csv`, `results/omegafold_plddt/all_plddt.csv` |
+| held-out likelihood vs. time | `out/figure2_likelihood_eval_{test,train_held_out}_esmc.pdf` |
+| time-estimation panels | `out/` |
+
+The five curves the likelihood panel produces, on this five-family subset — the expected
+ordering, reproduced from the deposit with no warm cache:
+
+| Model | mean per-site log-likelihood |
+|---|---|
+| Random guess | −2.618 |
+| WAG | −1.133 |
+| LG (4 rate categories) | −1.096 |
+| PEINT (ESM2) | −0.923 |
+| PEINT (ESM-C) | −0.873 |
+
+Swap the checkpoint to compare models; swap the family list to change the split.
 
 `figure2_simulation` is the one script that needs both environments. Run it twice —
 `--skip-structures` in `peint-esmc` to generate and cache the sequences, then again in
@@ -248,3 +341,6 @@ recognized` — that means cache miss, not a broken install.
 - protevo cache keys hash absolute input paths, so a cache copied from another machine
   never hits. This is why `pcp_panels` is cold unless you built its cache in place.
 - Flash Attention wheel failures: see `../peint/installation.md`.
+- The classical baselines are fit through cherryml, which shells out to `mpirun`. Asking for
+  more processes than there are MPI slots fails with no output; the likelihood script probes
+  and steps down, but other entry points do not.

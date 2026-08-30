@@ -37,7 +37,7 @@ from paper.jsd import (
     signed_residue_contributions,
 )
 from paper.splits import generate_tree_split
-from paper.model_style import model_colors
+from paper.model_style import model_colors, peint_model_name
 import paper_config as cfg
 
 mpl.rcParams["pdf.fonttype"] = 42
@@ -258,6 +258,7 @@ def plot_jsd_boxplot(
     jsd_df: pd.DataFrame,
     output_dir: str,
     filename_stem: str = "figure3_conservation_jsd_boxplot",
+    peint_backbone: str | None = None,
 ) -> None:
     """Distribution of per-family mean JSD, one box per model.
 
@@ -268,10 +269,23 @@ def plot_jsd_boxplot(
     # this boxplot, the structure-metrics ECDFs, PCP mutation counts — matches.
     colors = model_colors()
 
+    # The driver names its PEINT arms by sampling mode, so a run's column is always
+    # "PEINT (Progressive)" whatever backbone produced it. Given the backbone, file that
+    # column under the right canonical name rather than letting it default to ESM2.
+    if peint_backbone is not None and "PEINT (Progressive)" in jsd_df.columns:
+        canon = peint_model_name(peint_backbone)
+        if canon != "PEINT (ESM2)":
+            jsd_df = jsd_df.rename(columns={"PEINT (Progressive)": canon})
+
+    # Which arms exist is a property of the run: one PEINT backbone or both, and whichever
+    # AliSim models were asked for. Plot what is there rather than treating the full list as
+    # expected -- a single-backbone run is normal, not a missing column.
     models = [m for m in BOXPLOT_MODELS if m in jsd_df.columns]
-    missing = [m for m in BOXPLOT_MODELS if m not in jsd_df.columns]
-    if missing:
-        print(f"Note: no JSD columns for {missing}; omitting from the boxplot.")
+    if not models:
+        raise ValueError(
+            f"No plottable model columns. Have {list(jsd_df.columns)}, "
+            f"know {BOXPLOT_MODELS}."
+        )
     plot_df = jsd_df[models].rename(columns=BOXPLOT_LABELS)
 
     fig, ax = plt.subplots(figsize=(2, 3))

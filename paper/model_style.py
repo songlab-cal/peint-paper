@@ -84,6 +84,19 @@ BASE_LM_PAIRS = {
 }
 
 
+def peint_model_name(encoder_backbone):
+    """Canonical display name for a PEINT run on the given encoder backbone.
+
+    The simulation driver names its arms by sampling mode ("PEINT (Progressive)"), not by
+    backbone, and uses the same directory names for every run. The backbone therefore has to
+    come from the checkpoint -- otherwise an ESM-C run is silently labelled ESM2, which is
+    what the "PEINT (Progressive)" alias below would otherwise assume.
+    """
+    if encoder_backbone in ("esmc", "esmc-biohub"):
+        return "PEINT (ESM-C)"
+    return "PEINT (ESM2)"
+
+
 def model_colors(palette=None):
     """Return {model_name -> color} for every canonical name and alias.
 

@@ -58,6 +58,18 @@ scripts/fetch_local_data.py --tier full          # download and unpack them agai
 
 `REPRODUCING.md` covers what redraws, what recomputes, and which figures need a full rerun.
 
+### Caching
+
+Expensive steps — simulations, rate-matrix fits, per-site likelihoods, folding — are cached to
+disk by `protevo.caching` (and `cherryml.caching` for the classical models). A cached call is
+keyed on a hash of its arguments, **including absolute input paths**, so:
+
+- rerunning the same command is instant the second time;
+- a cache copied from another machine never hits, which is why none is distributed;
+- moving your `local_data/` invalidates everything derived from it.
+
+Caches live under `local_data/derived/`. Deleting one costs time, never correctness.
+
 ## Conventions
 
 - **Model colors** come from `paper.model_style` and nowhere else, so a model is the same
