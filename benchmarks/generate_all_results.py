@@ -534,8 +534,12 @@ def main(args):
     if args.include_conservation:
         print("Generating conservation JSD plots aggregated across all families")
         if args.include_3di:
-            write_jsd_boxplots(all_jsd_3di, training_fams_map, os.path.join(results_output_path, "jsd/3di"))
-        write_jsd_boxplots(all_jsd, training_fams_map, os.path.join(results_output_path, "jsd/aa"))
+            write_jsd_boxplots(all_jsd_3di, training_fams_map,
+                               os.path.join(results_output_path, "jsd/3di"),
+                               args.peint_checkpoint_path)
+        write_jsd_boxplots(all_jsd, training_fams_map,
+                           os.path.join(results_output_path, "jsd/aa"),
+                           args.peint_checkpoint_path)
 
     if args.include_plddt:
         print("Generating pLDDT score plots aggregated across all families")
@@ -557,7 +561,7 @@ def main(args):
 AF2_SCORES_TO_PLOT = ["plddt", "rmsd_io", "pae", "composite"]
 
 
-def write_jsd_boxplots(all_jsd, training_fams_map, output_path):
+def write_jsd_boxplots(all_jsd, training_fams_map, output_path, peint_checkpoint_path):
     """Aggregate per-family mean JSD into all / in-family / held-out boxplots.
 
     Reuses the conservation figure's boxplot so the driver and the figure cannot drift.
@@ -573,7 +577,7 @@ def write_jsd_boxplots(all_jsd, training_fams_map, output_path):
     in_family = jsd_df.loc[[f for f in jsd_df.index if training_fams_map[f]]]
     held_out = jsd_df.loc[[f for f in jsd_df.index if not training_fams_map[f]]]
 
-    backbone = peint_encoder_backbone(args.peint_checkpoint_path)
+    backbone = peint_encoder_backbone(peint_checkpoint_path)
     plot_jsd_boxplot(jsd_df, output_path, filename_stem="all", peint_backbone=backbone)
     if not in_family.empty:
         plot_jsd_boxplot(in_family, output_path, filename_stem="in_family",
