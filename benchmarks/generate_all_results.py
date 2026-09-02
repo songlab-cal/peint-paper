@@ -344,6 +344,33 @@ def main(args):
         families = fams["families"]
         in_fams = families  # no split provided: treat everything as in-family
 
+    # Skip families whose simulation inputs are absent rather than dying on the first one.
+    # Training families have transitions but were never given a re-rooted tree, a root
+    # sequence or an empirical MSA, so a family list sampled from the train/test split (as
+    # data/example_families.json once was) would otherwise fail with FileNotFoundError on
+    # family #1 and give the reader no way to tell how many others were affected.
+    _required = {"tree": args.tree_dir, "root sequence": args.root_sequences_dir,
+                 "real sequences": args.real_sequences_dir}
+    _missing = {}
+    for fam in families:
+        absent = [what for what, d in _required.items()
+                  if d and not os.path.exists(os.path.join(d, fam + ".txt"))]
+        if absent:
+            _missing[fam] = absent
+    if _missing:
+        print(f"WARNING: skipping {len(_missing)} of {len(families)} families with no "
+              f"simulation inputs (e.g. {', '.join(list(_missing)[:5])})")
+        for fam, absent in list(_missing.items())[:5]:
+            print(f"    {fam}: missing {', '.join(absent)}")
+        families = [f for f in families if f not in _missing]
+        in_fams = [f for f in in_fams if f not in _missing]
+        if not families:
+            raise SystemExit(
+                "No families left: none of the requested families have simulation inputs. "
+                "The sim/ archive covers the 545 simulation families only, not the training "
+                "families -- check --families_path against local_data/sim/trees_newick."
+            )
+
     print(f"Families to evaluate: {len(families)}")
     training_fams_map = {fam: fam in in_fams for fam in families}
 
