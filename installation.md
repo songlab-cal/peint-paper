@@ -224,10 +224,13 @@ in `protevo-env/bin`, so calling the interpreter directly is not enough).
 **0. Pick families.** Both entry points take the same JSON: `in_family` are families seen in
 training, `held_out_family` are not. This list of families allows you to subset.
 
-`data/example_families.json` is a fixed 20 + 5 subset of the paper's split, ready to use:
+`data/example_families.json` is a fixed set of **five held-out families**, ready to use.
+It is five rather than a larger sample because every family in it must have all three
+simulation inputs in `sim/` (tree, root sequence, empirical MSA), and only the 545
+simulation families do — training families have transitions but were never given them:
 
 ```json
-{"in_family": ["13gs_1_A", "..."], "held_out_family": ["1a2t_1_A", "..."]}
+{"in_family": [], "held_out_family": ["1a2t_1_A", "1acf_1_A", "1amx_1_A", "1aq6_1_A", "1bai_1_A"]}
 ```
 
 **1. Simulate** (`peint-esmc`, GPU). Loads the checkpoint, evolves each

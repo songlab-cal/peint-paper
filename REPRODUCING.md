@@ -97,12 +97,21 @@ in prose so it cannot drift. The shape of it:
 | `r2/omegafold` | `benchmarks/omegafold_peint_esmc.py` |
 | `r2/af2` | `benchmarks/af2rank_peint_esmc.py` |
 | `r1/3di`, `r2/3di` | `benchmarks/threedi_jsd_all_models.py` without `--skip-3di-generation` |
+| `sim` (trees, root sequences, empirical MSAs) | **not regenerable from this repo** — see below |
 | `blast_sequences` | `blastp` against nr, run outside this repo |
 
 The exact rev2 invocation, recovered from its own slurm log, is in the `r2_simulations`
 role's `producer` field — including the checkpoint path and the shard list.
 
 ### Not regenerable from this deposit
+
+- **The simulation inputs** (`sim/`: `trees_newick`, `root_sequences`,
+  `empirical_msas`) come from the upstream 512-leaf simulation setup, which is not part
+  of either public repo — nothing here writes a re-rooted tree or picks a root sequence
+  (`paper/splits.py:generate_tree_split` only *splits* a tree that already exists). The
+  deposit is therefore the only source. It covers the **545 simulation families**; the
+  14,498 training families have transitions but no simulation inputs, so a family list
+  taken from the train/test split cannot be simulated.
 
 - **PEINT checkpoints** now ship in the `full` tier (`peint_checkpoints`, 3.3 GB, four
   files), so a step that simulates or scores is covered by the deposit alone. What is still
