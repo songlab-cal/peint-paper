@@ -40,7 +40,7 @@ FOCUS_LABELS = {"PEINT (Progressive)": "PEINT (ESM2)", "PEINT (ESM-C)": "PEINT (
 # merge — ESM-C is just another frame in the build.
 _ESMC_MAFFT = os.path.join(
     os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR",
-                   os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc")),
+                   str(cfg.RESULTS_R2_DIR)),
     "mafft_add",
 )
 

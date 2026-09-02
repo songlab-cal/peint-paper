@@ -69,7 +69,7 @@ DIRKEY = {
 # revision's seq1 frame, which is revision-independent once threaded -> comparable.
 _R2 = os.environ.get(
     "PEINT_PAPER_ESMC_RESULTS_DIR",
-    os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc"),
+    str(cfg.RESULTS_R2_DIR),
 )
 MODEL_RESULTS_DIR = {m: str(cfg.RESULTS_DIR) for m in MODEL_ORDER}
 MODEL_RESULTS_DIR["PEINT (ESM-C)"] = _R2

@@ -77,7 +77,7 @@ BOXPLOT_LABELS = {
 # in rev2. Add future revisions here and they are picked up automatically.
 _ESMC_MAFFT = os.path.join(
     os.environ.get("PEINT_PAPER_ESMC_RESULTS_DIR",
-                   os.path.join(str(cfg.DATA_ROOT), "local_data", "results_revision2_esmc")),
+                   str(cfg.RESULTS_R2_DIR)),
     "mafft_add",
 )
 EXTRA_REVISION_MODELS = {

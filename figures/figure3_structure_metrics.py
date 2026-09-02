@@ -38,8 +38,8 @@ mpl.rcParams["pdf.fonttype"] = 42
 
 # Revision-1 holds the classical/mixture baselines + PEINT-ESM2 + real; revision-2
 # holds the fresh ESM-C run (per the user, both live under DATA_ROOT/local_data).
-R1 = cfg.DATA_ROOT / "local_data" / "results_revision1"
-R2 = cfg.DATA_ROOT / "local_data" / "results_revision2_esmc"
+R1 = cfg.RESULTS_R1_DIR
+R2 = cfg.RESULTS_R2_DIR
 OUT = cfg.FIGURES_DIR
 
 MODEL_ORDER = [

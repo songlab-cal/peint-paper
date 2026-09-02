@@ -64,8 +64,8 @@ STANDARD_MODELS: List[str] = [
 # The cross-revision model generated here; its boxplot key (matches BOXPLOT_MODELS).
 ESMC_MODEL = "PEINT (ESM-C)"
 
-_R1 = str(cfg.DATA_ROOT / "local_data" / "results_revision1")
-_R2 = str(cfg.DATA_ROOT / "local_data" / "results_revision2_esmc")
+_R1 = str(cfg.RESULTS_R1_DIR)
+_R2 = str(cfg.RESULTS_R2_DIR)
 
 
 def _threedi_dir(sequences_dir: str) -> Dict[str, str]:
@@ -142,7 +142,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--families_path",
-        default=str(cfg.DATA_ROOT / "local_data" / "final_sim_held_out_family.json"),
+        default=str(cfg.HELDOUT_FAMILIES_JSON),
         help="JSON with a 'families' list (the simulation eval set).",
     )
     # Standard (rev1) 3Di annotations, already on disk, one <name>/sequences dir per model.
