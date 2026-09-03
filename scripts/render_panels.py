@@ -55,10 +55,14 @@ class Panel:
 PANELS = [
     # ---------------- main text ----------------
     Panel("figure2_likelihood_eval", "main", "figures.figure2_ll_eval_esmc",
+          from_csv_argv=["--from-csv"],
           outputs=["output/figure2_likelihood_eval_test_esmc.pdf",
                    "output/figure2_likelihood_eval_train_held_out_esmc.pdf"],
-          cost="GPU; ~15 min",
-          note="Needs a GPU and HF_HOME. Reads the peint repo's local_data + _cache_peint."),
+          cost="GPU; ~15 min (or seconds with --from-csv)",
+          note="Recompute needs a GPU, HF_HOME, a checkpoint and the peint_transitions_* "
+               "roles; it reads the peint repo's local_data + _cache_peint. Each run writes "
+               "<stem>.csv, and --from-csv redraws both panels from those tables at the "
+               "figure_data tier with no GPU."),
     # Two entries for one script, because no single env can do both halves: ESM-C generation
     # needs peint-esmc's transformers, OmegaFold lives in protevo-env. The sequence sims are
     # cached, so the folding pass re-reads them instead of rebuilding any model.
