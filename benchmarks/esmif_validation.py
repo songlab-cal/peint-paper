@@ -236,6 +236,44 @@ def run_approach1(families, existing=None, existing_leaf=None):
 # ======================================================================================
 # Approach 2 — self-consistency on OmegaFold structures
 # ======================================================================================
+def a2_model_coverage(df):
+    """(scored, missing) model arms for Approach 2, in MODEL_ORDER."""
+    have = set(df["model"]) if df is not None and len(df) else set()
+    return ([m for m in MODEL_ORDER if m in have],
+            [m for m in MODEL_ORDER if m not in have])
+
+
+def warn_a2_incomplete(df, skipped=None, skipped_root=None):
+    """Say loudly which model arms Approach 2 could not score, and why.
+
+    A2 reads each model's OmegaFold structures from ITS revision's results dir. The seven
+    rev1 arms live in the ``r1_omegafold`` deposit role, which ``MANIFEST.toml`` marks
+    ``panels = []`` and ``REPRODUCING.md`` tells readers they may skip -- so the common
+    failure is that EVERY rev1 arm yields no structures and the panel quietly collapses to
+    the ESM-C arm alone. Left unreported that looks like a finished eight-model comparison.
+    """
+    scored, missing = a2_model_coverage(df)
+    if not missing:
+        return scored, missing
+    bar = "  " + "=" * 74
+    print("\n" + bar)
+    print(f"  WARNING: Approach 2 scored {len(scored)} of {len(MODEL_ORDER)} model arms -- "
+          f"ED5e is INCOMPLETE.")
+    print(f"    scored : {', '.join(scored) or '(none)'}")
+    print(f"    SKIPPED: {', '.join(missing)}")
+    for m in missing:
+        n = (skipped or {}).get(m)
+        root = (skipped_root or {}).get(m)
+        if n:
+            print(f"      {m:<16} no structures for {n} families under {root}/<family>/...")
+    print("    The rev1 arms come from the `r1_omegafold` deposit role. MANIFEST.toml marks it")
+    print("    `panels = []`, which is wrong: this panel needs it. Fetch it with")
+    print("      python scripts/fetch_local_data.py --tier full")
+    print("    (or unpack r1_omegafold.tar.zst into local_data/r1/), then re-run.")
+    print(bar + "\n")
+    return scored, missing
+
+
 def run_approach2(families, existing=None):
     """Self-consistency recovery per (family, model). ``existing`` rows are reused; only the
     missing (family, model) pairs are computed. Each model's OmegaFold structures come from
@@ -245,8 +283,11 @@ def run_approach2(families, existing=None):
     todo = [(f, m) for f in families for m in MODEL_ORDER if (f, m) not in done]
     if not todo:
         print(f"  [A2] all pairs reused; nothing to compute")
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
+        warn_a2_incomplete(df)
+        return df
     print(f"  [A2] computing {len(todo)} (family, model) pairs; reusing {len(done)}")
+    skipped, skipped_root = {}, {}
     esmif.load_model()
     for i, fam in enumerate(families):
         for disp in MODEL_ORDER:
@@ -255,6 +296,11 @@ def run_approach2(families, existing=None):
             sdir = Path(MODEL_RESULTS_DIR[disp]) / "omegafold" / fam / DIRKEY[disp] / "structures"
             pdbs = sorted(glob.glob(str(sdir / "seq*.pdb")))
             if not pdbs:
+                # Not a per-family quirk when it happens to a whole arm: the rev1 models read
+                # the r1_omegafold role, which the deposit marks `panels = []`. Record the
+                # skip so it can be reported instead of silently shrinking the figure.
+                skipped[disp] = skipped.get(disp, 0) + 1
+                skipped_root.setdefault(disp, str(sdir.parents[1]))
                 continue
             if len(pdbs) > STRUCT_CAP:
                 idx = np.unique(np.linspace(0, len(pdbs) - 1, STRUCT_CAP).astype(int))
@@ -274,7 +320,9 @@ def run_approach2(families, existing=None):
             torch.cuda.empty_cache()
         if (i + 1) % 25 == 0:
             print(f"  [A2] {i + 1}/{len(families)} families")
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    warn_a2_incomplete(df, skipped, skipped_root)
+    return df
 
 
 # ======================================================================================
@@ -333,7 +381,7 @@ def _median_table(df, value_col):
     return [(m, float(med[m])) for m in MODEL_ORDER if m in med.index]
 
 
-def write_rebuttal(a1, a2, strat):
+def write_rebuttal(a1, a2, strat, a2_missing=()):
     lines = ["# ESM-IF inverse-folding validation\n",
              "Inverse-folding corroboration of the structural metrics, per reviewer request. ",
              "Two confounds shape interpretation: ESM-IF's training on natural (UniRef50) sequences ",
@@ -346,6 +394,12 @@ def write_rebuttal(a1, a2, strat):
         lines.append(f"- {m:<10} {v:+.3f}{tag}")
     if a2 is not None and len(a2):
         lines.append("\n## Approach 2 — self-consistency on OmegaFold structures (median recovery per model)\n")
+        if a2_missing:
+            lines.append(f"> **INCOMPLETE — {len(MODEL_ORDER) - len(a2_missing)} of "
+                         f"{len(MODEL_ORDER)} model arms.** Not scored: "
+                         f"{', '.join(a2_missing)}. Their OmegaFold structures come from the "
+                         f"`r1_omegafold` deposit role, which is absent here. The values below "
+                         f"are NOT a model comparison and must not be read as one.\n")
         for m, v in _median_table(a2, "recovery"):
             lines.append(f"- {m:<10} {v:.3f}")
     lines.append("\n## Novel vs seen (generalization)\n")
@@ -434,13 +488,18 @@ def main():
         _divergence_plot(a1_leaf, "esmif_approach1_divergence_controlled")
         print("  medians:", _median_table(a1, "ll"))
 
+    a2_missing = ()
     if args.approach in ("2", "both"):
         print("[Approach 2] self-consistency ...")
         a2 = run_approach2(families, existing=a2x)
         if len(a2):
             a2.to_csv(OUT_DIR / "esmif_selfconsistency.csv", index=False)
-            _boxplot(a2, "recovery", "ESM-IF sequence recovery",
-                     "Self-consistency on OmegaFold structures",
+            a2_scored, a2_missing = a2_model_coverage(a2)
+            a2_title = "Self-consistency on OmegaFold structures"
+            if a2_missing:
+                a2_title += (f"\nINCOMPLETE: {len(a2_scored)} of {len(MODEL_ORDER)} model "
+                             f"arms (missing r1_omegafold)")
+            _boxplot(a2, "recovery", "ESM-IF sequence recovery", a2_title,
                      "esmif_approach2_selfconsistency")
             print("  medians:", _median_table(a2, "recovery"))
 
@@ -460,7 +519,7 @@ def main():
             print(f"  [stratify] skipped: {e}")
 
     write_rebuttal(a1 if a1 is not None else pd.DataFrame(),
-                   a2, strat)
+                   a2, strat, a2_missing=a2_missing)
     print(f"Done. Wrote CSVs + figures + REBUTTAL_esmif.md to {OUT_DIR}")
 
 
