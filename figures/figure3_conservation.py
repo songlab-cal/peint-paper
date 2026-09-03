@@ -18,6 +18,7 @@ Run from the repo root, e.g.::
 """
 
 import argparse
+from pathlib import Path
 import os
 from typing import Dict, List
 
@@ -353,6 +354,11 @@ def main() -> None:
         default=str(cfg.FIGURES_DIR),
         help="Where figures and CSVs are written.",
     )
+    parser.add_argument(
+        "--from-csv", "--replot", dest="from_csv", action="store_true",
+        help="Redraw the boxplot from the shipped figure_data table instead of recomputing "
+             "per-family JSD from the mafft_add alignments (~1h45m). Same plotting code.",
+    )
     args = parser.parse_args()
 
     msa_dirs = model_msa_dirs()
@@ -366,7 +372,25 @@ def main() -> None:
         )
         print(f"Wrote logo panel for {args.family} to {args.output_dir}")
 
-    if "boxplot" in args.panels:
+    if "boxplot" in args.panels and args.from_csv:
+        # Replot path: load the table this module itself writes (and which the deposit ships
+        # as figure_data/figure3_conservation_jsd.csv) and hand it to the SAME plotting
+        # function the recompute path uses, so there is one implementation of the figure.
+        stem = "figure3_conservation_jsd.csv"
+        for cand in (Path(cfg.FIGURE_DATA_DIR) / stem, Path(args.output_dir) / stem):
+            if cand.exists():
+                jsd_df = pd.read_csv(cand, index_col=0)
+                print(f"replotting JSD boxplot from {cand} ({len(jsd_df)} families)")
+                os.makedirs(args.output_dir, exist_ok=True)
+                plot_jsd_boxplot(jsd_df, args.output_dir)
+                print(f"Wrote JSD boxplot over {len(jsd_df)} families to {args.output_dir}")
+                break
+        else:
+            raise SystemExit(
+                f"No saved {stem} in {cfg.FIGURE_DATA_DIR} or {args.output_dir}. "
+                f"Fetch the figure_data tier, or omit --from-csv to recompute it."
+            )
+    elif "boxplot" in args.panels:
         families = discover_families(msa_dirs)
         if args.max_families is not None:
             families = families[: args.max_families]

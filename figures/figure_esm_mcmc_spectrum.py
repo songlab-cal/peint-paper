@@ -34,7 +34,21 @@ import matplotlib.pyplot as plt
 import paper_config as cfg
 from paper.plot_style import _set_publication_style
 
-BASE = Path(cfg.FIGURES_DIR) / "esm_mcmc"
+def _base():
+    """Where the five ESM-MCMC result CSVs live.
+
+    The deposit ships them under figure_data/esm_mcmc/; a local rerun of the study writes
+    them under figures/output/esm_mcmc/. Prefer whichever exists so the panel works from the
+    deposit alone -- previously only the latter was consulted, so a fresh unpack died with
+    FileNotFoundError on sweep.csv.
+    """
+    for cand in (Path(cfg.FIGURE_DATA_DIR) / "esm_mcmc", Path(cfg.FIGURES_DIR) / "esm_mcmc"):
+        if (cand / "eval" / "jsd_comparison.csv").exists():
+            return cand
+    return Path(cfg.FIGURES_DIR) / "esm_mcmc"
+
+
+BASE = _base()
 OUT_STEM = Path(cfg.FIGURES_DIR) / "figure_esm_mcmc_spectrum"
 
 # Reference JSD (1a2t) for the spectrum panel's guide lines (from the eval).

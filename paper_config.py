@@ -77,9 +77,19 @@ def _first_existing(*candidates, env=None):
     if env and os.environ.get(env):
         return Path(os.environ[env])
     if LOCAL_DATA_ONLY:
-        for c in candidates:
-            if str(c).startswith(str(LOCAL_DATA)):
+        # Prefer the first deposit-relative candidate that EXISTS, then fall back to the first
+        # one regardless. A role can legitimately have more than one deposit-relative location
+        # -- e.g. the family split lists ship both in the `aux` archive (LOCAL_DATA/splits/)
+        # and inside the figure_data tier (LOCAL_DATA/figure_data/splits/) -- and returning the
+        # first unconditionally made the figure_data tier unusable on its own. Falling back to
+        # candidates[0] preserves the original intent: a genuinely missing input is reported
+        # against the deposit path, not silently resolved to a local tree.
+        under = [c for c in candidates if str(c).startswith(str(LOCAL_DATA))]
+        for c in under:
+            if Path(c).exists():
                 return Path(c)
+        if under:
+            return Path(under[0])
     for c in candidates:
         if Path(c).exists():
             return Path(c)
@@ -209,6 +219,7 @@ TRANSITIONS_DIR = _first_existing(
 NONTRAIN_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
     LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_nontrain_fam.json",
     env="PEINT_PAPER_NONTRAIN_FAMILIES_FILE",
 )
 
@@ -276,6 +287,7 @@ REAL_MSA_DIR = Path(os.environ.get("PEINT_PAPER_REAL_MSA_DIR", str(EMPIRICAL_MSA
 HELDOUT_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "final_sim_held_out_family.txt",
     LOCAL_DATA / "splits" / "final_sim_held_out_family.txt",
+    FIGURE_DATA_DIR / "splits" / "final_sim_held_out_family.txt",
     env="PEINT_PAPER_HELDOUT_FAMILIES_FILE",
 )
 # Same 553 families as HELDOUT_FAMILIES_FILE, in the {"families": [...]} JSON form the
@@ -283,6 +295,7 @@ HELDOUT_FAMILIES_FILE = _first_existing(
 HELDOUT_FAMILIES_JSON = _first_existing(
     DATA_ROOT / "local_data" / "final_sim_held_out_family.json",
     LOCAL_DATA / "splits" / "final_sim_held_out_family.json",
+    FIGURE_DATA_DIR / "splits" / "final_sim_held_out_family.json",
     env="PEINT_PAPER_HELDOUT_FAMILIES_JSON",
 )
 
@@ -299,11 +312,13 @@ HELDOUT_FAMILIES_JSON = _first_existing(
 TRAIN_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_fam.json",
     LOCAL_DATA / "splits" / "14k5_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_fam.json",
     env="PEINT_PAPER_TRAIN_FAMILIES_FILE",
 )
 EVAL_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
     LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_nontrain_fam.json",
     env="PEINT_PAPER_EVAL_FAMILIES_FILE",
 )
 ANNOTATION_DIR = _first_existing(

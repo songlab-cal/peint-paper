@@ -66,6 +66,12 @@ def build_domain_jsd_table(force: bool = False) -> pd.DataFrame:
     cache = Path(cfg.GENERALIZATION_DIR) / "domain_jsd_heldout.csv"
     if cache.exists() and not force:
         return pd.read_csv(cache)
+    # The deposit ships this same table under figure_data/generalization/, so a reader with
+    # only the figure_data tier can still draw the panel. Same downstream plotting code.
+    shipped = Path(cfg.FIGURE_DATA_DIR) / "generalization" / "domain_jsd_heldout.csv"
+    if shipped.exists() and not force:
+        print(f"using shipped per-domain JSD table: {shipped}")
+        return pd.read_csv(shipped)
     cache.parent.mkdir(parents=True, exist_ok=True)
 
     families = gen.eval_families()
@@ -149,6 +155,7 @@ def main() -> None:
         )
         records.append({"model": model, **stat})
     stats = pd.DataFrame(records)
+    Path(cfg.GENERALIZATION_DIR).mkdir(parents=True, exist_ok=True)
     stats.to_csv(Path(cfg.GENERALIZATION_DIR) / "generalization_jsd_domain_stats.csv", index=False)
 
     # paired: families carrying BOTH a novel and a seen domain (same-family difficulty control)

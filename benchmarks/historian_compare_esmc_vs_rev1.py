@@ -15,6 +15,7 @@ ESM2-vs-ESM-C, and saves a 3-panel scatter.
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -76,35 +77,54 @@ def main():
     ap.add_argument("--out_suffix", default="_refine",
                     help="Suffix for output files; defaults to match --esmc_variant.")
     ap.add_argument("--esmc_label", default="PEINT ESM-C")
+    ap.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                    help="Redraw from the shipped figure_data table.")
     args = ap.parse_args()
-    esmc_events = args.esmc_events or esmc_historian_dirs(R2, args.esmc_variant)["events"]
+    # Replot short-circuit, before esmc_historian_dirs() touches the filesystem (see the
+    # matching comment in historian_indel_vs_length.py).
+    _shipped = None
+    if getattr(args, "from_csv", False):
+        for _c in (Path(cfg.FIGURE_DATA_DIR) / f"historian_indel_esmc_vs_rev1{args.out_suffix}.csv",
+                   Path(cfg.FIGURE_DATA_DIR) / "historian_indel_esmc_vs_rev1_refine.csv"):
+            if _c.exists():
+                _shipped = pd.read_csv(_c)
+                print(f"replotting from {_c} ({len(_shipped)} families)")
+                break
+        if _shipped is None:
+            raise SystemExit(
+                f"No shipped historian_indel_esmc_vs_rev1 table under {cfg.FIGURE_DATA_DIR}."
+            )
+    esmc_events = (None if _shipped is not None
+                   else (args.esmc_events or esmc_historian_dirs(R2, args.esmc_variant)["events"]))
     sfx = args.out_suffix
     lbl = args.esmc_label
 
-    families = json.load(open(FAM_JSON))["families"]
-    protevo_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
-    protevo_caching.set_dir_levels(3)
+    # Only the recompute path needs the Historian event tables; --from-csv skips it.
+    if _shipped is None:
+        families = json.load(open(FAM_JSON))["families"]
+        protevo_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
+        protevo_caching.set_dir_levels(3)
 
-    # ESM2 + real counts from rev1 reconstructions (paired with rev1's subtree trees).
-    esm2 = get_all_evolutionary_counts_from_historian_output(
-        sequences_dir=f"{R1}/peint_msa_historian",
-        tree_dir=f"{R1}/real_subtree_historian",
-        families=families, num_processes=16,
-    )["output_events_dir"]
-    real = get_all_evolutionary_counts_from_historian_output(
-        sequences_dir=f"{R1}/real_msa_historian",
-        tree_dir=f"{R1}/real_subtree_historian",
-        families=families, num_processes=16,
-    )["output_events_dir"]
+        # ESM2 + real counts from rev1 reconstructions (paired with rev1's subtree trees).
+        esm2 = get_all_evolutionary_counts_from_historian_output(
+            sequences_dir=f"{R1}/peint_msa_historian",
+            tree_dir=f"{R1}/real_subtree_historian",
+            families=families, num_processes=16,
+        )["output_events_dir"]
+        real = get_all_evolutionary_counts_from_historian_output(
+            sequences_dir=f"{R1}/real_msa_historian",
+            tree_dir=f"{R1}/real_subtree_historian",
+            families=families, num_processes=16,
+        )["output_events_dir"]
 
-    rows = []
-    for f in families:
-        e = indel_events(esmc_events, f)
-        m = indel_events(esm2, f)
-        r = indel_events(real, f)
-        if None not in (e, m, r):
-            rows.append((f, e, m, r))
-    df = pd.DataFrame(rows, columns=["family", "esmc", "esm2", "real"])
+        rows = []
+        for f in families:
+            e = indel_events(esmc_events, f)
+            m = indel_events(esm2, f)
+            r = indel_events(real, f)
+            if None not in (e, m, r):
+                rows.append((f, e, m, r))
+    df = _shipped if _shipped is not None else pd.DataFrame(rows, columns=["family", "esmc", "esm2", "real"])
     os.makedirs(FIG_OUT, exist_ok=True)
     df.to_csv(f"{FIG_OUT}/historian_indel_esmc_vs_rev1{sfx}.csv", index=False)
     print(f"{len(df)} families with counts in all three sources")
@@ -127,6 +147,14 @@ def main():
             d = pd.read_csv(p, usecols=["event_type", "length"])
             out.extend(d.loc[d["event_type"].isin(["insertion", "deletion"]), "length"].values)
         return np.sort(np.asarray(out, dtype=float))
+
+    if _shipped is not None:
+        # Fig 3e (the indel-LENGTH CDF) needs per-event lengths from the Historian event
+        # files; the shipped table is per-family event COUNTS only, so this sub-panel cannot
+        # be redrawn from it. Fig 3d (the count correlations) is complete above.
+        print("--from-csv: skipping the indel-length CDF (needs per-event lengths, not in "
+              "the shipped per-family table); the event-count panels are written")
+        return
 
     _c = model_colors()
     series = [("Real (inferred)", _indel_lengths(real), _c["Real"]),
