@@ -1334,23 +1334,24 @@ def make_spearman_figure():
         palettes_all[1],
     ]
     run_names = {
-        # "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
-        # "peint": {
-        #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        #     "t_wag": None,
-        # },
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {
+            "run_name": "peint_esm2_150m",
+            "t_wag": None,
+        },
         # "peint_optimal_t_per_site": {
         #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_optimal_per_site",
         #     "t_wag": None,
         # },
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        # 650M arm, kept for reference; the captions specify 150M.
+        # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
-    save_path = _fig_path("spearman_agg", "spearman_plot_esm_650m.png")
+    save_path = _fig_path("spearman_agg", "spearman_plot_esm_150m.png")
     return _make_spearman_plot(
         run_names=run_names,
         model_names=model_names,
@@ -1366,7 +1367,7 @@ def make_per_family_spearman_figure():
     run_names_example = {
         "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
         "peint": {
-            "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
+            "run_name": "peint_esm2_150m",
             "t_wag": None,
         },
         # "peint_optimal_t_per_site": {
@@ -1374,7 +1375,7 @@ def make_per_family_spearman_figure():
         #     "t_wag": None,
         # },
         # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        # "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names_example = {
         "esm_150m": "ESM2",
@@ -1469,7 +1470,7 @@ def make_per_family_spearman_time_figure_best_vs_default():
 def make_esm_vs_peint_figure():
     run_names_example = {
         "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names_example = {
         "esm_650m": "ESM2",
@@ -1504,19 +1505,20 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
         palettes_all[1],
     ]
     run_names = {
-        # "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
-        # "peint": {
-        #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        #     "t_wag": None,
-        # },
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {
+            "run_name": "peint_esm2_150m",
+            "t_wag": None,
+        },
+        # 650M arm, kept for reference; the captions specify 150M.
+        # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
-    save_path = _fig_path("mutational_depth", "spearman_by_mutational_depth_esm_650m.png")
+    save_path = _fig_path("mutational_depth", "spearman_by_mutational_depth_esm_150m.png")
     output_dir = VEP_RESULTS_DIR
 
     # Load mutational depth data for all models
