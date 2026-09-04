@@ -49,6 +49,12 @@ def _fig_path(category, filename):
     return out_dir / filename
 
 
+# Assay types in the order the figures present them.
+ASSAY_TYPE_ORDER = [
+    "OrganismalFitness", "Stability", "Expression", "Activity", "Binding",
+]
+
+
 def _paired_bars(df_plot, hue_order, palette, group_size, alpha):
     """Bars grouped into touching sub-groups of ``group_size`` within each assay type.
 
@@ -108,6 +114,12 @@ def _plot_proteingym_spearman_comparision(
     Style is controlled externally via `_set_publication_style()`.
     """
     df_plot = df_results_all.copy()
+    # Assay types read in a fixed, meaningful order rather than order-of-appearance.
+    if "assay_type" in df_plot.columns:
+        present = [a for a in ASSAY_TYPE_ORDER if a in set(df_plot["assay_type"])]
+        present += [a for a in dict.fromkeys(df_plot["assay_type"]) if a not in present]
+        df_plot["assay_type"] = pd.Categorical(df_plot["assay_type"], categories=present, ordered=True)
+        df_plot = df_plot.sort_values("assay_type")
     hue_order = None
     if model_names is not None:
         df_plot = df_plot[df_plot["model"].isin(model_names.keys())]
@@ -1469,16 +1481,16 @@ def make_per_family_spearman_time_figure_best_vs_default():
 
 def make_esm_vs_peint_figure():
     run_names_example = {
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "peint_650m", "t_wag": None},
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {"run_name": "peint_esm2_150m", "t_wag": None},
     }
     model_names_example = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
     assay_type = "OrganismalFitness"
     save_path = _fig_path(
-        "scatter", f"esm_vs_peint_scatter_{assay_type}_esm_650m.png"
+        "scatter", f"esm_vs_peint_scatter_{assay_type}_esm_150m.png"
     )
     return _make_esm_vs_peint_plot(
         run_names=run_names_example,
