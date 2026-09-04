@@ -15,10 +15,10 @@ import argparse
 import json
 import os
 
-from protevo import caching as pc
-from protevo.io import read_tree, write_msa
-from protevo.utils import read_msa
-from protevo.datasets._datasets import find_optimal_edge_split, split_tree_on_edge
+from peint import caching as pc
+from peint.io import read_tree, write_msa
+from peint.utils import read_msa
+from peint.datasets._datasets import find_optimal_edge_split, split_tree_on_edge
 from paper.alignment import run_mafft
 from paper.historian import run_historian
 import paper_config as cfg

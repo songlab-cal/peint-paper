@@ -9,7 +9,7 @@ import os
 import json
 from pathlib import Path
 
-from protevo.vep._vep_utils import (
+from peint.vep._vep_utils import (
     PROTEINGYM_DIR,
     _format_time_dir_suffix,
     _discover_time_dirs,
@@ -30,7 +30,7 @@ apply Illustrator-friendly, publication-ready defaults before plotting.
 """
 
 # Figures and their input data both live inside the peint-paper repo (anchored via
-# __file__), git-committed, so nothing is written to the model (protevo) repo:
+# __file__), git-committed, so nothing is written to the model (peint) repo:
 #   * figures                -> peint-paper/figures/<category>/
 #   * per-run scored results -> peint-paper/local_data/vep/test_lls/production/<run>/spearman_results.csv
 # The ProteinGym family reference (transition pairs) is still read from the model
@@ -1370,7 +1370,7 @@ def make_spearman_figure():
         palette=palettes,
         save_path=save_path,
         figsize=(10, 4),
-        # save_spearman_path=MAIN_DIR / "protevo/vep/figures" / "spearman_results.csv",
+        # save_spearman_path=MAIN_DIR / "peint/vep/figures" / "spearman_results.csv",
     )
 
 
@@ -1643,7 +1643,7 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
 # Official-release baselines + base-vs-PEINT / multi-model comparisons
 # ---------------------------------------------------------------------------
 # Baselines come from ProteinGym's released per-variant zero-shot scores via
-# protevo.vep.official_baselines (the maintained canonical source). Each released
+# peint.vep.official_baselines (the maintained canonical source). Each released
 # column is materialized as an ordinary `test_lls/production/<column>/` run dir so
 # the existing bar machinery (_make_spearman_plot -> side-by-side bars per assay
 # type with SE error bars) works unchanged and any released model can sit next to
@@ -1655,7 +1655,7 @@ def materialize_official_baselines(columns, overwrite=False):
     column (schema `family, assay_type, spearman`), computing all requested columns
     in a single pass over the release. Returns the list of run names (== columns).
     """
-    from protevo.vep.official_baselines import released_zero_shot_spearman
+    from peint.vep.official_baselines import released_zero_shot_spearman
 
     prod = VEP_RESULTS_DIR
     todo = [

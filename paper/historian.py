@@ -18,15 +18,15 @@ from Bio.SeqRecord import SeqRecord
 import pandas as pd
 from ete3 import Tree
 
-from protevo import caching as protevo_caching
-from protevo.caching import secure_parallel_output
-from protevo.io import read_tree, write_msa, write_tree
+from peint import caching as peint_caching
+from peint.caching import secure_parallel_output
+from peint.io import read_tree, write_msa, write_tree
 from paper.alignment import run_mafft
-from protevo.datasets._datasets import (
+from peint.datasets._datasets import (
     find_optimal_edge_split,
     split_tree_on_edge
 )
-from protevo.utils import get_process_args, read_msa
+from peint.utils import get_process_args, read_msa
 
 
 #logging
@@ -337,7 +337,7 @@ def create_summary_statistics(events_df: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg='families',
         output_dirs=['output_tree_dir'],
         exclude_args=['num_processes'],
@@ -529,7 +529,7 @@ def _map_func_prep_for_historian(args):
         with open(os.path.join(output_simulated_tree_dir, f"{family}.txt"), 'w') as f:
             f.write(newick_str)
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg='families',
         output_dirs=['output_real_tree_dir', 'output_real_sequences_dir',
                      'output_simulated_tree_dir', 'output_simulated_sequences_dir'],
@@ -594,7 +594,7 @@ def prepare_simulated_vs_real_historian(
             )
         )
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg = 'families',
         output_dirs = ['output_sequences_dir', 'output_tree_dir'],
         exclude_args = ['num_processes'],
@@ -664,7 +664,7 @@ def prepare_sequences_for_historian(
         with open(output_tree_file, 'w') as f:
             f.write(newick_str)
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg = 'families',
         exclude_args_if_default = ['dummy_branch_length'],
         exclude_args = ['num_processes'],
@@ -755,7 +755,7 @@ def _map_func_run_historian(args):
         #should be written already to file, but check
         secure_parallel_output(output_sequences_dir, family)
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg = 'families',
         exclude_args = ['num_processes'],
         output_dirs = ['output_sequences_dir'],
@@ -987,7 +987,7 @@ def remove_dummy_nodes_from_msa(msa: Dict[str, str]) -> Dict[str, str]:
     
     return cleaned_msa
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg = 'families',
         exclude_args = ['num_processes'],
         output_dirs = ['output_sequences_dir'],
@@ -1126,7 +1126,7 @@ def _map_func_historian_count_events(args):
             json.dump(good_json, f, indent=4)
     
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg = 'families',
         exclude_args = ['num_processes'],
         output_dirs = ['output_counts_dir'],
@@ -1341,7 +1341,7 @@ def _map_func_get_full_counts_historian(args):
         # Write the summary DataFrame to a file
         summary_df.to_csv(output_file, index=False)
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
         parallel_arg='families',
         exclude_args=['num_processes'],
         output_dirs=['output_events_dir'],
@@ -1403,7 +1403,7 @@ def esmc_historian_dirs(r2_root, variant: str = "refine") -> Dict[str, str]:
 
         <r2_root>/historian_esmc/<variant>/{events,reconstructions}
 
-    Falling back to the protevo content-hash cache, whose paths carry no label — there
+    Falling back to the peint content-hash cache, whose paths carry no label — there
     the two runs are told apart by the mtime of the cached output directory. Each run
     wrote its reconstructions and then its event tables within a minute of each other,
     and the two runs are a day apart, so pairing the directories in time order gives

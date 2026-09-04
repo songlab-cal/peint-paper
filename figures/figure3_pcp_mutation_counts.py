@@ -14,11 +14,11 @@ import pandas as pd
 from ete3 import Tree
 from cherryml import caching as cherryml_caching
 
-from protevo.utils import read_msa
-from protevo.io import read_tree, write_msa
-from protevo.simulation import simulate_alisim_evolution_subtree
-from protevo.simulation._alisim import _UDM_NEX_PATH
-from protevo import caching as protevo_caching
+from peint.utils import read_msa
+from peint.io import read_tree, write_msa
+from peint.simulation import simulate_alisim_evolution_subtree
+from peint.simulation._alisim import _UDM_NEX_PATH
+from peint import caching as peint_caching
 
 from paper.alignment import run_mafft_add
 from paper.historian import esmc_historian_dirs
@@ -32,10 +32,10 @@ import paper_config as cfg
 # match_branches, which several benchmarks do) never depends on the rev2 data being present.
 def esmc_recon_dir():
     return esmc_historian_dirs(cfg.RESULTS_R2_DIR, "refine")["reconstructions"]
-# Models whose trees are in the protevo (read_tree) format rather than AliSim .full.treefile.
+# Models whose trees are in the peint (read_tree) format rather than AliSim .full.treefile.
 _PROTEVO_TREE_MODELS = ("PEINT", "PEINT_ESMC")
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     exclude_args=["num_processes"],
     output_dirs=[
@@ -573,7 +573,7 @@ def _writable_out(base, name):
 
     The data trees are inputs for everyone except the machine that produced them, and a
     published/shared copy is read-only. Deciding on ``os.access(W_OK)`` rather than a config
-    flag keeps the producing machine bit-identical -- same output path, so every protevo
+    flag keeps the producing machine bit-identical -- same output path, so every peint
     cache key stays warm -- while a read-only mirror diverts the writes instead of raising.
     """
     shipped = Path(base) / name
@@ -623,8 +623,8 @@ def _run_full_pipeline():
     # benchmark to one working directory: run it from anywhere else and the AliSim /
     # mafft-add / copy_gap_pattern cache missed and everything recomputed.
     protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
-    protevo_caching.set_log_level(9)
-    protevo_caching.set_dir_levels(3)
+    peint_caching.set_log_level(9)
+    peint_caching.set_dir_levels(3)
 
     cherryml_caching.set_cache_dir(str(cfg.CHERRYML_CACHE_DIR))
     cherryml_caching.set_log_level(9)
@@ -863,7 +863,7 @@ def _run_full_pipeline():
                         model_dirs[model]['tree'],
                         family + '.txt'
                     )
-                ).to_ete3() #we save sim trees in the protevo tree format
+                ).to_ete3() #we save sim trees in the peint tree format
             else:
                 sim_tree = Tree(
                     os.path.join(

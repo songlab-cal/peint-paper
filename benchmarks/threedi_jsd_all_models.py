@@ -43,7 +43,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
+from peint import caching as peint_caching
 
 from paper.jsd import REAL, REAL_OTHER_SPLIT, family_jsd
 from paper.splits import generate_tree_split
@@ -198,8 +198,8 @@ def main() -> None:
         )
 
     protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_log_level(9)
-    protevo_caching.set_dir_levels(3)
+    peint_caching.set_log_level(9)
+    peint_caching.set_dir_levels(3)
     cherryml_caching.set_cache_dir("_cache_benchmarking")
     cherryml_caching.set_log_level(9)
     cherryml_caching.set_dir_levels(3)

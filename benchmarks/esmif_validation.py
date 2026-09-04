@@ -48,7 +48,7 @@ import paper_config as cfg
 from paper import esmif
 from paper.generalization import eval_families
 from paper.splits import generate_tree_split, SPLIT_A, SPLIT_B
-from protevo.utils import read_msa, gap_character
+from peint.utils import read_msa, gap_character
 from figures.figure3_conservation import model_msa_dirs
 
 # --- models: same order/labels/colors as the JSD figure (figure3_conservation.BOXPLOT_MODELS /

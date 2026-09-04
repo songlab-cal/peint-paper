@@ -39,8 +39,8 @@ import sys
 from pathlib import Path
 
 import paper_config as cfg
-from protevo.io import read_tree
-from protevo.utils import read_msa, write_msa
+from peint.io import read_tree
+from peint.utils import read_msa, write_msa
 
 # Base output dir; the per-run dirs live under a mode subdir (esm_mcmc/<target_mode>/...) so an
 # "attempts" baseline and a "hamming" calibration run never clobber each other. Set in main().

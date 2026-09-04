@@ -27,8 +27,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from ete3 import Tree
 
-from protevo.io import read_tree
-from protevo.utils import read_msa
+from peint.io import read_tree
+from peint.utils import read_msa
 from paper.historian import esmc_historian_dirs
 from paper.model_style import model_colors
 import paper_config as cfg

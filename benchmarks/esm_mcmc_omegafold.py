@@ -26,9 +26,9 @@ import pandas as pd
 import biotite.structure.io as bsio
 
 import paper_config as cfg
-from protevo import caching as protevo_caching
+from peint import caching as peint_caching
 from cherryml import caching as cherryml_caching
-from protevo.utils import read_msa, write_msa
+from peint.utils import read_msa, write_msa
 from paper.structure_prediction import generate_omegafold_predictions
 
 OG = Path(cfg.RESULTS_DIR) / "omegafold"

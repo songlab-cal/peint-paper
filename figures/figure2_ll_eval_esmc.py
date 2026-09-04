@@ -53,15 +53,15 @@ import seaborn as sns
 from tqdm import tqdm
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
-from protevo.evaluation import (
+from peint import caching as peint_caching
+from peint.evaluation import (
     evaluate_peint_model_transitions_log_likelihood__cached,
 )
-from protevo.io import (
+from peint.io import (
     read_transitions,
     read_transitions_log_likelihood_per_site,
 )
-from protevo.utils import (
+from peint.utils import (
     get_quantile_idx,
     get_quantization_points_from_geometric_grid,
 )
@@ -69,7 +69,7 @@ from protevo.utils import (
 import paper_config as cfg
 from paper.model_style import model_colors
 
-# The peint repo ships the data and the _cache_peint cache alongside the protevo
+# The peint repo ships the data and the _cache_peint cache alongside the peint
 # package, so it is resolved from the installed package rather than hardcoded.
 PEINT_REPO = str(cfg.PEINT_REPO)
 
@@ -231,7 +231,7 @@ def compute_baseline_per_site_dir(name, families, families_train, num_processes)
     aligned/train_transitions_dir (LG additionally on train_site_rates_4cat_dir), then scored
     on the held-out test transitions. Cached like everything else, so this is paid once.
     """
-    from protevo import models
+    from peint import models
 
     num_processes = usable_mpi_processes(num_processes)
 
@@ -452,12 +452,12 @@ def main():
                                  os.path.join(args.out_dir, stem + ".pdf"), label)
         return
 
-    protevo_caching.set_cache_dir(CACHE_DIR)
+    peint_caching.set_cache_dir(CACHE_DIR)
     # cherryml has its own cache, and fitting the WAG/LG rate matrices goes through it. Without
     # this its cached functions hand back None output dirs and training dies in os.stat.
     cherryml_caching.set_cache_dir(CHERRYML_CACHE_DIR)
     cherryml_caching.set_read_only(False)
-    protevo_caching.set_read_only(False)
+    peint_caching.set_read_only(False)
 
     if args.families_path:
         # Same JSON convention as benchmarks/generate_all_results --families_path:

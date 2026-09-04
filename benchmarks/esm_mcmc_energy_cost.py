@@ -76,7 +76,7 @@ def family_acceptances(fam: str, lam: float) -> dict:
     from paper import esmif  # applies the biotite shim before invf import
     import esm.inverse_folding as invf
     from paper import esm_mcmc
-    from protevo.utils import read_msa
+    from peint.utils import read_msa
 
     root_seq = next(iter(read_msa(os.path.join(str(cfg.ROOT_SEQ_DIR), f"{fam}.txt")).values()))
     coords, gt_seq = invf.util.load_coords(

@@ -130,7 +130,7 @@ note = "Per-panel tables. The whole replot tier, ~5 MB packed."
 
 [[role]]
 name = "vep"
-producer = "protevo.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The VEP checkpoints ship in peint_checkpoints.tar.zst; the raw per-variant scoring output behind these tables is not redistributed."
+producer = "peint.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The VEP checkpoints ship in peint_checkpoints.tar.zst; the raw per-variant scoring output behind these tables is not redistributed."
 path = "vep"
 source = "{repo_root}/local_data/vep"
 tier = "figure_data"
@@ -246,7 +246,7 @@ blocks_mb = 2365
 apparent_mb = 9348
 files = 22919
 panels = ["pcp_panels", "historian_indel_vs_length", "historian_indel_esmc_vs_rev1"]
-note = """Carries the ESM-C Historian outputs in their protevo content-hash form under
+note = """Carries the ESM-C Historian outputs in their peint content-hash form under
 historian_progressive/_cache/; paper.historian.esmc_historian_dirs resolves the refine and
 norefine runs out of it by mtime. Both variants are kept so that comparison stays checkable."""
 
@@ -619,7 +619,7 @@ declared because it is the only copy and it is easy to lose track of."""
 
 [[role]]
 name = "peint_cache"
-producer = "protevo's evaluate_peint_model_* cached computations, in the peint repo"
+producer = "peint's (formerly protevo) evaluate_peint_model_* cached computations, in the peint repo"
 path = "peint/_cache_peint"
 source = "{peint_repo}/_cache_peint"
 tier = "on_request"
@@ -627,7 +627,7 @@ blocks_mb = 5164
 apparent_mb = 5164
 files = 0
 panels = ["figure2_likelihood_eval"]
-note = """Cached per-site likelihood evaluations in the peint repo. protevo cache keys are a
+note = """Cached per-site likelihood evaluations in the peint repo. peint cache keys are a
 sha512 over absolute argument paths, so this is only valid in place -- it cannot be relocated
 or shared, which is why figure2_likelihood_eval is replot-only for everyone else."""
 

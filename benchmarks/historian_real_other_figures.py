@@ -20,7 +20,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
-from protevo import caching as pc
+from peint import caching as pc
 from paper.historian import get_all_evolutionary_counts_from_historian_output as gac
 from paper.model_style import model_colors
 import paper_config as cfg

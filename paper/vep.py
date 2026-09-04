@@ -81,7 +81,7 @@ def released_depth_spearman(column, families=None, max_len=1022):
     PEINT evaluation (skips target sequences > 1022).
     """
     import scipy.stats
-    from protevo.vep.official_baselines import RELEASED_SCORES_DIR, DMS_REFERENCE
+    from peint.vep.official_baselines import RELEASED_SCORES_DIR, DMS_REFERENCE
 
     ref = pd.read_csv(DMS_REFERENCE).set_index("DMS_id")
     ids = list(ref.index) if families is None else [f for f in families if f in ref.index]

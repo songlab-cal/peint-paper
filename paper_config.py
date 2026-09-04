@@ -19,14 +19,14 @@ REPO_ROOT = Path(__file__).resolve().parent
 def _peint_repo_root() -> Path:
     """Root of the installed ``peint`` checkout, which ships the model checkpoints.
 
-    Resolved from the installed ``protevo`` package rather than assuming a sibling
+    Resolved from the installed ``peint`` package rather than assuming a sibling
     directory, so it works wherever ``pip install -e`` pointed. Uses ``find_spec`` to
     avoid importing (and thus loading torch) at config-import time.
     """
-    spec = importlib.util.find_spec("protevo")
+    spec = importlib.util.find_spec("peint")
     if spec is None or not spec.origin:
         raise ImportError(
-            "Cannot locate the installed 'protevo' package. Install peint first: "
+            "Cannot locate the installed 'peint' package. Install peint first: "
             "pip install -e /path/to/peint"
         )
     return Path(spec.origin).resolve().parent.parent
@@ -64,7 +64,7 @@ def _first_existing(*candidates, env=None):
     One config has to serve two layouts: this machine, where these inputs sit in scattered
     absolute trees, and an unpacked data deposit, where everything lives under LOCAL_DATA.
     The authoritative tree is listed first so the producing machine keeps resolving to the
-    exact same string -- protevo cache keys hash absolute argument paths, and a "harmless"
+    exact same string -- peint cache keys hash absolute argument paths, and a "harmless"
     reordering here would cold-start every cached computation.
 
     Under LOCAL_DATA_ONLY the first candidate *under LOCAL_DATA* wins whether or not it

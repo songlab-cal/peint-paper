@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import jensenshannon
 
-from protevo.utils import amino_acids, gap_character, read_msa
+from peint.utils import amino_acids, gap_character, read_msa
 
 from paper.splits import REAL, REAL_OTHER_SPLIT, SPLIT_A, SPLIT_B, filter_msa_based_on_split
 

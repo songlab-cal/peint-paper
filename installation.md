@@ -3,7 +3,7 @@
 Three things to do: clone both repos, build two conda environments, get the data.
 Then see [Reproducing figures](#reproducing-figures) for what you can run at each tier.
 
-The models live in the separate [`peint`](../peint) repo and are imported here as `protevo`.
+The models live in the separate [`peint`](../peint) repo and are imported here as `peint`.
 Two environments are needed because ESM-C and the folding stack (OmegaFold, JAX/AF2Rank,
 ProstT5) require incompatible `transformers` versions.
 
@@ -81,7 +81,7 @@ Verify — torch and JAX must both see the GPU in one process:
 python - <<'EOF'
 import torch;  print("torch", torch.__version__, torch.cuda.is_available())
 import jax;    print("jax", jax.__version__, jax.devices())   # expect [CudaDevice(id=0)]
-import protevo, omegafold, colabdesign, esm, torch_geometric
+import peint, omegafold, colabdesign, esm, torch_geometric
 from transformers import T5EncoderModel
 print("ok")
 EOF
@@ -329,7 +329,7 @@ recognized` — that means cache miss, not a broken install.
 
 - `biotite>=1.0` renamed `filter_backbone`, which `fair-esm` 2.0.0 imports at load.
   `paper/esmif.py` shims it; do the same if you import `esm.inverse_folding` yourself.
-- protevo cache keys hash absolute input paths, so a cache copied from another machine
+- peint cache keys hash absolute input paths, so a cache copied from another machine
   never hits. This is why `pcp_panels` is cold unless you built its cache in place.
 - Flash Attention wheel failures: see `../peint/installation.md`.
 - The classical baselines are fit through cherryml, which shells out to `mpirun`. Asking for

@@ -27,7 +27,7 @@ matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
-from protevo import caching as protevo_caching
+from peint import caching as peint_caching
 from paper.historian import (
     esmc_historian_dirs,
     get_all_evolutionary_counts_from_historian_output,
@@ -102,8 +102,8 @@ def main():
     # Only the recompute path needs the Historian event tables; --from-csv skips it.
     if _shipped is None:
         families = json.load(open(FAM_JSON))["families"]
-        protevo_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
-        protevo_caching.set_dir_levels(3)
+        peint_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
+        peint_caching.set_dir_levels(3)
 
         # ESM2 + real counts from rev1 reconstructions (paired with rev1's subtree trees).
         esm2 = get_all_evolutionary_counts_from_historian_output(

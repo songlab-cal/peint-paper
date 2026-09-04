@@ -161,7 +161,7 @@ derived from them are here, and the public ProteinGym release they come from is 
 source.
 
 The only other thing left out is the model repo's evaluation cache (`_cache_peint`), and that
-is a warm-start rather than an input: protevo keys a cached computation on a hash of its
+is a warm-start rather than an input: peint keys a cached computation on a hash of its
 arguments *including absolute input paths*, so a copy is only ever valid at the path where it
 was built — shipping it would be shipping something inert. The Figure 2 likelihood panel runs
 without it, recomputing from the transitions above; the cache only makes it faster.

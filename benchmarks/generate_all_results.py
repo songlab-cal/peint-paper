@@ -45,14 +45,14 @@ import numpy as np
 import pandas as pd
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
-from protevo.simulation import simulate_alisim_evolution, simulate_peint_evolution_down_tree
-from protevo.simulation._alisim import (
+from peint import caching as peint_caching
+from peint.simulation import simulate_alisim_evolution, simulate_peint_evolution_down_tree
+from peint.simulation._alisim import (
     MODEL_DEFINITIONS as ALISIM_MODEL_DEFINITIONS,
     PRIOR_MODE_SUPPORTED_MODELS,
     ALISIM_MODES,
 )
-from protevo.utils import read_msa, write_msa
+from peint.utils import read_msa, write_msa
 
 from paper.alignment import clean_msa, run_mafft, run_mafft_add
 from paper.jsd import REAL, REAL_OTHER_SPLIT, family_jsd
@@ -326,8 +326,8 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
 
 def main(args):
     protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_log_level(9)
-    protevo_caching.set_dir_levels(3)
+    peint_caching.set_log_level(9)
+    peint_caching.set_dir_levels(3)
 
     cherryml_caching.set_cache_dir("_cache_benchmarking")
     cherryml_caching.set_log_level(9)

@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 import paper_config as cfg
-from protevo.utils import read_msa, write_msa, gap_character
+from peint.utils import read_msa, write_msa, gap_character
 from paper.splits import generate_tree_split
 
 MCMC_MODEL = "ESM-MCMC"

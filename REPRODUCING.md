@@ -69,7 +69,7 @@ shipped artifacts, and re-running them is section 3.
 ### The one panel that is genuinely cold
 
 `pcp_panels` re-runs AliSim over ~500 families × 3 models unless it finds a warm cache.
-The caches are deliberately **not** distributed: protevo keys a cached computation on a
+The caches are deliberately **not** distributed: peint keys a cached computation on a
 sha512 of its arguments *including absolute input paths*, so a cache is only valid at the
 path where it was built. Copying one elsewhere produces a directory that will never be hit.
 
@@ -164,7 +164,7 @@ The simulations need the ESM-C stack and the folding needs the JAX stack, and no
 has both — which works because what crosses the boundary is **sequences in text files, not
 models**. The folding benchmarks never construct a PEINT model; they read the simulated
 sequences off disk. The one exception is `figure2_simulation`, which is the same script run
-twice and joined by protevo's computation cache: the model load sits *inside* the cached
+twice and joined by peint's computation cache: the model load sits *inside* the cached
 function, so on a cache hit it is never reached. `installation.md` has the full account,
 including the one failure mode worth recognising — a cache miss in the folding pass surfaces
 as `model type 'esmc' not recognized`, which means *miss*, not *broken install*.

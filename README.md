@@ -1,7 +1,7 @@
 # peint-paper
 
 Figures and benchmarks for the PEINT paper. The models live in the separate
-[`peint`](../peint) repo and are imported here as `protevo`.
+[`peint`](../peint) repo and are imported here as `peint`.
 
 **Start with [`installation.md`](installation.md)** — clone, two conda environments, data,
 and the three tiers of reproduction (replot / recompute / rerun from a checkpoint).
@@ -61,7 +61,7 @@ scripts/fetch_local_data.py --tier full          # download and unpack them agai
 ### Caching
 
 Expensive steps — simulations, rate-matrix fits, per-site likelihoods, folding — are cached to
-disk by `protevo.caching` (and `cherryml.caching` for the classical models). A cached call is
+disk by `peint.caching` (and `cherryml.caching` for the classical models). A cached call is
 keyed on a hash of its arguments, **including absolute input paths**, so:
 
 - rerunning the same command is instant the second time;

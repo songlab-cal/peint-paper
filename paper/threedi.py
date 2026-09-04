@@ -1,6 +1,6 @@
 """3Di structural-state annotation with ProstT5.
 
-Ported from the model repo's ``protevo/datasets/_3di.py``. ProstT5 is a *benchmarking*
+Ported from the model repo's ``peint/datasets/_3di.py``. ProstT5 is a *benchmarking*
 dependency (transformers + sentencepiece), not part of the ``peint`` model library.
 
 Two sets of weights are involved and they come from different places: the ProstT5 encoder
@@ -28,9 +28,9 @@ import multiprocessing
 import tqdm
 from Bio import SeqIO
 from transformers import T5EncoderModel, T5Tokenizer
-from protevo import caching as protevo_caching
-from protevo.caching import secure_parallel_output
-from protevo.utils import get_process_args, read_msa, write_msa
+from peint import caching as peint_caching
+from peint.caching import secure_parallel_output
+from peint.utils import get_process_args, read_msa, write_msa
 
 import paper_config as cfg
 
@@ -406,7 +406,7 @@ def _generate_3di_annotations(map_args):
         secure_parallel_output(out_path, family)
         secure_parallel_output(probs_path, family)
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     exclude_args=["num_processes", "input_is_aligned"],
     output_dirs=[

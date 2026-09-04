@@ -32,10 +32,10 @@ import seaborn as sns
 import torch
 from scipy.stats import pearsonr
 
-from protevo import caching as protevo_caching
-from protevo.io import read_transitions
-from protevo.simulation import load_model
-from protevo.time_mle.t_mle import estimate_transition_times
+from peint import caching as peint_caching
+from peint.io import read_transitions
+from peint.simulation import load_model
+from peint.time_mle.t_mle import estimate_transition_times
 
 import paper_config as cfg
 
@@ -267,7 +267,7 @@ def main() -> None:
         )
 
     protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_read_only(False)
+    peint_caching.set_read_only(False)
 
     device = torch.device("cuda")
     checkpoint = args.checkpoint or str(cfg.require(cfg.PEINT_CHECKPOINT))
