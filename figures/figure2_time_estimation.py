@@ -266,7 +266,7 @@ def main() -> None:
             "Figure 2 time estimation requires a GPU: every panel needs PEINT forward passes."
         )
 
-    protevo_caching.set_cache_dir("_cache_protevo")
+    peint_caching.set_cache_dir("_cache_peint")
     peint_caching.set_read_only(False)
 
     device = torch.device("cuda")

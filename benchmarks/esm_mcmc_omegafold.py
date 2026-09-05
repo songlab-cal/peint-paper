@@ -81,7 +81,7 @@ def main():
     args = ap.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cherryml_caching.set_cache_dir("_cache_cherryml"); cherryml_caching.set_read_only(False)
-    protevo_caching.set_cache_dir("_cache_protevo"); protevo_caching.set_read_only(False)
+    peint_caching.set_cache_dir("_cache_peint"); peint_caching.set_read_only(False)
 
     families = args.families or sorted(f[:-4] for f in os.listdir(SEQ_DIR) if f.endswith(".txt"))
     print(f"OmegaFold pLDDT on ESM-MCMC leaves | {len(families)} families | shared leaf set from '{REF_MODEL}'")

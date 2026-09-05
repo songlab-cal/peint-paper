@@ -49,7 +49,7 @@ fi
 # is worthless anywhere but where it was built -- which is why they are appended here rather
 # than declared in the manifest.
 DATA_ROOT="${PEINT_PAPER_DATA_ROOT:-/scratch/users/akoehl/protein-evolution}"
-LINKS+=$'\n'"derived/_cache_protevo|$DATA_ROOT/_cache_protevo"
+LINKS+=$'\n'"derived/_cache_peint|$DATA_ROOT/_cache_peint"
 LINKS+=$'\n'"derived/_cache_benchmarking|$DATA_ROOT/_cache_benchmarking"
 
 rc=0

@@ -325,7 +325,7 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
 
 
 def main(args):
-    protevo_caching.set_cache_dir("_cache_protevo")
+    peint_caching.set_cache_dir("_cache_peint")
     peint_caching.set_log_level(9)
     peint_caching.set_dir_levels(3)
 

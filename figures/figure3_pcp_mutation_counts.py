@@ -622,7 +622,7 @@ def _run_full_pipeline():
     # Absolute, from config. These used to be relative, which silently tied the whole
     # benchmark to one working directory: run it from anywhere else and the AliSim /
     # mafft-add / copy_gap_pattern cache missed and everything recomputed.
-    protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
+    peint_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
     peint_caching.set_log_level(9)
     peint_caching.set_dir_levels(3)
 

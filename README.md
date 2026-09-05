@@ -20,7 +20,7 @@ scripts/render_panels.py --only vep_params
 ```
 
 Each panel is run with the interpreter its environment needs, so set `PEINT_PAPER_PY_ESMC`
-and `PEINT_PAPER_PY_PROTEVO` first. Prerequisites resolve automatically — asking for the
+and `PEINT_PAPER_PY_PEINT` first. Prerequisites resolve automatically — asking for the
 novel-vs-seen OmegaFold panel runs the pLDDT ECDF that writes its input.
 
 ## Data

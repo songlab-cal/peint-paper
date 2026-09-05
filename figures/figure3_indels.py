@@ -24,7 +24,7 @@ import paper_config as cfg
 if __name__ == "__main__":
     num_processes = 20
 
-    protevo_caching.set_cache_dir("_cache_protevo")
+    peint_caching.set_cache_dir("_cache_peint")
     peint_caching.set_read_only(False)  # remove this line when training a new model
     peint_caching.set_log_level(9)
 

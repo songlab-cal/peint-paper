@@ -12,7 +12,7 @@ records how a panel is produced, which conda env it needs, and what it writes, s
     scripts/render_panels.py --check                   # just report what is missing
 
 Two conda envs are involved and they cannot share a process, so every panel is run as a
-subprocess with an explicit interpreter. Point PEINT_PAPER_PY_ESMC / PEINT_PAPER_PY_PROTEVO
+subprocess with an explicit interpreter. Point PEINT_PAPER_PY_ESMC / PEINT_PAPER_PY_PEINT
 at them; they default to the current interpreter, which is right only if it happens to
 satisfy the panel's requirements.
 """
@@ -32,7 +32,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # AliSim/MAFFT (the PCP panels) or the Historian event counter.
 PY = {
     "esmc": os.environ.get("PEINT_PAPER_PY_ESMC", sys.executable),
-    "protevo": os.environ.get("PEINT_PAPER_PY_PROTEVO", sys.executable),
+    "peint": os.environ.get("PEINT_PAPER_PY_PEINT", sys.executable),
 }
 
 
@@ -64,7 +64,7 @@ PANELS = [
                "<stem>.csv, and --from-csv redraws both panels from those tables at the "
                "figure_data tier with no GPU."),
     # Two entries for one script, because no single env can do both halves: ESM-C generation
-    # needs peint-esmc's transformers, OmegaFold lives in protevo-env. The sequence sims are
+    # needs peint-esmc's transformers, OmegaFold lives in peint-env. The sequence sims are
     # cached, so the folding pass re-reads them instead of rebuilding any model.
     Panel("figure2_simulation_generate", "main", "figures.figure2_simulation",
           argv=["--skip-structures"], env="esmc",
@@ -73,11 +73,11 @@ PANELS = [
           note="Star-topology simulation from one sequence: both PEINT backbones + WAG + LG. "
                "Needs a GPU and Historian. Populates the sequence cache the folding pass reads."),
     Panel("figure2_simulation_plddt", "main", "figures.figure2_simulation",
-          env="protevo",
+          env="peint",
           outputs=["output/figure2_simulation_plddt.pdf"],
           depends_on=["figure2_simulation_generate"],
           cost="GPU; ~1.5 h (folds ~1200 structures)",
-          note="OmegaFold pLDDT vs time. Must run in protevo-env (the only env with omegafold); "
+          note="OmegaFold pLDDT vs time. Must run in peint-env (the only env with omegafold); "
                "the sequence sims are cache hits here, so no ESM-C model is constructed."),
     Panel("figure3_af2rank_ecdf", "main", "figures.figure3_structure_metrics",
           argv=["--panels", "af2"],
@@ -98,25 +98,25 @@ PANELS = [
           note="Needs logomaker."),
 
     # ---------------- extended data ----------------
-    Panel("pcp_panels", "extended", "figures.figure3_pcp_mutation_counts", env="protevo",
+    Panel("pcp_panels", "extended", "figures.figure3_pcp_mutation_counts", env="peint",
           outputs=["output/parent_child_pairs_all_models.pdf",
                    "output/back_mutation_and_root_leaf.pdf",
                    "output/per_family_median_mutation_rate_all_models.pdf"],
           cost="~30-45 min warm, or ~20 s with --from-csv",
           from_csv_argv=["--replot"],
-          note="Needs iqtree2 + MAFFT on PATH. Warm only if PEINT_PAPER_PROTEVO_CACHE_DIR / "
+          note="Needs iqtree2 + MAFFT on PATH. Warm only if PEINT_PAPER_PEINT_CACHE_DIR / "
                "PEINT_PAPER_CHERRYML_CACHE_DIR point at prebuilt caches; cold it re-runs AliSim. "
                "--from-csv redraws from the saved aggregation tables instead."),
     Panel("historian_indel_esmc_vs_rev1", "extended", "benchmarks.historian_compare_esmc_vs_rev1",
-          env="protevo",
+          env="peint",
           outputs=["output/historian_indel_esmc_vs_rev1_refine.pdf",
                    "output/historian_indel_length_cdf_refine.pdf"],
           cost="~5 min"),
     Panel("historian_indel_vs_length", "extended", "benchmarks.historian_indel_vs_length",
-          env="protevo",
+          env="peint",
           outputs=["output/historian_indel_vs_length.pdf"], cost="~5 min"),
     Panel("threedi_jsd_boxplot", "extended", "benchmarks.threedi_jsd_all_models",
-          argv=["--skip-3di-generation"], env="protevo",
+          argv=["--skip-3di-generation"], env="peint",
           from_csv_argv=["--from-csv"],
           outputs=["output/esmc_summary/conservation_jsd_3di_boxplot.pdf"],
           cost="~30-60 min",
@@ -139,12 +139,12 @@ PANELS = [
                "families and sequence hit-rate behind it, because most classical-simulator "
                "sequences have no hit at all; blast_similarity_coverage.csv has the raw counts."),
     Panel("esmif_validation", "extended", "benchmarks.esmif_validation",
-          argv=["--approach", "both"], env="protevo",
+          argv=["--approach", "both"], env="peint",
           outputs=["output/esmif/esmif_approach1_gt_likelihood.pdf",
                    "output/esmif/esmif_approach1_divergence_controlled.pdf",
                    "output/esmif/esmif_approach2_selfconsistency.pdf"],
           cost="GPU; minutes if the CSVs are complete, ~2 h cold",
-          note="Inverse-folding validation. Needs protevo-env (torch_geometric + fair-esm). "
+          note="Inverse-folding validation. Needs peint-env (torch_geometric + fair-esm). "
                "Reuses esmif_gt_likelihood{,_perleaf}.csv and esmif_selfconsistency.csv, "
                "recomputing only (family, model) pairs missing from BOTH tables."),
     Panel("esm_mcmc_spectrum", "extended", "figures.figure_esm_mcmc_spectrum",
@@ -248,7 +248,7 @@ def run(panel, dry, from_csv=False):
     if dry:
         return 0
     if interp == sys.executable and not os.environ.get(
-            "PEINT_PAPER_PY_ESMC" if panel.env == "esmc" else "PEINT_PAPER_PY_PROTEVO"):
+            "PEINT_PAPER_PY_ESMC" if panel.env == "esmc" else "PEINT_PAPER_PY_PEINT"):
         print(f"    (using the current interpreter; set "
               f"PEINT_PAPER_PY_{panel.env.upper()} to pin the right env)")
     r = subprocess.run(argv, cwd=REPO_ROOT)

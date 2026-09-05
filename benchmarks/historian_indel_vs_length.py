@@ -13,7 +13,7 @@ Sources (all overridable via CLI) match historian_compare_esmc_vs_rev1.py:
   * reconstruction sequences: rev1 ``real_msa_historian`` / ``peint_msa_historian`` and the rev2
     ESM-C remove-dummy reconstruction (the same one figure3_pcp_mutation_counts uses).
 
-Run from the repo root (env with protevo, e.g. protevo-env)::
+Run from the repo root (env with peint, e.g. peint-env)::
 
     python -m benchmarks.historian_indel_vs_length
 """

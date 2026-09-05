@@ -107,7 +107,7 @@ DERIVED_DIR = Path(os.environ.get("PEINT_PAPER_DERIVED_DIR", str(LOCAL_DATA / "d
 # PCP benchmark to be run from one specific working directory; routing them through
 # config means every script can run from the repo root.
 PROTEVO_CACHE_DIR = Path(os.environ.get(
-    "PEINT_PAPER_PROTEVO_CACHE_DIR", str(DERIVED_DIR / "_cache_protevo")
+    "PEINT_PAPER_PEINT_CACHE_DIR", str(DERIVED_DIR / "_cache_peint")
 ))
 CHERRYML_CACHE_DIR = Path(os.environ.get(
     "PEINT_PAPER_CHERRYML_CACHE_DIR", str(DERIVED_DIR / "_cache_benchmarking")

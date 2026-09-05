@@ -158,7 +158,7 @@ sentence is a field in the manifest.
 The benchmarks span stacks that do not pin together: JAX (AF2Rank), PyTorch (PEINT,
 OmegaFold, ESM-C), and the older `transformers` ProstT5 was pinned against.
 `render_panels.py` subprocesses each panel with the right interpreter, so you only need to
-set `PEINT_PAPER_PY_ESMC` and `PEINT_PAPER_PY_PROTEVO`.
+set `PEINT_PAPER_PY_ESMC` and `PEINT_PAPER_PY_PEINT`.
 
 The simulations need the ESM-C stack and the folding needs the JAX stack, and no environment
 has both — which works because what crosses the boundary is **sequences in text files, not

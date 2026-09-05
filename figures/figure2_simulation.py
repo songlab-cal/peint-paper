@@ -418,7 +418,7 @@ def main() -> None:
     # directory and silently missed the cache from anywhere else.
     cherryml_caching.set_cache_dir(str(cfg.CHERRYML_CACHE_DIR))
     cherryml_caching.set_read_only(False)
-    protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
+    peint_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
     peint_caching.set_read_only(False)
 
     a3m_dir = str(cfg.require(cfg.INPUT_A3M_DIR))
