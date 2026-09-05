@@ -2,7 +2,7 @@
 # Run the full from-checkpoint pipeline on a family list: simulate, fold, score.
 #
 #   export PEINT_PAPER_PY_ESMC=/path/to/envs/peint-esmc/bin/python
-#   export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-env/bin/python
+#   export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-paper/bin/python
 #   export HF_HOME=/path/to/hf_cache
 #   scripts/run_from_checkpoint.sh --checkpoint local_data/peint/model_checkpoints/peint_esmc.ckpt
 #
@@ -10,7 +10,7 @@
 # local_data/, plus mafft and iqtree2 on PATH. Four steps, two environments:
 #
 #   1. simulate + conservation JSD        peint-esmc    GPU
-#   2. fold + 3Di + pLDDT                 peint-env   GPU   (sims are cache hits here)
+#   2. fold + 3Di + pLDDT                 peint-paper   GPU   (sims are cache hits here)
 #   3. held-out per-site likelihood       peint-esmc    GPU
 #   4. time estimation                    peint-esmc    GPU
 #
@@ -41,13 +41,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 : "${PEINT_PAPER_PY_ESMC:?set it to the peint-esmc interpreter}"
-: "${PEINT_PAPER_PY_PEINT:?set it to the peint-env interpreter}"
+: "${PEINT_PAPER_PY_PEINT:?set it to the peint-paper interpreter}"
 [[ -f "$CKPT" ]]     || { echo "no checkpoint at $CKPT" >&2; exit 1; }
 [[ -f "$FAMILIES" ]] || { echo "no family list at $FAMILIES" >&2; exit 1; }
 command -v mafft >/dev/null || { echo "mafft is not on PATH" >&2; exit 1; }
 command -v iqtree2 >/dev/null || echo "WARNING: iqtree2 is not on PATH; the WAG/LG arms will fail" >&2
 
-# omegafold is a console script in peint-env/bin, which is not on PATH when the interpreter
+# omegafold is a console script in peint-paper/bin, which is not on PATH when the interpreter
 # is invoked by absolute path. Put that bin first for step 2.
 PROTEVO_BIN="$(dirname "$PEINT_PAPER_PY_PEINT")"
 
@@ -66,7 +66,7 @@ if step 1; then
 fi
 
 if step 2; then
-  run "2/4 structures + 3Di  (peint-env; simulations are cache hits)"
+  run "2/4 structures + 3Di  (peint-paper; simulations are cache hits)"
   PATH="$PROTEVO_BIN:$PATH" "$PEINT_PAPER_PY_PEINT" -m benchmarks.generate_all_results \
       --families_path "$FAMILIES" "${DATA[@]}" --out_path "$OUT" \
       --subsample_msa_size "$SUBSAMPLE" --include_plddt --include_3di

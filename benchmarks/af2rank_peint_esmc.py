@@ -8,7 +8,7 @@ strictly evidence-preserving and needs NO re-alignment.
 
 Per family: take the same 30-leaf subsample AF2 uses (subsampled_a = seq1 + 29 from split-A, via
 the real _subsample_selection), pull those leaves' ALIGNED sequences from the peint mafft-add
-alignment, and score them with AF2Rank against the experimental structure. GPU (peint-env);
+alignment, and score them with AF2Rank against the experimental structure. GPU (peint-paper);
 cached per (family, model) so it shards over GPUs and resumes. Output ->
 <R2>/af2/<family>/<MODEL_KEY>/{structures,scores,sites}, matching rev1's layout for the ECDF.
 """

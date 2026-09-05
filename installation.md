@@ -39,13 +39,13 @@ pip install matplotlib seaborn logomaker biotite 'tomli; python_version < "3.11"
 
 Do not `pip install transformers` here — it replaces the Biohub fork and ESM-C stops loading.
 
-### `peint-env` — folding, alignment, ESM-IF
+### `peint-paper` — folding, alignment, ESM-IF
 
 **Install in this order.** JAX and PyTorch each ship CUDA wheels; the wrong order gives cuDNN
 errors at runtime, not install time.
 
 ```bash
-conda create -n peint-env python=3.10 -y && conda activate peint-env
+conda create -n peint-paper python=3.10 -y && conda activate peint-paper
 
 pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 \
     --index-url https://download.pytorch.org/whl/cu124
@@ -93,7 +93,7 @@ EOF
 
 ```bash
 export PEINT_PAPER_PY_ESMC=/path/to/envs/peint-esmc/bin/python
-export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-env/bin/python
+export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-paper/bin/python
 export HF_HOME=/path/to/hf_cache          # ESM-C and ProstT5 weights land here
 ```
 
@@ -193,7 +193,7 @@ No model is loaded — these read files.
 ### Tier 3 — rerun from a checkpoint
 
 Regenerating the simulations needs a checkpoint and a GPU. Simulation runs in `peint-esmc`,
-folding in `peint-env`, and what crosses between them is **sequences in text files** — so
+folding in `peint-paper`, and what crosses between them is **sequences in text files** — so
 nothing has to be version-compatible across the two. Running the halves as separate jobs is
 the designed path, not a workaround. Full recipe in
 [Running from a checkpoint](#running-from-a-checkpoint-end-to-end) below.
@@ -219,7 +219,7 @@ scripts/fetch_local_data.py --archives peint_checkpoints sim aux \
 ```
 
 Have MAFFT, `iqtree2` and the environments' `bin/` on `PATH` (OmegaFold is a console script
-in `peint-env/bin`, so calling the interpreter directly is not enough).
+in `peint-paper/bin`, so calling the interpreter directly is not enough).
 
 **0. Pick families.** Both entry points take the same JSON: `in_family` are families seen in
 training, `held_out_family` are not. This list of families allows you to subset.
@@ -250,7 +250,7 @@ $PEINT_PAPER_PY_ESMC -m benchmarks.generate_all_results \
 Use `sim/trees_newick`, not `sim/trees` — the latter is a different node-list format and fails
 with `NewickError`.
 
-**2. Structures and 3Di** (`peint-env`, GPU). The same command, different interpreter and
+**2. Structures and 3Di** (`peint-paper`, GPU). The same command, different interpreter and
 flags. The simulations are cache hits, so no model is built here; only folding and ProstT5
 run. This is the whole handoff — what crosses between the environments is sequences in files:
 
@@ -306,7 +306,7 @@ Swap the checkpoint to compare models; swap the family list to change the split.
 
 `figure2_simulation` is the one script that needs both environments. Run it twice —
 `--skip-structures` in `peint-esmc` to generate and cache the sequences, then again in
-`peint-env` where those are cache hits and only the folding runs. `render_panels.py` does
+`peint-paper` where those are cache hits and only the folding runs. `render_panels.py` does
 this automatically via `depends_on`.
 
 Note the cache key includes the checkpoint path as a string, so both passes must use the

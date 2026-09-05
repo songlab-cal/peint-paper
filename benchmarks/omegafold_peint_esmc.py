@@ -14,7 +14,7 @@ The leaf subset is chosen by calling the REAL ``_subsample_selection`` + ``gener
 folded -- seeded by md5(family+root), PEINT uses ``subsampled_a`` (seq1 + 29 from split-A). We
 fold those leaves' RAW simulated sequences (gap-stripped by OmegaFold), so no alignment is
 needed and this can run before the classical pipeline finishes. GPU + omegafold on PATH
-(peint-env). Per (family, model) is cherryml-cached -> resumes after preemption, shards
+(peint-paper). Per (family, model) is cherryml-cached -> resumes after preemption, shards
 cleanly over GPUs (disjoint families -> shared out dir, no collision).
 """
 

@@ -64,7 +64,7 @@ PANELS = [
                "<stem>.csv, and --from-csv redraws both panels from those tables at the "
                "figure_data tier with no GPU."),
     # Two entries for one script, because no single env can do both halves: ESM-C generation
-    # needs peint-esmc's transformers, OmegaFold lives in peint-env. The sequence sims are
+    # needs peint-esmc's transformers, OmegaFold lives in peint-paper. The sequence sims are
     # cached, so the folding pass re-reads them instead of rebuilding any model.
     Panel("figure2_simulation_generate", "main", "figures.figure2_simulation",
           argv=["--skip-structures"], env="esmc",
@@ -77,7 +77,7 @@ PANELS = [
           outputs=["output/figure2_simulation_plddt.pdf"],
           depends_on=["figure2_simulation_generate"],
           cost="GPU; ~1.5 h (folds ~1200 structures)",
-          note="OmegaFold pLDDT vs time. Must run in peint-env (the only env with omegafold); "
+          note="OmegaFold pLDDT vs time. Must run in peint-paper (the only env with omegafold); "
                "the sequence sims are cache hits here, so no ESM-C model is constructed."),
     Panel("figure3_af2rank_ecdf", "main", "figures.figure3_structure_metrics",
           argv=["--panels", "af2"],
@@ -144,7 +144,7 @@ PANELS = [
                    "output/esmif/esmif_approach1_divergence_controlled.pdf",
                    "output/esmif/esmif_approach2_selfconsistency.pdf"],
           cost="GPU; minutes if the CSVs are complete, ~2 h cold",
-          note="Inverse-folding validation. Needs peint-env (torch_geometric + fair-esm). "
+          note="Inverse-folding validation. Needs peint-paper (torch_geometric + fair-esm). "
                "Reuses esmif_gt_likelihood{,_perleaf}.csv and esmif_selfconsistency.csv, "
                "recomputing only (family, model) pairs missing from BOTH tables."),
     Panel("esm_mcmc_spectrum", "extended", "figures.figure_esm_mcmc_spectrum",
