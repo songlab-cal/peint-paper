@@ -1,60 +1,149 @@
 # PEINT — figure notebooks
 
-One notebook per manuscript figure. Each is self-contained: open it, run it top to bottom, and
-the panels appear inline.
+One notebook per manuscript figure, reproducing that figure's panels from the released data
+and code. Each cell runs a panel's producer and displays its output.
 
-Every notebook **defaults to level 1** — redraw a panel from a table shipped in the Zenodo
-deposit. No model, no checkpoint, no GPU; seconds on a laptop. Cells that need more are marked
-and left commented out, so nothing in the default path can silently start a six-hour job.
+## Levels
+
+Each cell is marked with the level it runs at.
+
+| level | reads | writes the panel from | cost |
+|---|---|---|---|
+| 1 | `local_data/figure_data/` | a released summary table | seconds, CPU |
+| 2 | `local_data/r1/`, `r2/`, `sim/` | released intermediate results | minutes to an hour |
+| 3 | model checkpoints + raw data | regenerated intermediates | hours to days, GPU |
+
+Every notebook runs at level 1 by default. Level-2 and level-3 commands are given in the
+cells, commented out.
 
 ## Setup
 
+### 1. Repositories
+
 ```bash
-git clone https://github.com/<org>/peint-paper.git && cd peint-paper
-git clone https://github.com/<org>/peint.git ../peint
-
-# the plotting environment (see the tutorial for the full recipe)
-conda env create -p ./envs/peint-paper -f envs/peint-paper.yml
-
-export PEINT_PAPER_REPO=$PWD
-jupyter lab notebooks/
+git clone https://github.com/<org>/peint-paper.git
+git clone https://github.com/<org>/peint.git
+cd peint-paper
 ```
 
-Then download the 19 MB summary tier, which is all the level-1 cells need:
+Expected layout — keep them as siblings, or set `PEINT_PAPER_PEINT_REPO`:
+
+```
+<anywhere>/
+├── peint-paper/     notebooks/, figures/, benchmarks/, scripts/, local_data/
+└── peint/           the model library, imported as `peint`
+```
+
+The notebooks find the repository root by looking for `paper_config.py`. Launch Jupyter from
+either directory; no environment variables are needed for level 1.
+
+### 2. Environment
 
 ```bash
-python scripts/fetch_data.py --tier summary
+conda create -p ./envs/paper python=3.10 -y
+conda activate ./envs/paper
+
+pip install -e ../peint      # model library
+pip install -e .             # this repository, plotting and analysis
+pip install jupyterlab
+```
+
+This covers every level-1 cell.
+
+Structure panels (Fig. 3f, 3g; ED Fig. 4b, 5d, 5e) also need the folding stack. Two of its
+packages are not on PyPI:
+
+```bash
+pip install -e ".[folding]"
+pip install -q git+https://github.com/sokrypton/ColabDesign.git@v1.1.3 --no-deps
+pip install --no-deps -e <OmegaFold checkout>
+```
+
+Optional, for display only:
+
+```bash
+conda install -c conda-forge poppler   # Fig. 4 panels are PDF; this shows them inline
+pip install PyQt5                      # Fig. 4a/4b render a tree through Qt
+```
+
+Headless machines need `QT_QPA_PLATFORM=offscreen`; the Figure 4 notebook sets it.
+
+Level 3 uses two further environments — one for PEINT, one for the ESM-C variant — because
+JAX and PyTorch need different CUDA builds and ESM-C needs a `transformers` fork. Recipes and
+pinned versions are in `../REPRODUCING_TUTORIAL.md`.
+
+### 3. Data
+
+Everything downloads into `local_data/`. Paths in the notebooks are relative to it.
+
+```bash
+python scripts/fetch_local_data.py --list                # archives, sizes, contents
+python scripts/fetch_local_data.py --tier figure_data    # ~5 MB, covers all of level 1
+```
+
+Level 2 needs specific archives:
+
+```bash
+python scripts/fetch_local_data.py --tier full --archives r1 r2 sim aux
+```
+
+| panel | archives | unpacked |
+|---|---|---|
+| Fig. 3b, 3c, 3f, 3g · ED Fig. 3a–d, 4b, 9 | `r1` `r2` `sim` `aux` | 46 GB |
+| Fig. 3d, 3e | `r2` | 25 GB |
+| Fig. 2a | `peint_transitions_aligned` `peint_transitions_unaligned` | 26 GB |
+| ED Fig. 5d, 5e | `r1_omegafold` `r2` | 71 GB |
+
+`--tier full` fetches all of them: ~22 GB compressed, ~151 GB unpacked. Archives are
+checksummed on download; `--verify-only` re-checks an existing copy.
+
+Level 3 also needs `peint_checkpoints` (6.7 GB).
+
+Resulting layout:
+
+```
+peint-paper/
+├── local_data/
+│   ├── figure_data/     summary tables            level 1
+│   ├── r1/ r2/ sim/     intermediate results      level 2
+│   └── peint/           model checkpoints         level 3
+├── figures/output/      panels are written here
+└── notebooks/
+```
+
+### 4. Verify
+
+```bash
+python scripts/check_local_data.py     # lists roles present and missing
 ```
 
 ## Coverage
 
-| notebook | panels | default level |
-|---|---|---|
-| `Figure2.ipynb` | 2a, 2b, 2c | 1 (2b, 2c need a GPU) |
-| `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 |
-| `Figure4.ipynb` | 4c, 4e, 4f (4a, 4b, 4d documented) | 1 |
-| `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 |
-| `ExtendedData2.ipynb` | 2a–2g | — points at Fig. 2 and 3 |
-| `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 |
-| `ExtendedData4.ipynb` | 4b, 4c | 2 |
-| `ExtendedData5.ipynb` | 5d, 5e | 2 (GPU) |
-| `ExtendedData6.ipynb` | 6b–6e | 1 |
-| `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 |
-| `ExtendedData9.ipynb` | 9a, 9b | 1 |
+| notebook | panels | default level | notes |
+|---|---|---|---|
+| `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2c regenerates at level 3 |
+| `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | |
+| `Figure4.ipynb` | 4a, 4b, 4c, 4e, 4f | 1 | inputs are in the repository; 4d needs a parser not included here |
+| `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
+| `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
+| `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | |
+| `ExtendedData4.ipynb` | 4b, 4c | 2 | |
+| `ExtendedData5.ipynb` | 5d, 5e | 2 | 5b, 5c need a table not in this release |
+| `ExtendedData6.ipynb` | 6b–6e | 1 | |
+| `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
+| `ExtendedData9.ipynb` | 9a, 9b | 1 | |
 
-Where the manuscript prints a number, the notebook prints ours beside it, so you can check the
-reproduction rather than take it on trust.
+Where the manuscript prints a number, the notebook prints the computed value beside it and
+marks `MATCH` or `CHECK`.
 
-## Figures with no notebook
+## Figures without a notebook
 
-- **Figure 1** is a schematic — nothing to compute.
-- **Extended Data Figure 1** (b, c) is the ablation sweep. The evaluated numbers ship as
-  `figure_data/ed1/master_sweep_553fam.csv` with a `make_report.py`; the sweep itself involves
-  fifteen checkpoints and is not rerunnable from the deposit.
-- **Extended Data Figure 8** (b, c, e, f) needs an interpretability module that is not yet
-  released.
-- **Supplementary Figure 1** describes the dataset and the splits, both of which are in the
-  deposit; there is no plotting script.
+- **Figure 1** — schematic.
+- **ED Figure 1b, 1c** — ablation sweep. Numbers ship as `figure_data/ed1/master_sweep_553fam.csv`
+  with `make_report.py`, so the panels redraw at level 1. The sweep spans fifteen checkpoints
+  and is not rerunnable from this release.
+- **ED Figure 8b, 8c, 8e, 8f** — need an interpretability module not included here.
+- **Supplementary Figure 1** — dataset and splits, both in the release; no plotting script.
 
-`../REPRODUCING_TUTORIAL.md` is the full step-by-step version, including the level-2 and
-level-3 paths and the measured runtimes.
+`../REPRODUCING_TUTORIAL.md` has the level-2 and level-3 commands per panel with measured
+runtimes.
