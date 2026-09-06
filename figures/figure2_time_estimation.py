@@ -302,9 +302,42 @@ def plot_single_families(data: pd.DataFrame, output_dir: str) -> None:
     _save(fig, output_dir, "figure2_time_estimation_single")
 
 
+NLL_TABLE_NAME = "figure2_time_estimation_nll.csv"
+
+
+def load_nll_table(output_dir: str):
+    """Read the likelihood curve, preferring the deposited copy. None if absent."""
+    figure_data = getattr(cfg, "FIGURE_DATA_DIR", None)
+    for path in ([os.path.join(str(figure_data), NLL_TABLE_NAME)] if figure_data else []) + [
+        os.path.join(output_dir, NLL_TABLE_NAME)
+    ]:
+        if os.path.exists(path):
+            print(f"replotting the nll panel from {path}")
+            return pd.read_csv(path)
+    return None
+
+
+def plot_nll_curve_from_table(df: pd.DataFrame, output_dir: str) -> None:
+    """Redraw the `nll` panel from the persisted curve -- no model, no GPU."""
+    _plot_nll(df["likelihood"].to_numpy(), df["time"].to_numpy(),
+              float(df["wag_time"].iloc[0]), output_dir)
+
+
 def plot_nll_curve(nlls, times, wag_time: float, output_dir: str) -> None:
     likelihoods = np.exp(-1 * nlls.cpu().numpy().squeeze())
     times = times.cpu().numpy().squeeze()
+
+    # Persist the curve so the panel can be redrawn without a GPU. It is ~100 points; the
+    # sweep that produced it is PEINT forward passes over one transition, which --from-csv
+    # cannot do, so without this the paper's third 2b sub-panel is level-3 only.
+    os.makedirs(output_dir, exist_ok=True)
+    pd.DataFrame({"time": times, "likelihood": likelihoods, "wag_time": wag_time}).to_csv(
+        os.path.join(output_dir, NLL_TABLE_NAME), index=False
+    )
+    _plot_nll(likelihoods, times, wag_time, output_dir)
+
+
+def _plot_nll(likelihoods, times, wag_time: float, output_dir: str) -> None:
 
     max_likelihood = float(np.max(likelihoods))
     t_argmax = times[np.argmax(likelihoods)]
@@ -378,6 +411,12 @@ def main() -> None:
         os.makedirs(args.output_dir, exist_ok=True)
         plot_all_transitions(data, args.output_dir)
         plot_single_families(data, args.output_dir)
+        nll = load_nll_table(args.output_dir)
+        if nll is not None:
+            plot_nll_curve_from_table(nll, args.output_dir)
+        else:
+            print(f"  no {NLL_TABLE_NAME}: skipping the nll panel (it needs a GPU sweep to "
+                  f"produce, then replots from the table like the others)")
         print(f"Wrote time-estimation panels to {args.output_dir}")
         return
 
