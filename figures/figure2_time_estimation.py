@@ -8,13 +8,19 @@ likelihood under PEINT, and compared against the WAG time it was labelled with. 
 ``nll``    the PEINT likelihood as a function of time for one representative transition,
            with the WAG time marked — the curve whose argmax the estimate is taking.
 
-REQUIRES A GPU. Every panel depends on PEINT forward passes (time-MLE optimisation and the
-likelihood sweep), so there is no CPU-runnable subset. Not yet validated end to end —
-run this on a GPU node.
+Computing the estimates REQUIRES A GPU: the time-MLE optimisation and the likelihood sweep are
+PEINT forward passes. Redrawing them does not. `--from-csv` replots the `all` and `single`
+panels from the per-transition table, on CPU, in seconds::
+
+    python -m figures.figure2_time_estimation --from-csv          # no GPU, no checkpoint
+    python -m figures.figure2_time_estimation --checkpoint <ckpt> # ~4 h on one A100
+
+The table is looked up in the deposit's `figure_data/` first, then in `--output-dir`. The `nll`
+panel is not redrawn: it needs the likelihood curve itself, not the table.
 
 Run from the repo root::
 
-    python -m figures.figure2_time_estimation
+    python -m figures.figure2_time_estimation --from-csv
 """
 
 import argparse
@@ -34,8 +40,11 @@ from scipy.stats import pearsonr
 
 from peint import caching as peint_caching
 from peint.io import read_transitions
-from peint.simulation import load_model
-from peint.time_mle.t_mle import estimate_transition_times
+
+# `load_model` and `estimate_transition_times` are imported inside main()'s compute branch:
+# both pull in the training stack (lightning), which a plotting-only environment does not
+# have. Importing them at module level would make `--from-csv` fail on exactly the machines
+# it exists to serve.
 
 import paper_config as cfg
 
@@ -101,6 +110,7 @@ def collect_time_estimates(
     rows = []
     representative = None
     skipped = {}
+    truncated = {}
 
     for family in families:
         try:
@@ -110,8 +120,16 @@ def collect_time_estimates(
             skipped[family] = str(exc)
             continue
 
+        # Re-estimation can drop transitions (a family whose sequences exceed the model's
+        # length limit comes back short, occasionally empty). Pair only as far as both
+        # sides go, and report it -- indexing `original`'s length into `re_estimated`
+        # raises IndexError and discards the whole run, GPU hours included.
+        n = min(len(original), len(re_estimated))
+        if n < len(original):
+            truncated[family] = (len(original), len(re_estimated))
+
         # Transitions are stored in both directions; take every other one.
-        for i in range(0, len(original), 2):
+        for i in range(0, n, 2):
             wag_t = original[i][2]
             new_t = re_estimated[i][2]
             rows.append(
@@ -128,10 +146,37 @@ def collect_time_estimates(
         )
     if skipped:
         print(f"Skipped {len(skipped)}/{len(families)} families with missing transitions.")
+    if truncated:
+        worst = sorted(truncated.items(), key=lambda kv: kv[1][1] - kv[1][0])[:5]
+        print(
+            f"WARNING: {len(truncated)}/{len(families)} families came back short from "
+            f"re-estimation and were paired only as far as both sides go: "
+            + ", ".join(f"{f} ({b}/{a})" for f, (a, b) in worst)
+        )
 
     return (
         pd.DataFrame(rows, columns=["wag_time", "new_time", "length_difference", "family"]),
         representative,
+    )
+
+
+TABLE_NAME = "figure2_time_estimation.csv"
+
+
+def load_table(output_dir: str) -> pd.DataFrame:
+    """Read the per-transition table, preferring the deposited copy."""
+    candidates = []
+    figure_data = getattr(cfg, "FIGURE_DATA_DIR", None)
+    if figure_data:
+        candidates.append(os.path.join(str(figure_data), TABLE_NAME))
+    candidates.append(os.path.join(output_dir, TABLE_NAME))
+    for path in candidates:
+        if os.path.exists(path):
+            print(f"replotting from {path}")
+            return pd.read_csv(path)
+    raise FileNotFoundError(
+        f"No {TABLE_NAME} found. Looked in: " + ", ".join(candidates) + ". "
+        "Fetch the summary data tier, or generate it with a GPU run (no --from-csv)."
     )
 
 
@@ -259,12 +304,33 @@ def main() -> None:
     parser.add_argument("--num-steps", type=int, default=80)
     parser.add_argument("--max-nll-time", type=float, default=2.0)
     parser.add_argument("--output-dir", default=str(cfg.FIGURES_DIR))
+    parser.add_argument(
+        "--from-csv", "--replot", dest="from_csv", action="store_true",
+        help="Redraw the `all` and `single` panels from the per-transition table. "
+             "No GPU, no checkpoint, no cache.",
+    )
     args = parser.parse_args()
+
+    # Return before any GPU check, cache setup or checkpoint load: the replot path must work
+    # on a laptop with nothing but the summary data tier.
+    if args.from_csv:
+        data = load_table(args.output_dir)
+        print(f"Replotting {len(data)} transitions across {data.family.nunique()} families.")
+        _apply_paper_style()
+        os.makedirs(args.output_dir, exist_ok=True)
+        plot_all_transitions(data, args.output_dir)
+        plot_single_families(data, args.output_dir)
+        print(f"Wrote time-estimation panels to {args.output_dir}")
+        return
 
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "Figure 2 time estimation requires a GPU: every panel needs PEINT forward passes."
+            "Figure 2 time estimation requires a GPU: every panel needs PEINT forward passes. "
+            "To redraw the panels from the shipped table instead, pass --from-csv."
         )
+
+    from peint.simulation import load_model
+    from peint.time_mle.t_mle import estimate_transition_times
 
     peint_caching.set_cache_dir("_cache_peint")
     peint_caching.set_read_only(False)
