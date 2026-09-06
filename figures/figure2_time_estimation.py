@@ -163,6 +163,48 @@ def collect_time_estimates(
 TABLE_NAME = "figure2_time_estimation.csv"
 
 
+def warn_if_saturated(data: pd.DataFrame) -> None:
+    """Flag estimates that have piled up against the optimiser's reach rather than converged.
+
+    The time-MLE starts at `initializer` and takes `num_steps` Adam steps at `lr` under an
+    exponential decay, so the largest time it can physically return is bounded. At this
+    module's `--lr 1e-2` that bound is ~1.15; the t_mle library's own default of 1e-1 puts it
+    near 6. If the WAG times extend well past the largest estimate, the estimator ran out of
+    reach and the upper end of the panel shows a plateau, not a measurement.
+    """
+    ceiling = data.new_time.max()
+    beyond = int((data.wag_time > ceiling).sum())
+    if beyond > 0.02 * len(data):
+        print(
+            f"  WARNING: {beyond} of {len(data)} transitions ({100 * beyond / len(data):.1f}%) "
+            f"have a WAG time above the largest estimate returned ({ceiling:.3f}). The "
+            f"optimiser is bounded by --lr / --num-steps from --initializer, so these are "
+            f"pinned at its reach, not converged. Compare --lr against t_mle's default (1e-1) "
+            f"before reading the high-time end of the panel."
+        )
+
+
+def within_axes(data: pd.DataFrame) -> pd.DataFrame:
+    """Restrict to the transitions the panels can actually show.
+
+    Both panels are drawn on 0..TIME_AXIS_MAX axes. `hexbin` does not drop points outside its
+    `extent` -- it accumulates them into the boundary bins -- so passing the unrestricted table
+    both inflates the edge hexagons and invites a correlation quoted over rows the reader
+    cannot see. Restrict once, here, and let every panel and every statistic derive from the
+    returned frame, so the figure and its numbers can never describe different populations.
+    """
+    keep = (data.wag_time <= TIME_AXIS_MAX) & (data.new_time <= TIME_AXIS_MAX)
+    dropped = int((~keep).sum())
+    if dropped:
+        print(
+            f"  {dropped} of {len(data)} transitions ({100 * dropped / len(data):.1f}%) fall "
+            f"outside the 0-{TIME_AXIS_MAX} axes and are excluded from BOTH the panels and the "
+            f"reported correlation. They sit past the time-MLE's ceiling "
+            f"(largest estimate {data.new_time.max():.3f}), so they carry no signal to plot."
+        )
+    return data[keep]
+
+
 def load_table(output_dir: str) -> pd.DataFrame:
     """Read the per-transition table, preferring the deposited copy."""
     candidates = []
@@ -220,21 +262,12 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     fig, ax = plt.subplots(figsize=(2, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
-    # The hexbin's extent clips to TIME_AXIS_MAX, so quote R over the population the panel
-    # actually shows. Beyond it the time-MLE has saturated -- estimates top out around 1.29
-    # however large the WAG time -- so those points carry no signal to correlate, and
-    # including them in a statistic the reader checks against the visible cloud is
-    # misleading. Both numbers are printed so the difference is never silent.
-    shown = data[(data.wag_time <= TIME_AXIS_MAX) & (data.new_time <= TIME_AXIS_MAX)]
-    r_shown = pearsonr(shown.wag_time, shown.new_time)[0]
-    r_all = pearsonr(data.wag_time, data.new_time)[0]
-    n_out = len(data) - len(shown)
-    print(
-        f"Pearson R = {r_shown:.4f} over the {len(shown)} transitions inside the axes "
-        f"(t <= {TIME_AXIS_MAX}); {r_all:.4f} over all {len(data)}, "
-        f"where the {n_out} beyond the axes ({100 * n_out / len(data):.1f}%) are off-panel "
-        f"and past the estimator's ceiling."
-    )
+    # `data` here is already restricted to the plotted range by within_axes(); the hexbin and
+    # the quoted R are therefore computed from the very same rows. Do not reintroduce a
+    # separate population for either -- annotating a figure with a statistic taken over
+    # different data than it displays is indefensible however it is labelled.
+    r = pearsonr(data.wag_time, data.new_time)[0]
+    print(f"  hexbin and Pearson R both over the same {len(data)} transitions: R = {r:.4f}")
 
     ax.hexbin(
         data=data, x="wag_time", y="new_time", cmap="Greens", gridsize=45, mincnt=10,
@@ -243,7 +276,7 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     ax.plot([0, TIME_AXIS_MAX], [0, TIME_AXIS_MAX], color="black", linestyle="--", linewidth=0.25)
     ax.text(
         0.05, 0.95,
-        f"Pearson R: {r_shown:.2f}",
+        f"Pearson R: {r:.2f}",
         transform=ax.transAxes, fontsize=8, verticalalignment="top", horizontalalignment="left",
         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", boxstyle="round,pad=0.1"),
     )
@@ -331,7 +364,9 @@ def main() -> None:
     # on a laptop with nothing but the summary data tier.
     if args.from_csv:
         data = load_table(args.output_dir)
-        print(f"Replotting {len(data)} transitions across {data.family.nunique()} families.")
+        print(f"Read {len(data)} transitions across {data.family.nunique()} families.")
+        warn_if_saturated(data)
+        data = within_axes(data)
         _apply_paper_style()
         os.makedirs(args.output_dir, exist_ok=True)
         plot_all_transitions(data, args.output_dir)
@@ -367,6 +402,12 @@ def main() -> None:
 
     data, representative = collect_time_estimates(families, transitions_dir, re_estimated_dir)
     print(f"Collected {len(data)} transitions across {data.family.nunique()} families.")
+    # Deposit the UNRESTRICTED table: the axis range is a presentation choice, and a reader
+    # replotting later must be able to see -- and re-decide -- what the panels leave out.
+    os.makedirs(args.output_dir, exist_ok=True)
+    data.to_csv(os.path.join(args.output_dir, TABLE_NAME), index=False)
+    warn_if_saturated(data)
+    data = within_axes(data)
 
     _apply_paper_style()
     plot_all_transitions(data, args.output_dir)
@@ -384,8 +425,6 @@ def main() -> None:
         )
         plot_nll_curve(nlls, times, representative["t"], args.output_dir)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    data.to_csv(os.path.join(args.output_dir, "figure2_time_estimation.csv"), index=False)
     print(f"Wrote time-estimation panels to {args.output_dir}")
 
 
