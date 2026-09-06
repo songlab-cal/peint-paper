@@ -184,25 +184,28 @@ def warn_if_saturated(data: pd.DataFrame) -> None:
         )
 
 
-def within_axes(data: pd.DataFrame) -> pd.DataFrame:
-    """Restrict to the transitions the panels can actually show.
+def report_axis_coverage(data: pd.DataFrame) -> None:
+    """State how much of the evaluated set lies outside the plotted range.
 
-    Both panels are drawn on 0..TIME_AXIS_MAX axes. `hexbin` does not drop points outside its
-    `extent` -- it accumulates them into the boundary bins -- so passing the unrestricted table
-    both inflates the edge hexagons and invites a correlation quoted over rows the reader
-    cannot see. Restrict once, here, and let every panel and every statistic derive from the
-    returned frame, so the figure and its numbers can never describe different populations.
+    The panels are drawn on 0..TIME_AXIS_MAX axes but the reported correlation is over **every**
+    evaluated transition, which is the manuscript's convention -- Fig. 2b quotes Pearson's
+    r = 0.95 across the 150 held-out families, not across a plotted subset. One population is
+    used for the hexbin and for the statistic, so the figure and its number can never describe
+    different data; this function only says how much of it falls beyond the axes.
+
+    An earlier revision of this file restricted both to the plotted range. That was a
+    workaround for the learning-rate bug (P0-17): at the old --lr 1e-2 the estimator saturated
+    near 1.15, so the out-of-range points were noise and excluding them recovered ~0.95. At the
+    documented --lr 1e-1 no such correction is needed or wanted -- the unrestricted correlation
+    is already the reported one, and restricting would overstate it.
     """
-    keep = (data.wag_time <= TIME_AXIS_MAX) & (data.new_time <= TIME_AXIS_MAX)
-    dropped = int((~keep).sum())
-    if dropped:
+    outside = int(((data.wag_time > TIME_AXIS_MAX) | (data.new_time > TIME_AXIS_MAX)).sum())
+    if outside:
         print(
-            f"  {dropped} of {len(data)} transitions ({100 * dropped / len(data):.1f}%) fall "
-            f"outside the 0-{TIME_AXIS_MAX} axes and are excluded from BOTH the panels and the "
-            f"reported correlation. They sit past the time-MLE's ceiling "
-            f"(largest estimate {data.new_time.max():.3f}), so they carry no signal to plot."
+            f"  {outside} of {len(data)} transitions ({100 * outside / len(data):.1f}%) fall "
+            f"beyond the 0-{TIME_AXIS_MAX} axes. They are INCLUDED in the reported correlation "
+            f"-- which is over the full evaluated set -- and are simply off the visible range."
         )
-    return data[keep]
 
 
 def load_table(output_dir: str) -> pd.DataFrame:
@@ -262,9 +265,8 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     fig, ax = plt.subplots(figsize=(2, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
-    # `data` here is already restricted to the plotted range by within_axes(); the hexbin and
-    # the quoted R are therefore computed from the very same rows. Do not reintroduce a
-    # separate population for either -- annotating a figure with a statistic taken over
+    # The hexbin and the quoted R are computed from the same frame. Do not reintroduce a
+    # separate population for either: annotating a figure with a statistic taken over
     # different data than it displays is indefensible however it is labelled.
     r = pearsonr(data.wag_time, data.new_time)[0]
     print(f"  hexbin and Pearson R both over the same {len(data)} transitions: R = {r:.4f}")
@@ -348,7 +350,12 @@ def main() -> None:
              "point this at your own checkpoint to reproduce the figure with a different model.",
     )
     parser.add_argument("--num-families", type=int, default=150)
-    parser.add_argument("--lr", type=float, default=1e-2)
+    # The manuscript's Branch Length Estimation methods specify Adam at an initial learning
+    # rate of 1e-1 decaying with gamma = 0.99, converging in under 80 steps -- which is also
+    # t_mle's own default. This script previously passed 1e-2, ten times smaller, which bounds
+    # the reachable time at ~1.15 and puts a plateau in the upper third of the panel (P0-17).
+    # The documented value is the one to run.
+    parser.add_argument("--lr", type=float, default=1e-1)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--num-steps", type=int, default=80)
     parser.add_argument("--max-nll-time", type=float, default=2.0)
@@ -366,7 +373,7 @@ def main() -> None:
         data = load_table(args.output_dir)
         print(f"Read {len(data)} transitions across {data.family.nunique()} families.")
         warn_if_saturated(data)
-        data = within_axes(data)
+        report_axis_coverage(data)
         _apply_paper_style()
         os.makedirs(args.output_dir, exist_ok=True)
         plot_all_transitions(data, args.output_dir)
@@ -407,7 +414,7 @@ def main() -> None:
     os.makedirs(args.output_dir, exist_ok=True)
     data.to_csv(os.path.join(args.output_dir, TABLE_NAME), index=False)
     warn_if_saturated(data)
-    data = within_axes(data)
+    report_axis_coverage(data)
 
     _apply_paper_style()
     plot_all_transitions(data, args.output_dir)
