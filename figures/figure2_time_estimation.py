@@ -48,9 +48,11 @@ from peint.io import read_transitions
 
 import paper_config as cfg
 
-# Families whose per-family spread is shown in the `single` panel.
-HIGHLIGHT_FAMILIES = ["2b3y_1_A", "1j1v_1_A"]
-HIGHLIGHT_COLORS = ["purple", "green"]
+# The family whose per-family spread is shown in the `single` panel. The published
+# "Family Transitions" panel shows one family, in green; the released script also drew
+# 2b3y_1_A in purple, which is not in the figure.
+HIGHLIGHT_FAMILIES = ["1j1v_1_A"]
+HIGHLIGHT_COLORS = ["green"]
 
 TIME_AXIS_MAX = 1.5
 
