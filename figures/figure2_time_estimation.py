@@ -220,6 +220,22 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     fig, ax = plt.subplots(figsize=(2, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
+    # The hexbin's extent clips to TIME_AXIS_MAX, so quote R over the population the panel
+    # actually shows. Beyond it the time-MLE has saturated -- estimates top out around 1.29
+    # however large the WAG time -- so those points carry no signal to correlate, and
+    # including them in a statistic the reader checks against the visible cloud is
+    # misleading. Both numbers are printed so the difference is never silent.
+    shown = data[(data.wag_time <= TIME_AXIS_MAX) & (data.new_time <= TIME_AXIS_MAX)]
+    r_shown = pearsonr(shown.wag_time, shown.new_time)[0]
+    r_all = pearsonr(data.wag_time, data.new_time)[0]
+    n_out = len(data) - len(shown)
+    print(
+        f"Pearson R = {r_shown:.4f} over the {len(shown)} transitions inside the axes "
+        f"(t <= {TIME_AXIS_MAX}); {r_all:.4f} over all {len(data)}, "
+        f"where the {n_out} beyond the axes ({100 * n_out / len(data):.1f}%) are off-panel "
+        f"and past the estimator's ceiling."
+    )
+
     ax.hexbin(
         data=data, x="wag_time", y="new_time", cmap="Greens", gridsize=45, mincnt=10,
         extent=(0, TIME_AXIS_MAX, 0, TIME_AXIS_MAX), linewidths=0, vmin=0, vmax=300,
@@ -227,7 +243,7 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     ax.plot([0, TIME_AXIS_MAX], [0, TIME_AXIS_MAX], color="black", linestyle="--", linewidth=0.25)
     ax.text(
         0.05, 0.95,
-        f"Pearson R: {pearsonr(data.wag_time, data.new_time)[0]:.2f}",
+        f"Pearson R: {r_shown:.2f}",
         transform=ax.transAxes, fontsize=8, verticalalignment="top", horizontalalignment="left",
         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", boxstyle="round,pad=0.1"),
     )
