@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Paper figures and benchmarks for PEINT (uses the peint model library)"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "CC-BY-NC-4.0"}
+license = {file = "LICENSE"}
 authors = [{name = "Antoine Koehl"}]
 
 # NOTE: the model library `peint` is NOT listed here — it
