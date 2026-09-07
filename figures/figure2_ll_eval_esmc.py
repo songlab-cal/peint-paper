@@ -534,7 +534,7 @@ def main():
         os.makedirs(args.out_dir, exist_ok=True)
         # Save the table BEFORE plotting, so an expensive run is never lost to a plotting
         # error, and so the panel can be redrawn later with --from-csv. This file is what the
-        # deposit should ship in figure_data (a few KB) -- see FINDINGS P1-8.
+        # deposit should ship in figure_data (a few KB).
         table_path = os.path.join(args.out_dir, stem + ".csv")
         panel_table(totals, counts, quantization_points).to_csv(table_path, index=False)
         print(f"Wrote {table_path}")

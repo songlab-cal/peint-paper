@@ -196,7 +196,7 @@ def report_axis_coverage(data: pd.DataFrame) -> None:
     different data; this function only says how much of it falls beyond the axes.
 
     An earlier revision of this file restricted both to the plotted range. That was a
-    workaround for the learning-rate bug (P0-17): at the old --lr 1e-2 the estimator saturated
+    workaround for a learning-rate bug: at the old --lr 1e-2 the estimator saturated
     near 1.15, so the out-of-range points were noise and excluding them recovered ~0.95. At the
     documented --lr 1e-1 no such correction is needed or wanted -- the unrestricted correlation
     is already the reported one, and restricting would overstate it.
@@ -388,7 +388,7 @@ def main() -> None:
     # The manuscript's Branch Length Estimation methods specify Adam at an initial learning
     # rate of 1e-1 decaying with gamma = 0.99, converging in under 80 steps -- which is also
     # t_mle's own default. This script previously passed 1e-2, ten times smaller, which bounds
-    # the reachable time at ~1.15 and puts a plateau in the upper third of the panel (P0-17).
+    # the reachable time at ~1.15 and puts a plateau in the upper third of the panel.
     # The documented value is the one to run.
     parser.add_argument("--lr", type=float, default=1e-1)
     parser.add_argument("--batch-size", type=int, default=128)

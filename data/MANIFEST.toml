@@ -442,7 +442,7 @@ This role previously carried `panels = []` on the grounds that esmif_validation'
 "are shipped complete". They are not shipped at all: there is no figure_data/esmif/ in the
 deposit and no role here creates one, though benchmarks/esmif_validation.py::_load_prior looks
 for exactly that directory. Absent this role, Approach 2 scores ONE of eight arms -- see
-FINDINGS P1-9. Ship figure_data/esmif/{esmif_gt_likelihood,esmif_gt_likelihood_perleaf,
+Ship figure_data/esmif/{esmif_gt_likelihood,esmif_gt_likelihood_perleaf,
 esmif_selfconsistency}.csv and this can go back to `panels = []`."""
 
 [[role]]
@@ -552,9 +552,9 @@ note = """Experimental structures from the trRosetta training set
 (https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz). Not ours to redistribute, and
 on this cluster they live in a third user's scratch. esmif_validation needs them for a cold
 run -- which is currently the ONLY run available, because its result CSVs do not ship (no
-figure_data/esmif/ exists; see FINDINGS P1-9 and the r1_omegafold note). Only pdb/ is needed,
+figure_data/esmif/ exists; see the r1_omegafold note). Only pdb/ is needed,
 and the archive members are prefixed ./training_set/, so extraction needs
---strip-components=2 (FINDINGS P1-7)."""
+--strip-components=2."""
 
 [[role]]
 name = "a3m"
