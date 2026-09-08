@@ -88,7 +88,7 @@ Headless machines need `QT_QPA_PLATFORM=offscreen`; the Figure 4 notebook sets i
 
 Level 3 uses two further environments — one for PEINT, one for the ESM-C variant — because
 JAX and PyTorch need different CUDA builds and ESM-C needs a `transformers` fork. Recipes and
-pinned versions are in `../REPRODUCING_TUTORIAL.md`.
+pinned versions are in `../REPRODUCING.md`.
 
 ### 3. Data
 
@@ -141,28 +141,36 @@ python scripts/check_local_data.py     # lists roles present and missing
 |---|---|---|---|
 | `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2c regenerates at level 3 |
 | `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | |
-| `Figure4.ipynb` | 4a, 4b, 4c, 4e, 4f | 1 | inputs are in the repository; 4d needs a parser not included here |
+| `Figure4.ipynb` | 4a, 4b, 4c, 4e, 4f | 1 | inputs are in the repository; 4d needs a fitting helper not yet packaged |
 | `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
 | `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
 | `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | |
 | `ExtendedData4.ipynb` | 4b, 4c | 2 | |
-| `ExtendedData5.ipynb` | 5d, 5e | 2 | 5b, 5c need a table not in this release |
+| `ExtendedData5.ipynb` | 5d, 5e | 2 | 5b, 5c need a table not yet recovered |
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
-| `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are cartoons; 8e is not scripted |
+| `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are diagrams; 8e is not scripted |
 | `ExtendedData9.ipynb` | 9a, 9b | 1 | |
 
 Where the manuscript prints a number, the notebook prints the computed value beside it and
 marks `MATCH` or `CHECK`.
 
-## Figures without a notebook
+## Reproduction gaps
 
-- **Figure 1** — schematic.
-- **ED Figure 8a, 8d** — cartoons; **8e** is a worked example, not scripted.
-- **ED Figure 1b, 1c** — ablation sweep. Numbers ship as `figure_data/ed1/master_sweep_553fam.csv`
-  with `make_report.py`, so the panels redraw at level 1. The sweep spans fifteen checkpoints
-  and is not rerunnable from this release.
-- **Supplementary Figure 1** — dataset and splits, both in the release; no plotting script.
+These notebooks ship **53 panels with their outputs embedded**. Five entries in the figure list
+are not reproduced by a notebook cell. In each case what is missing is a script or an input, not
+a result we have reason to doubt; where we are recovering the missing piece, that is said.
 
-`../REPRODUCING_TUTORIAL.md` has the level-2 and level-3 commands per panel with measured
+| figure | what is missing | status |
+|---|---|---|
+| **Fig. 4d** | the `tecantaloupe` fitting helper that turns the committed plate-reader export into lag times, growth rates and yields | being packaged for release; the inputs and the published panel are both committed to this repository |
+| **ED Fig. 5b, 5c** | the AlphaFold2-with-MSA prediction table these two panels compare against | produced for the original analysis, not yet recovered from the run that made it |
+| **ED Fig. 8e** | a script for the single worked alignment example; its inputs are the same categorical-Jacobian tensors as 8b | not scripted |
+| **ED Fig. 1b, 1c** | the ablation sweep itself — fifteen checkpoints, not rerunnable from this release | the numbers ship as `figure_data/ed1/master_sweep_553fam.csv` with `make_report.py`, so both panels redraw at level 1 |
+| **Supp. Fig. 1** | a plotting script | the dataset and splits it summarises are both in the release |
+
+Figure 1 and ED Figure 8a, 8d are diagrams rather than plots, so there is nothing to reproduce
+for them.
+
+`../REPRODUCING.md` has the level-2 and level-3 commands per panel with measured
 runtimes.
