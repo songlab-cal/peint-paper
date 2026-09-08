@@ -113,7 +113,7 @@ role's `producer` field — including the checkpoint path and the shard list.
   14,498 training families have transitions but no simulation inputs, so a family list
   taken from the train/test split cannot be simulated.
 
-- **PEINT checkpoints** now ship in the `full` tier (`peint_checkpoints`, 3.3 GB, four
+- **PEINT checkpoints** now ship in the `full` tier (`peint_checkpoints`, 6.9 GB, five
   files), so a step that simulates or scores is covered by the deposit alone. What is still
   not regenerable is the training that produced them.
 - **Ground-truth structures and a3m alignments** come from the trRosetta training set
