@@ -96,7 +96,7 @@ Everything downloads into `local_data/`. Paths in the notebooks are relative to 
 
 ```bash
 python scripts/fetch_local_data.py --list                # archives, sizes, contents
-python scripts/fetch_local_data.py --tier figure_data    # ~5 MB, covers all of level 1
+python scripts/fetch_local_data.py --tier figure_data    # 20 MB, covers all of level 1
 ```
 
 Level 2 needs specific archives:

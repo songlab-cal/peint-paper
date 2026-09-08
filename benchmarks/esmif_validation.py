@@ -381,7 +381,7 @@ def _median_table(df, value_col):
     return [(m, float(med[m])) for m in MODEL_ORDER if m in med.index]
 
 
-def write_rebuttal(a1, a2, strat, a2_missing=()):
+def write_report(a1, a2, strat, a2_missing=()):
     lines = ["# ESM-IF inverse-folding validation\n",
              "Inverse-folding corroboration of the structural metrics, per reviewer request. ",
              "Two confounds shape interpretation: ESM-IF's training on natural (UniRef50) sequences ",
@@ -406,7 +406,7 @@ def write_rebuttal(a1, a2, strat, a2_missing=()):
     lines.append("See `esmif_gt_likelihood_stratified_*` " + ("(written)." if strat else "(skipped: annotations unavailable)."))
     lines.append("\n_Leaves: non-root split, matched across models, capped at "
                  f"{LEAF_CAP}/family. Structures: up to {STRUCT_CAP}/family/model._\n")
-    (OUT_DIR / "REBUTTAL_esmif.md").write_text("\n".join(lines))
+    (OUT_DIR / "REPORT_esmif.md").write_text("\n".join(lines))
 
 
 def _load_prior(path, rename=None, drop_models=()):
@@ -518,9 +518,9 @@ def main():
         except Exception as e:  # pragma: no cover
             print(f"  [stratify] skipped: {e}")
 
-    write_rebuttal(a1 if a1 is not None else pd.DataFrame(),
+    write_report(a1 if a1 is not None else pd.DataFrame(),
                    a2, strat, a2_missing=a2_missing)
-    print(f"Done. Wrote CSVs + figures + REBUTTAL_esmif.md to {OUT_DIR}")
+    print(f"Done. Wrote CSVs + figures + REPORT_esmif.md to {OUT_DIR}")
 
 
 if __name__ == "__main__":

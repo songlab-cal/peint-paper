@@ -211,7 +211,7 @@ def write_report(a1_wide, a1_mcmc, jsd_df, families):
                  "via the root gap pattern (substitution-only; exact, no mafft --add). "
                  "JSD threshold "
                  f"{JSD_THRESHOLD}; conserved sites lie within the root span for these families._\n")
-    (OUT_DIR / "REBUTTAL_esm_mcmc_eval.md").write_text("\n".join(lines))
+    (OUT_DIR / "REPORT_esm_mcmc_eval.md").write_text("\n".join(lines))
 
 
 def main():
@@ -248,7 +248,7 @@ def main():
 
     if a1_wide is not None:
         write_report(a1_wide, a1_mcmc, jsd_df, families)
-        print(f"Wrote report -> {OUT_DIR / 'REBUTTAL_esm_mcmc_eval.md'}")
+        print(f"Wrote report -> {OUT_DIR / 'REPORT_esm_mcmc_eval.md'}")
 
 
 if __name__ == "__main__":

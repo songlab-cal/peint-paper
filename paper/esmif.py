@@ -17,7 +17,7 @@ of one scorer:
                                 (a homolog on a real GT structure; Approach 1).
 
 INTERPRETATION — two independent confounds, both established up front, because they
-change which comparisons are valid (see ``figures/output/esmif/REBUTTAL_esmif.md``):
+change which comparisons are valid (see ``figures/output/esmif/REPORT_esmif.md``):
 
 1. **Memorization.** ESM-IF was trained on ~12M AlphaFold structures of UniRef50
    sequences. The empirical ("Real") leaves are natural sequences ESM-IF has

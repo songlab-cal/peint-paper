@@ -143,7 +143,7 @@ def write_report(res, df, families, args):
                  "unit weights (LM/L + struct + ngram), which is conservative vs. lm-design's tuned "
                  "weights. Structure term scored on the GT backbone with the proposal threaded onto "
                  "its frame._\n")
-    (OUT_DIR / "REBUTTAL_esm_mcmc_proposer.md").write_text("\n".join(lines))
+    (OUT_DIR / "REPORT_esm_mcmc_proposer.md").write_text("\n".join(lines))
 
 
 def main():
@@ -209,7 +209,7 @@ def main():
               f"(degrade x{r['degrade']:.1f}) | dLM {r['dLM']:+.2f} dStruct {r['dStruct']:+.2f} dNgram {r['dNgram']:+.2f}")
     print(f"  efficiency gap PEINT/uniform: LM {res.get('gap_LM', float('nan')):.1f}x  "
           f"+struct {res.get('gap_LMstruct', float('nan')):.1f}x  full {res.get('gap_full', float('nan')):.1f}x")
-    print(f"wrote {OUT_DIR/'proposer_energy_gaps.csv'} + REBUTTAL_esm_mcmc_proposer.md")
+    print(f"wrote {OUT_DIR/'proposer_energy_gaps.csv'} + REPORT_esm_mcmc_proposer.md")
 
 
 if __name__ == "__main__":

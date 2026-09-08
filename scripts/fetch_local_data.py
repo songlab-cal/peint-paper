@@ -3,7 +3,7 @@
 
 Two tiers, because most people want the first one:
 
-  figure_data  ~5 MB    every table needed to re-render all the panels. No model
+  figure_data  20 MB    every table needed to re-render all the panels. No model
                         weights, no GPU, no other download.
   full         ~22 GB   the inputs behind those tables (~151 GB unpacked), so the
                         metrics can be recomputed rather than replotted.
