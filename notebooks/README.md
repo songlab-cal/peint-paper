@@ -16,6 +16,24 @@ Each cell is marked with the level it runs at.
 Every notebook runs at level 1 by default. Level-2 and level-3 commands are given in the
 cells, commented out.
 
+## Why level 1 is the default, and what the embedded outputs are
+
+These notebooks are shipped **with their outputs embedded**: the panels and printed values you
+see are from an actual run, not typed in. Re-running any cell regenerates them.
+
+Level 1 is the default because of size. The data release is already ~26 GB compressed. Some
+panels are backed by intermediates far larger than the panel needs — Extended Data Fig. 8b, for
+one, reduces a 32 MB Jacobian tensor per structure (25 GB across the set) to a 67 KB matrix.
+Depositing the raw intermediates for every panel would multiply the record's size for no gain,
+so what ships is the reduced quantity each panel actually plots.
+
+Every cell that redraws also documents how to recompute what it redraws from, and the producers
+take the flags to do it. Where a reduction step exists, it is the released implementation:
+Fig. 8b's, for instance, was checked against the original and is bitwise identical.
+
+So: level 1 shows the released figures follow from the released numbers, and the recompute path
+is there for anyone who wants to go further back.
+
 ## Setup
 
 ### 1. Repositories
@@ -40,8 +58,8 @@ either directory; no environment variables are needed for level 1.
 ### 2. Environment
 
 ```bash
-conda create -p ./envs/paper python=3.10 -y
-conda activate ./envs/paper
+conda create -p ./envs/peint-paper python=3.10 -y
+conda activate ./envs/peint-paper
 
 pip install -e ../peint      # model library
 pip install -e .             # this repository, plotting and analysis
