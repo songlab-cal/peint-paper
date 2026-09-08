@@ -131,7 +131,7 @@ python scripts/check_local_data.py     # lists roles present and missing
 | `ExtendedData5.ipynb` | 5d, 5e | 2 | 5b, 5c need a table not in this release |
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
-| `ExtendedData8.ipynb` | 8f | 1 | 8b, 8c, 8e need caches not in this release |
+| `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are cartoons; 8e is not scripted |
 | `ExtendedData9.ipynb` | 9a, 9b | 1 | |
 
 Where the manuscript prints a number, the notebook prints the computed value beside it and
@@ -140,7 +140,7 @@ marks `MATCH` or `CHECK`.
 ## Figures without a notebook
 
 - **Figure 1** — schematic.
-- **ED Figure 8a, 8d** — cartoons.
+- **ED Figure 8a, 8d** — cartoons; **8e** is a worked example, not scripted.
 - **ED Figure 1b, 1c** — ablation sweep. Numbers ship as `figure_data/ed1/master_sweep_553fam.csv`
   with `make_report.py`, so the panels redraw at level 1. The sweep spans fifteen checkpoints
   and is not rerunnable from this release.
