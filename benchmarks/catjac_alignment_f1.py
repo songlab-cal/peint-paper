@@ -7,8 +7,8 @@ panel is mean F1 per percent-identity bin for each method.
 The scoring is cached one file per family, so the panel redraws from that cache with no model
 and no GPU::
 
-    python -m benchmarks.catjac_alignment_f1                 # from the cache
-    python -m benchmarks.catjac_alignment_f1 --cache <dir>   # a cache elsewhere
+    python -m benchmarks.catjac_alignment_f1 --from-csv       # from the shipped table
+    python -m benchmarks.catjac_alignment_f1 --cache <dir>    # rebuild from the per-family cache
 
 Each cache file has four lines::
 
@@ -23,6 +23,7 @@ that ship with the categorical-Jacobian data.
 
 import argparse
 import os
+import pathlib
 
 import matplotlib
 matplotlib.use("Agg")
@@ -35,8 +36,10 @@ try:
     import paper_config as cfg
     DEFAULT_CACHE = str(cfg.LOCAL_DATA / "catjac" / "alignment_cache")
     DEFAULT_OUT = str(cfg.FIGURES_DIR)
+    FIGURE_DATA = str(cfg.FIGURE_DATA_DIR)
+    REPO_DATA = str(pathlib.Path(cfg.__file__).parent / "data" / "catjac")
 except Exception:                                     # usable outside the repo too
-    DEFAULT_CACHE, DEFAULT_OUT = "alignment_cache", "."
+    DEFAULT_CACHE, DEFAULT_OUT, FIGURE_DATA, REPO_DATA = "alignment_cache", ".", ".", "."
 
 STYLE = {
     "linewidth": 1.5, "markeredgecolor": "k", "markeredgewidth": 1.5, "markersize": 8,
@@ -69,6 +72,21 @@ def read_cache(cache_dir: str) -> pd.DataFrame:
     return df
 
 
+TABLE = "catjac_alignment_f1.csv"
+
+
+def load_table(out_dir: str) -> pd.DataFrame:
+    """Read the distilled per-family table, preferring the deposited copy."""
+    for path in (os.path.join(REPO_DATA, TABLE), os.path.join(FIGURE_DATA, TABLE),
+                 os.path.join(out_dir, TABLE)):
+        if os.path.exists(path):
+            print(f"  reading {path}")
+            return pd.read_csv(path)
+    raise SystemExit(
+        f"No {TABLE} found. Run with --cache <dir> to rebuild it from the per-family cache."
+    )
+
+
 def plot(df: pd.DataFrame, out_dir: str) -> None:
     plt.figure(figsize=(5, 3))
     for method, label, colour in (("peint", "PEINT CatJac Alignment F1 Score", 0),
@@ -98,13 +116,28 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cache", default=DEFAULT_CACHE, help="directory of per-family cache files")
     ap.add_argument("--output-dir", default=DEFAULT_OUT)
+    ap.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                    help="plot from the distilled table instead of the per-family cache")
     a = ap.parse_args()
+
+    if a.from_csv:
+        df = load_table(a.output_dir)
+        print(f"  {df.family.nunique()} families, {len(df)} scored alignments")
+        for method in ("peint", "classical"):
+            sub = df[df.method == method]
+            print(f"    {method:<10} mean F1 {sub.f1_score.mean():.3f}  "
+                  f"(low %ID <0.3: {sub[sub.pid < 0.3].f1_score.mean():.3f})")
+        plot(df, a.output_dir)
+        return
 
     if not os.path.isdir(a.cache):
         raise SystemExit(
             f"No alignment cache at {a.cache}. Fetch the catjac role, or pass --cache."
         )
     df = read_cache(a.cache)
+    os.makedirs(a.output_dir, exist_ok=True)
+    df.to_csv(os.path.join(a.output_dir, TABLE), index=False)
+    print(f"  wrote {os.path.join(a.output_dir, TABLE)} ({len(df)} rows)")
     print(f"  {df.family.nunique()} families, {len(df)} scored alignments")
     for method in ("peint", "classical"):
         sub = df[df.method == method]

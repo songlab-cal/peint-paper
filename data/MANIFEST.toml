@@ -12,10 +12,20 @@
 # Keeping it in one place is the point: the role list previously existed three times and
 # had already drifted.
 #
-# Sizes are measured, not estimated. `blocks_mb` is what it costs on the destination (the
-# cluster filesystem compresses transparently); `apparent_mb` is what rsync moves and what a
-# downloader needs free. For many small files blocks can EXCEED apparent -- `site_rates` is
-# 30,104 files averaging 1 KB, so it is 33 MB of content in 78 MB of blocks.
+# Sizes are measured, not estimated.
+#
+#   apparent_mb  the sum of the file sizes -- what is transferred, and the number a reader
+#                should budget for. USE THIS ONE.
+#   blocks_mb    what the role occupied on the filesystem it was produced on. That filesystem
+#                compresses transparently, so blocks there are often far below apparent; on a
+#                filesystem that does not compress, expect apparent instead. It is recorded for
+#                provenance and is not a requirement for anyone downloading.
+#
+# Neither number is the whole story for many small files: block size rounds every file up, so
+# blocks can EXCEED apparent -- `site_rates` is 30,104 files averaging 1 KB, 33 MB of content in
+# 78 MB of blocks. Where a filesystem also limits the NUMBER of files, `files` is the field that
+# matters: the full tier is 1.46 M files, over a million of which are the two raw-structure
+# archives that most readers can omit.
 #
 # Tiers:
 #   figure_data  every table needed to re-render all panels; one small archive

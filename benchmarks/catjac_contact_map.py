@@ -18,6 +18,7 @@ the diagonal, and apply the average product correction.
 
 import argparse
 import os
+import pathlib
 
 import matplotlib
 matplotlib.use("Agg")
@@ -28,8 +29,9 @@ try:
     import paper_config as cfg
     DEFAULT_OUT = str(cfg.FIGURES_DIR)
     FIGURE_DATA = str(cfg.FIGURE_DATA_DIR)
+    REPO_DATA = str(pathlib.Path(cfg.__file__).parent / "data" / "catjac")
 except Exception:
-    DEFAULT_OUT, FIGURE_DATA = ".", "."
+    DEFAULT_OUT, FIGURE_DATA, REPO_DATA = ".", ".", "."
 
 CACHE = "catjac_contact_map_4k6e.npz"
 
@@ -117,7 +119,8 @@ def main():
     a = ap.parse_args()
 
     if a.from_npz:
-        for path in (os.path.join(FIGURE_DATA, CACHE), os.path.join(a.output_dir, CACHE)):
+        for path in (os.path.join(REPO_DATA, CACHE), os.path.join(FIGURE_DATA, CACHE),
+                     os.path.join(a.output_dir, CACHE)):
             if os.path.exists(path):
                 print(f"  reading {path}")
                 z = np.load(path)

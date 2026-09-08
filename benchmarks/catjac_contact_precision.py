@@ -17,6 +17,7 @@ medium, long and all, at L fractions 1.0, 0.5 and 0.2. The published panel is P@
 import argparse
 import json
 import os
+import pathlib
 
 import matplotlib
 matplotlib.use("Agg")
@@ -29,8 +30,9 @@ try:
     CATJAC = str(cfg.LOCAL_DATA / "catjac")
     DEFAULT_OUT = str(cfg.FIGURES_DIR)
     FIGURE_DATA = str(cfg.FIGURE_DATA_DIR)
+    REPO_DATA = str(pathlib.Path(cfg.__file__).parent / "data" / "catjac")
 except Exception:
-    CATJAC, DEFAULT_OUT, FIGURE_DATA = "catjac", ".", "."
+    CATJAC, DEFAULT_OUT, FIGURE_DATA, REPO_DATA = "catjac", ".", ".", "."
 
 TABLE = "catjac_contact_precision.csv"
 SEPARATIONS = ("short", "medium", "long", "all")
@@ -79,7 +81,8 @@ def build_table(catjac_dir: str) -> pd.DataFrame:
 
 
 def load_table(out_dir: str) -> pd.DataFrame:
-    for path in (os.path.join(FIGURE_DATA, TABLE), os.path.join(out_dir, TABLE)):
+    for path in (os.path.join(REPO_DATA, TABLE), os.path.join(FIGURE_DATA, TABLE),
+                 os.path.join(out_dir, TABLE)):
         if os.path.exists(path):
             print(f"  reading {path}")
             return pd.read_csv(path)
