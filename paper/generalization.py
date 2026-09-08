@@ -125,8 +125,13 @@ def _download(url: str, dest: Path) -> None:
             subprocess.run(["curl", "-fsS", "--max-time", "900", "-o", str(tmp), url], check=True)
         else:  # pragma: no cover - fallback
             urllib.request.urlretrieve(url, tmp)
-    else:
-        with urllib.request.urlopen(url, timeout=900) as r, open(tmp, "wb") as f:
+    elif shutil.which("curl"):
+        # -L is required: the ECOD host answers http:// with a 308 to https://, which
+        # urllib does not follow, so urlopen raises HTTPError 308 and the fetch fails.
+        subprocess.run(["curl", "-fsSL", "--max-time", "900", "-o", str(tmp), url], check=True)
+    else:  # pragma: no cover - fallback when curl is unavailable
+        req = urllib.request.Request(url, headers={"User-Agent": "peint-paper"})
+        with urllib.request.urlopen(req, timeout=900) as r, open(tmp, "wb") as f:
             shutil.copyfileobj(r, f)
     tmp.replace(dest)
 

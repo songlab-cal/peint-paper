@@ -273,12 +273,55 @@ def pick_family(a3m_dir: str) -> str:
     return np.random.RandomState(seed).choice(families_test, 1)[0]
 
 
-def starting_sequence_for(a3m_dir: str, family: str) -> str:
-    """First sequence of the family's a3m — the only one guaranteed to share a length
-    between the PEINT and classical arms."""
-    with open(os.path.join(a3m_dir, family + ".a3m")) as f:
-        f.readline()  # header
-        return f.readline().strip()
+def starting_sequence_for(a3m_dir, family: str) -> str:
+    """The family's query sequence, which is what this panel simulates from.
+
+    Only one sequence is needed -- the first line of the family's a3m, i.e. the query. The
+    full trRosetta alignment set is 16 GB for that one string, so it is not required: pass
+    ``--starting-sequence`` directly, or let it be read from the family's structure, which
+    ships with the same third-party download and gives the identical sequence.
+
+    ``a3m_dir`` may be None when either alternative is used.
+    """
+    if a3m_dir is not None:
+        path = os.path.join(str(a3m_dir), family + ".a3m")
+        if os.path.exists(path):
+            with open(path) as f:
+                f.readline()                      # header
+                return f.readline().strip()
+    seq = starting_sequence_from_structure(family)
+    if seq is None:
+        raise SystemExit(
+            f"No starting sequence for {family}. Give it with --starting-sequence, or make "
+            f"either the a3m directory or the family's PDB available (see "
+            f"PEINT_PAPER_GROUND_TRUTH_STRUCTURE_DIR)."
+        )
+    return seq
+
+
+def starting_sequence_from_structure(family: str):
+    """Query sequence read off the family's trRosetta structure, or None if unavailable.
+
+    Verified to match the a3m query exactly for the paper's family (3t0y_1_A: 126 residues,
+    identical). The structures are the same public download as the alignments, so this needs
+    no additional source.
+    """
+    try:
+        import biotite.structure as struc
+        import biotite.structure.io.pdb as pdb_io
+        from biotite.sequence import ProteinSequence
+    except ImportError:
+        return None
+    pdb_dir = getattr(cfg, "GROUND_TRUTH_STRUCTURE_DIR", None)
+    if pdb_dir is None:
+        return None
+    path = os.path.join(str(pdb_dir), family + ".pdb")
+    if not os.path.exists(path):
+        return None
+    arr = pdb_io.PDBFile.read(path).get_structure(model=1)
+    arr = arr[struc.filter_amino_acids(arr)]
+    names = struc.get_residues(arr)[1]
+    return "".join(ProteinSequence.convert_letter_3to1(r) for r in names)
 
 
 def _apply_paper_style() -> None:
@@ -391,7 +434,12 @@ def plot_plddt(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--family", default=None, help="Family to simulate (default: the paper's).")
+    parser.add_argument("--family", default=None,
+                        help="Family to simulate. The paper's is 3t0y_1_A; without this the "
+                             "choice is reproduced from the a3m directory.")
+    parser.add_argument("--starting-sequence", default=None,
+                        help="Sequence to simulate from. Defaults to the family's query, taken "
+                             "from its a3m if present, otherwise from its structure.")
     parser.add_argument(
         "--peint",
         action="append",
@@ -421,9 +469,19 @@ def main() -> None:
     peint_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
     peint_caching.set_read_only(False)
 
-    a3m_dir = str(cfg.require(cfg.INPUT_A3M_DIR))
-    family = args.family or pick_family(a3m_dir)
-    starting_sequence = starting_sequence_for(a3m_dir, family)
+    # The alignment set is only needed to CHOOSE the family; with --family given, this panel
+    # needs one sequence, so do not require 16 GB for it.
+    a3m_dir = cfg.INPUT_A3M_DIR if os.path.isdir(str(cfg.INPUT_A3M_DIR or "")) else None
+    if args.family:
+        family = args.family
+    else:
+        if a3m_dir is None:
+            raise SystemExit(
+                "--family is required unless the a3m directory is available (it is only used "
+                "to reproduce the paper's family choice). The paper's family is 3t0y_1_A."
+            )
+        family = pick_family(str(a3m_dir))
+    starting_sequence = args.starting_sequence or starting_sequence_for(a3m_dir, family)
     print(f"Family: {family} (starting sequence length {len(starting_sequence)})")
 
     sim_kwargs = dict(

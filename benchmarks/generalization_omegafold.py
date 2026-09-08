@@ -13,6 +13,8 @@ Fetches the annotation data itself. Run from the repo root::
     python -m benchmarks.generalization_omegafold
 """
 
+import pathlib
+
 import pandas as pd
 
 import paper_config as cfg
@@ -23,11 +25,29 @@ FOCUS_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
 
 
 def load_omegafold() -> pd.DataFrame:
-    """Long-form OmegaFold pLDDT (0-100): one row per (family, model), all models incl ESM-C."""
-    return pd.read_csv(cfg.FIGURES_DIR / "figure3_omegafold_plddt_ecdf.csv")
+    """Long-form OmegaFold pLDDT (0-100): one row per (family, model), all models incl ESM-C.
+
+    The table ships with the data release; look there first so a fresh checkout works
+    without having produced it, then fall back to a locally produced copy.
+    """
+    name = "figure3_omegafold_plddt_ecdf.csv"
+    for d in (cfg.FIGURE_DATA_DIR, cfg.FIGURES_DIR):
+        p = pathlib.Path(d) / name
+        if p.exists():
+            print(f"  reading {p}")
+            return pd.read_csv(p)
+    raise SystemExit(
+        f"{name} not found in the release (local_data/figure_data) or figures/output. "
+        f"Fetch the figure_data tier, or run figures.figure3_structure_metrics first."
+    )
 
 
 def main() -> None:
+    # Novelty here is family-level: a family counts as novel only when every one of its Pfam
+    # domains is novel to the held-out set. That partition is derived from the annotation
+    # files, not from the per-domain table used by the sequence-conservation panel -- the two
+    # define different novel sets, and substituting one for the other shifts the novel arm by
+    # several pLDDT points while leaving the seen arm apparently correct.
     gen.ensure_annotations()
     df = load_omegafold()
     print(f"OmegaFold: {df['family'].nunique()} families, models={sorted(df['model'].unique())}")

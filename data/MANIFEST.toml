@@ -132,9 +132,9 @@ archive = "figure_data"
 source = "{repo_root}/local_data/figure_data"
 tier = "figure_data"
 probe = "figure3_conservation_jsd.csv"
-blocks_mb = 29
-apparent_mb = 40
-files = 25
+blocks_mb = 27
+apparent_mb = 27
+files = 39
 panels = ["all"]
 note = "Per-panel tables. The whole replot tier, ~5 MB packed."
 
@@ -578,8 +578,9 @@ apparent_mb = 16000
 files = 15051
 panels = []
 note = """trRosetta training-set alignments, same download as gt_pdb. Only on the Pfam
-cold path, which the shipped annotations bypass. figure2_simulation asserts the directory
-exists but reads one family from it."""
+cold path, which the shipped annotations bypass. figure2_simulation no longer needs this:
+with --family given it requires one starting sequence, read from the family's structure when
+the alignments are absent, so the 16 GB is not on any panel's path."""
 
 [[role]]
 name = "peint_transitions_aligned"
