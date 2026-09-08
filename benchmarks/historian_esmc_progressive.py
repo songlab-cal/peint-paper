@@ -24,7 +24,7 @@ import argparse
 import json
 import os
 
-from protevo import caching as protevo_caching
+from peint import caching as peint_caching
 from paper.alignment import run_mafft
 from paper.historian import (
     prepare_simulated_vs_real_historian,
@@ -63,8 +63,8 @@ def main():
           f"(num_processes={args.num_processes}, band={args.band})")
 
     base = f"{R2}/simulations/historian_progressive"
-    protevo_caching.set_cache_dir(f"{base}/_cache")
-    protevo_caching.set_dir_levels(3)
+    peint_caching.set_cache_dir(f"{base}/_cache")
+    peint_caching.set_dir_levels(3)
     N = args.num_processes
 
     # 1. Pick the eval subtree (deterministic from the real tree) and filter the ESM-C

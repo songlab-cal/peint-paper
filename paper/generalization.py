@@ -455,7 +455,7 @@ def seq1_residue_to_column(family: str, msa_dir: Optional[str] = None) -> Dict[i
     walked left to right, are seq1 residues 1..L. Columns are numbered as ``paper.jsd`` numbers
     them (1-based), so the result indexes directly into that module's per-site tables.
     """
-    from protevo.utils import read_msa, gap_character
+    from peint.utils import read_msa, gap_character
 
     msa_dir = msa_dir or str(Path(cfg.MAFFT_ADD_DIR) / "old_sequences")
     msa = read_msa(os.path.join(msa_dir, f"{family}.txt"))
@@ -495,7 +495,7 @@ def fast_family_jsd(
     threshold: float,
 ) -> Tuple[Dict[str, float], "pd.DataFrame"]:
     """Drop-in fast equivalent of ``paper.jsd.family_jsd`` (same return shape and values)."""
-    from protevo.utils import read_msa
+    from peint.utils import read_msa
     from paper.jsd import RESIDUES, VOCAB, jsd, msa_path
     from paper.splits import (
         REAL, REAL_OTHER_SPLIT, SPLIT_A, SPLIT_B, filter_msa_based_on_split,

@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from protevo.utils import read_msa
+from peint.utils import read_msa
 
 from paper.jsd import (
     REAL,

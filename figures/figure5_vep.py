@@ -9,7 +9,7 @@ import os
 import json
 from pathlib import Path
 
-from protevo.vep._vep_utils import (
+from peint.vep._vep_utils import (
     PROTEINGYM_DIR,
     _format_time_dir_suffix,
     _discover_time_dirs,
@@ -30,7 +30,7 @@ apply Illustrator-friendly, publication-ready defaults before plotting.
 """
 
 # Figures and their input data both live inside the peint-paper repo (anchored via
-# __file__), git-committed, so nothing is written to the model (protevo) repo:
+# __file__), git-committed, so nothing is written to the model (peint) repo:
 #   * figures                -> peint-paper/figures/<category>/
 #   * per-run scored results -> peint-paper/local_data/vep/test_lls/production/<run>/spearman_results.csv
 # The ProteinGym family reference (transition pairs) is still read from the model
@@ -47,6 +47,12 @@ def _fig_path(category, filename):
     out_dir = FIG_DIR / category
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / filename
+
+
+# Assay types in the order the figures present them.
+ASSAY_TYPE_ORDER = [
+    "OrganismalFitness", "Stability", "Expression", "Activity", "Binding",
+]
 
 
 def _paired_bars(df_plot, hue_order, palette, group_size, alpha):
@@ -108,6 +114,12 @@ def _plot_proteingym_spearman_comparision(
     Style is controlled externally via `_set_publication_style()`.
     """
     df_plot = df_results_all.copy()
+    # Assay types read in a fixed, meaningful order rather than order-of-appearance.
+    if "assay_type" in df_plot.columns:
+        present = [a for a in ASSAY_TYPE_ORDER if a in set(df_plot["assay_type"])]
+        present += [a for a in dict.fromkeys(df_plot["assay_type"]) if a not in present]
+        df_plot["assay_type"] = pd.Categorical(df_plot["assay_type"], categories=present, ordered=True)
+        df_plot = df_plot.sort_values("assay_type")
     hue_order = None
     if model_names is not None:
         df_plot = df_plot[df_plot["model"].isin(model_names.keys())]
@@ -1334,30 +1346,31 @@ def make_spearman_figure():
         palettes_all[1],
     ]
     run_names = {
-        # "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
-        # "peint": {
-        #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        #     "t_wag": None,
-        # },
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {
+            "run_name": "peint_esm2_150m",
+            "t_wag": None,
+        },
         # "peint_optimal_t_per_site": {
         #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_optimal_per_site",
         #     "t_wag": None,
         # },
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        # 650M arm, kept for reference; the captions specify 150M.
+        # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
-    save_path = _fig_path("spearman_agg", "spearman_plot_esm_650m.png")
+    save_path = _fig_path("spearman_agg", "spearman_plot_esm_150m.png")
     return _make_spearman_plot(
         run_names=run_names,
         model_names=model_names,
         palette=palettes,
         save_path=save_path,
         figsize=(10, 4),
-        # save_spearman_path=MAIN_DIR / "protevo/vep/figures" / "spearman_results.csv",
+        # save_spearman_path=MAIN_DIR / "peint/vep/figures" / "spearman_results.csv",
     )
 
 
@@ -1366,7 +1379,7 @@ def make_per_family_spearman_figure():
     run_names_example = {
         "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
         "peint": {
-            "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
+            "run_name": "peint_esm2_150m",
             "t_wag": None,
         },
         # "peint_optimal_t_per_site": {
@@ -1374,7 +1387,7 @@ def make_per_family_spearman_figure():
         #     "t_wag": None,
         # },
         # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        # "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names_example = {
         "esm_150m": "ESM2",
@@ -1468,16 +1481,16 @@ def make_per_family_spearman_time_figure_best_vs_default():
 
 def make_esm_vs_peint_figure():
     run_names_example = {
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {"run_name": "peint_esm2_150m", "t_wag": None},
     }
     model_names_example = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
     assay_type = "OrganismalFitness"
     save_path = _fig_path(
-        "scatter", f"esm_vs_peint_scatter_{assay_type}_esm_650m.png"
+        "scatter", f"esm_vs_peint_scatter_{assay_type}_esm_150m.png"
     )
     return _make_esm_vs_peint_plot(
         run_names=run_names_example,
@@ -1504,19 +1517,20 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
         palettes_all[1],
     ]
     run_names = {
-        # "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
-        # "peint": {
-        #     "run_name": "20250922_112511-ft_217fams-hhfilter90-epoch=5-step=4000-t_1_0",
-        #     "t_wag": None,
-        # },
-        "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
-        "peint": {"run_name": "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0", "t_wag": None},
+        "esm_150m": {"run_name": "ESM2_150M", "t_wag": None},
+        "peint": {
+            "run_name": "peint_esm2_150m",
+            "t_wag": None,
+        },
+        # 650M arm, kept for reference; the captions specify 150M.
+        # "esm_650m": {"run_name": "ESM2_650M", "t_wag": None},
+        # "peint": {"run_name": "peint_650m", "t_wag": None},
     }
     model_names = {
-        "esm_650m": "ESM2",
+        "esm_150m": "ESM2",
         "peint": "PEINT",
     }
-    save_path = _fig_path("mutational_depth", "spearman_by_mutational_depth_esm_650m.png")
+    save_path = _fig_path("mutational_depth", "spearman_by_mutational_depth_esm_150m.png")
     output_dir = VEP_RESULTS_DIR
 
     # Load mutational depth data for all models
@@ -1629,7 +1643,7 @@ def make_spearman_by_mutational_depth_figure(per_assay_type=False):
 # Official-release baselines + base-vs-PEINT / multi-model comparisons
 # ---------------------------------------------------------------------------
 # Baselines come from ProteinGym's released per-variant zero-shot scores via
-# protevo.vep.official_baselines (the maintained canonical source). Each released
+# peint.vep.official_baselines (the maintained canonical source). Each released
 # column is materialized as an ordinary `test_lls/production/<column>/` run dir so
 # the existing bar machinery (_make_spearman_plot -> side-by-side bars per assay
 # type with SE error bars) works unchanged and any released model can sit next to
@@ -1641,7 +1655,7 @@ def materialize_official_baselines(columns, overwrite=False):
     column (schema `family, assay_type, spearman`), computing all requested columns
     in a single pass over the release. Returns the list of run names (== columns).
     """
-    from protevo.vep.official_baselines import released_zero_shot_spearman
+    from peint.vep.official_baselines import released_zero_shot_spearman
 
     prod = VEP_RESULTS_DIR
     todo = [

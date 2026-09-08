@@ -1,6 +1,6 @@
 """Structure prediction for the paper benchmarks: OmegaFold and AF2Rank.
 
-Ported from the model repo's ``protevo/datasets/_structure_prediction.py``. Structure
+Ported from the model repo's ``peint/datasets/_structure_prediction.py``. Structure
 prediction is a *benchmarking* dependency, not part of the ``peint`` model library.
 
 The paper uses **both** predictors, and they have very different requirements:
@@ -28,8 +28,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from protevo import caching as protevo_caching
-from protevo.utils import read_msa, write_msa
+from peint import caching as peint_caching
+from peint.utils import read_msa, write_msa
 
 import paper_config as cfg
 
@@ -202,7 +202,7 @@ def create_valid_output_for_caching(result_dir):
         os.chmod(out_path, mode=444)
 
 
-@protevo_caching.cached_computation(
+@peint_caching.cached_computation(
     output_dirs=["output_structures_dir"],
     exclude_args_if_default=["input_filename", "keep_prefix"],
     write_extra_log_files=True,
@@ -250,7 +250,7 @@ def generate_omegafold_predictions(
     create_valid_output_for_caching(output_structures_dir)
 
 
-@protevo_caching.cached_computation(
+@peint_caching.cached_computation(
     output_dirs=[
         "output_structures_dir",
         "output_scores_dir",

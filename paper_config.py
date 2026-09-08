@@ -19,14 +19,14 @@ REPO_ROOT = Path(__file__).resolve().parent
 def _peint_repo_root() -> Path:
     """Root of the installed ``peint`` checkout, which ships the model checkpoints.
 
-    Resolved from the installed ``protevo`` package rather than assuming a sibling
+    Resolved from the installed ``peint`` package rather than assuming a sibling
     directory, so it works wherever ``pip install -e`` pointed. Uses ``find_spec`` to
     avoid importing (and thus loading torch) at config-import time.
     """
-    spec = importlib.util.find_spec("protevo")
+    spec = importlib.util.find_spec("peint")
     if spec is None or not spec.origin:
         raise ImportError(
-            "Cannot locate the installed 'protevo' package. Install peint first: "
+            "Cannot locate the installed 'peint' package. Install peint first: "
             "pip install -e /path/to/peint"
         )
     return Path(spec.origin).resolve().parent.parent
@@ -64,7 +64,7 @@ def _first_existing(*candidates, env=None):
     One config has to serve two layouts: this machine, where these inputs sit in scattered
     absolute trees, and an unpacked data deposit, where everything lives under LOCAL_DATA.
     The authoritative tree is listed first so the producing machine keeps resolving to the
-    exact same string -- protevo cache keys hash absolute argument paths, and a "harmless"
+    exact same string -- peint cache keys hash absolute argument paths, and a "harmless"
     reordering here would cold-start every cached computation.
 
     Under LOCAL_DATA_ONLY the first candidate *under LOCAL_DATA* wins whether or not it
@@ -77,9 +77,19 @@ def _first_existing(*candidates, env=None):
     if env and os.environ.get(env):
         return Path(os.environ[env])
     if LOCAL_DATA_ONLY:
-        for c in candidates:
-            if str(c).startswith(str(LOCAL_DATA)):
+        # Prefer the first deposit-relative candidate that EXISTS, then fall back to the first
+        # one regardless. A role can legitimately have more than one deposit-relative location
+        # -- e.g. the family split lists ship both in the `aux` archive (LOCAL_DATA/splits/)
+        # and inside the figure_data tier (LOCAL_DATA/figure_data/splits/) -- and returning the
+        # first unconditionally made the figure_data tier unusable on its own. Falling back to
+        # candidates[0] preserves the original intent: a genuinely missing input is reported
+        # against the deposit path, not silently resolved to a local tree.
+        under = [c for c in candidates if str(c).startswith(str(LOCAL_DATA))]
+        for c in under:
+            if Path(c).exists():
                 return Path(c)
+        if under:
+            return Path(under[0])
     for c in candidates:
         if Path(c).exists():
             return Path(c)
@@ -97,7 +107,7 @@ DERIVED_DIR = Path(os.environ.get("PEINT_PAPER_DERIVED_DIR", str(LOCAL_DATA / "d
 # PCP benchmark to be run from one specific working directory; routing them through
 # config means every script can run from the repo root.
 PROTEVO_CACHE_DIR = Path(os.environ.get(
-    "PEINT_PAPER_PROTEVO_CACHE_DIR", str(DERIVED_DIR / "_cache_protevo")
+    "PEINT_PAPER_PEINT_CACHE_DIR", str(DERIVED_DIR / "_cache_peint")
 ))
 CHERRYML_CACHE_DIR = Path(os.environ.get(
     "PEINT_PAPER_CHERRYML_CACHE_DIR", str(DERIVED_DIR / "_cache_benchmarking")
@@ -209,6 +219,7 @@ TRANSITIONS_DIR = _first_existing(
 NONTRAIN_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
     LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_nontrain_fam.json",
     env="PEINT_PAPER_NONTRAIN_FAMILIES_FILE",
 )
 
@@ -276,6 +287,7 @@ REAL_MSA_DIR = Path(os.environ.get("PEINT_PAPER_REAL_MSA_DIR", str(EMPIRICAL_MSA
 HELDOUT_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "final_sim_held_out_family.txt",
     LOCAL_DATA / "splits" / "final_sim_held_out_family.txt",
+    FIGURE_DATA_DIR / "splits" / "final_sim_held_out_family.txt",
     env="PEINT_PAPER_HELDOUT_FAMILIES_FILE",
 )
 # Same 553 families as HELDOUT_FAMILIES_FILE, in the {"families": [...]} JSON form the
@@ -283,6 +295,7 @@ HELDOUT_FAMILIES_FILE = _first_existing(
 HELDOUT_FAMILIES_JSON = _first_existing(
     DATA_ROOT / "local_data" / "final_sim_held_out_family.json",
     LOCAL_DATA / "splits" / "final_sim_held_out_family.json",
+    FIGURE_DATA_DIR / "splits" / "final_sim_held_out_family.json",
     env="PEINT_PAPER_HELDOUT_FAMILIES_JSON",
 )
 
@@ -299,11 +312,13 @@ HELDOUT_FAMILIES_JSON = _first_existing(
 TRAIN_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_fam.json",
     LOCAL_DATA / "splits" / "14k5_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_fam.json",
     env="PEINT_PAPER_TRAIN_FAMILIES_FILE",
 )
 EVAL_FAMILIES_FILE = _first_existing(
     DATA_ROOT / "local_data" / "14k5_nontrain_fam.json",
     LOCAL_DATA / "splits" / "14k5_nontrain_fam.json",
+    FIGURE_DATA_DIR / "splits" / "14k5_nontrain_fam.json",
     env="PEINT_PAPER_EVAL_FAMILIES_FILE",
 )
 ANNOTATION_DIR = _first_existing(

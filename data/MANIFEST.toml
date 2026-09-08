@@ -12,10 +12,20 @@
 # Keeping it in one place is the point: the role list previously existed three times and
 # had already drifted.
 #
-# Sizes are measured, not estimated. `blocks_mb` is what it costs on the destination (the
-# cluster filesystem compresses transparently); `apparent_mb` is what rsync moves and what a
-# downloader needs free. For many small files blocks can EXCEED apparent -- `site_rates` is
-# 30,104 files averaging 1 KB, so it is 33 MB of content in 78 MB of blocks.
+# Sizes are measured, not estimated.
+#
+#   apparent_mb  the sum of the file sizes -- what is transferred, and the number a reader
+#                should budget for. USE THIS ONE.
+#   blocks_mb    what the role occupied on the filesystem it was produced on. That filesystem
+#                compresses transparently, so blocks there are often far below apparent; on a
+#                filesystem that does not compress, expect apparent instead. It is recorded for
+#                provenance and is not a requirement for anyone downloading.
+#
+# Neither number is the whole story for many small files: block size rounds every file up, so
+# blocks can EXCEED apparent -- `site_rates` is 30,104 files averaging 1 KB, 33 MB of content in
+# 78 MB of blocks. Where a filesystem also limits the NUMBER of files, `files` is the field that
+# matters: the full tier is 1.46 M files, over a million of which are the two raw-structure
+# archives that most readers can omit.
 #
 # Tiers:
 #   figure_data  every table needed to re-render all panels; one small archive
@@ -107,7 +117,7 @@ name = "r1_omegafold"
 file = "r1_omegafold.tar.zst"
 prebuilt = true
 unpack_into = "r1"
-note = "raw rev1 OmegaFold structures, 607,696 files. Prebuilt; unpacks into local_data/r1/. Only omegafold_plddt.csv is needed by any panel."
+note = "raw rev1 OmegaFold structures, 607,696 files. Prebuilt; unpacks into local_data/r1/. REQUIRED by esmif_validation (ED5e) for its seven rev1 model arms; omegafold_plddt.csv covers the pLDDT panels only."
 
 
 # =====================================================================================
@@ -130,7 +140,7 @@ note = "Per-panel tables. The whole replot tier, ~5 MB packed."
 
 [[role]]
 name = "vep"
-producer = "protevo.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The VEP checkpoints ship in peint_checkpoints.tar.zst; the raw per-variant scoring output behind these tables is not redistributed."
+producer = "peint.vep compute_fitness (PEINT runs) + official_baselines (released ProteinGym columns). The VEP checkpoints ship in peint_checkpoints.tar.zst; the raw per-variant scoring output behind these tables is not redistributed."
 path = "vep"
 source = "{repo_root}/local_data/vep"
 tier = "figure_data"
@@ -246,7 +256,7 @@ blocks_mb = 2365
 apparent_mb = 9348
 files = 22919
 panels = ["pcp_panels", "historian_indel_vs_length", "historian_indel_esmc_vs_rev1"]
-note = """Carries the ESM-C Historian outputs in their protevo content-hash form under
+note = """Carries the ESM-C Historian outputs in their peint content-hash form under
 historian_progressive/_cache/; paper.historian.esmc_historian_dirs resolves the refine and
 norefine runs out of it by mtime. Both variants are kept so that comparison stays checkable."""
 
@@ -433,9 +443,17 @@ probe = "."
 blocks_mb = 12433
 apparent_mb = 47564
 files = 607696
-panels = []
+panels = ["esmif_validation"]
 note = """Raw rev1 OmegaFold structures. Needed to regenerate omegafold_plddt.csv (shipped),
-and by esmif_validation if its result CSVs are incomplete -- they are shipped complete."""
+and REQUIRED by esmif_validation's Approach 2 (ED5e), which globs
+r1/omegafold/<family>/<model>/structures/ for the seven rev1 model arms.
+
+This role previously carried `panels = []` on the grounds that esmif_validation's result CSVs
+"are shipped complete". They are not shipped at all: there is no figure_data/esmif/ in the
+deposit and no role here creates one, though benchmarks/esmif_validation.py::_load_prior looks
+for exactly that directory. Absent this role, Approach 2 scores ONE of eight arms -- see
+Ship figure_data/esmif/{esmif_gt_likelihood,esmif_gt_likelihood_perleaf,
+esmif_selfconsistency}.csv and this can go back to `panels = []`."""
 
 [[role]]
 name = "r1_results_af2"
@@ -542,8 +560,11 @@ files = 15049
 panels = ["esmif_validation"]
 note = """Experimental structures from the trRosetta training set
 (https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz). Not ours to redistribute, and
-on this cluster they live in a third user's scratch. esmif_validation needs them only for a
-cold run; its result CSVs ship complete."""
+on this cluster they live in a third user's scratch. esmif_validation needs them for a cold
+run -- which is currently the ONLY run available, because its result CSVs do not ship (no
+figure_data/esmif/ exists; see the r1_omegafold note). Only pdb/ is needed,
+and the archive members are prefixed ./training_set/, so extraction needs
+--strip-components=2."""
 
 [[role]]
 name = "a3m"
@@ -608,7 +629,7 @@ declared because it is the only copy and it is easy to lose track of."""
 
 [[role]]
 name = "peint_cache"
-producer = "protevo's evaluate_peint_model_* cached computations, in the peint repo"
+producer = "peint's (formerly protevo) evaluate_peint_model_* cached computations, in the peint repo"
 path = "peint/_cache_peint"
 source = "{peint_repo}/_cache_peint"
 tier = "on_request"
@@ -616,7 +637,7 @@ blocks_mb = 5164
 apparent_mb = 5164
 files = 0
 panels = ["figure2_likelihood_eval"]
-note = """Cached per-site likelihood evaluations in the peint repo. protevo cache keys are a
+note = """Cached per-site likelihood evaluations in the peint repo. peint cache keys are a
 sha512 over absolute argument paths, so this is only valid in place -- it cannot be relocated
 or shared, which is why figure2_likelihood_eval is replot-only for everyone else."""
 

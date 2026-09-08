@@ -3,7 +3,7 @@
 Three things to do: clone both repos, build two conda environments, get the data.
 Then see [Reproducing figures](#reproducing-figures) for what you can run at each tier.
 
-The models live in the separate [`peint`](../peint) repo and are imported here as `protevo`.
+The models live in the separate [`peint`](../peint) repo and are imported here as `peint`.
 Two environments are needed because ESM-C and the folding stack (OmegaFold, JAX/AF2Rank,
 ProstT5) require incompatible `transformers` versions.
 
@@ -39,13 +39,13 @@ pip install matplotlib seaborn logomaker biotite 'tomli; python_version < "3.11"
 
 Do not `pip install transformers` here — it replaces the Biohub fork and ESM-C stops loading.
 
-### `protevo-env` — folding, alignment, ESM-IF
+### `peint-paper` — folding, alignment, ESM-IF
 
 **Install in this order.** JAX and PyTorch each ship CUDA wheels; the wrong order gives cuDNN
 errors at runtime, not install time.
 
 ```bash
-conda create -n protevo-env python=3.10 -y && conda activate protevo-env
+conda create -n peint-paper python=3.10 -y && conda activate peint-paper
 
 pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 \
     --index-url https://download.pytorch.org/whl/cu124
@@ -81,7 +81,7 @@ Verify — torch and JAX must both see the GPU in one process:
 python - <<'EOF'
 import torch;  print("torch", torch.__version__, torch.cuda.is_available())
 import jax;    print("jax", jax.__version__, jax.devices())   # expect [CudaDevice(id=0)]
-import protevo, omegafold, colabdesign, esm, torch_geometric
+import peint, omegafold, colabdesign, esm, torch_geometric
 from transformers import T5EncoderModel
 print("ok")
 EOF
@@ -93,7 +93,7 @@ EOF
 
 ```bash
 export PEINT_PAPER_PY_ESMC=/path/to/envs/peint-esmc/bin/python
-export PEINT_PAPER_PY_PROTEVO=/path/to/envs/protevo-env/bin/python
+export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-paper/bin/python
 export HF_HOME=/path/to/hf_cache          # ESM-C and ProstT5 weights land here
 ```
 
@@ -193,7 +193,7 @@ No model is loaded — these read files.
 ### Tier 3 — rerun from a checkpoint
 
 Regenerating the simulations needs a checkpoint and a GPU. Simulation runs in `peint-esmc`,
-folding in `protevo-env`, and what crosses between them is **sequences in text files** — so
+folding in `peint-paper`, and what crosses between them is **sequences in text files** — so
 nothing has to be version-compatible across the two. Running the halves as separate jobs is
 the designed path, not a workaround. Full recipe in
 [Running from a checkpoint](#running-from-a-checkpoint-end-to-end) below.
@@ -219,15 +219,18 @@ scripts/fetch_local_data.py --archives peint_checkpoints sim aux \
 ```
 
 Have MAFFT, `iqtree2` and the environments' `bin/` on `PATH` (OmegaFold is a console script
-in `protevo-env/bin`, so calling the interpreter directly is not enough).
+in `peint-paper/bin`, so calling the interpreter directly is not enough).
 
 **0. Pick families.** Both entry points take the same JSON: `in_family` are families seen in
 training, `held_out_family` are not. This list of families allows you to subset.
 
-`data/example_families.json` is a fixed 20 + 5 subset of the paper's split, ready to use:
+`data/example_families.json` is a fixed set of **five held-out families**, ready to use.
+It is five rather than a larger sample because every family in it must have all three
+simulation inputs in `sim/` (tree, root sequence, empirical MSA), and only the 545
+simulation families do — training families have transitions but were never given them:
 
 ```json
-{"in_family": ["13gs_1_A", "..."], "held_out_family": ["1a2t_1_A", "..."]}
+{"in_family": [], "held_out_family": ["1a2t_1_A", "1acf_1_A", "1amx_1_A", "1aq6_1_A", "1bai_1_A"]}
 ```
 
 **1. Simulate** (`peint-esmc`, GPU). Loads the checkpoint, evolves each
@@ -247,12 +250,12 @@ $PEINT_PAPER_PY_ESMC -m benchmarks.generate_all_results \
 Use `sim/trees_newick`, not `sim/trees` — the latter is a different node-list format and fails
 with `NewickError`.
 
-**2. Structures and 3Di** (`protevo-env`, GPU). The same command, different interpreter and
+**2. Structures and 3Di** (`peint-paper`, GPU). The same command, different interpreter and
 flags. The simulations are cache hits, so no model is built here; only folding and ProstT5
 run. This is the whole handoff — what crosses between the environments is sequences in files:
 
 ```bash
-$PEINT_PAPER_PY_PROTEVO -m benchmarks.generate_all_results \
+$PEINT_PAPER_PY_PEINT -m benchmarks.generate_all_results \
     --families_path data/example_families.json \
     --tree_dir local_data/sim/trees_newick \
     --root_sequences_dir local_data/sim/root_sequences \
@@ -303,7 +306,7 @@ Swap the checkpoint to compare models; swap the family list to change the split.
 
 `figure2_simulation` is the one script that needs both environments. Run it twice —
 `--skip-structures` in `peint-esmc` to generate and cache the sequences, then again in
-`protevo-env` where those are cache hits and only the folding runs. `render_panels.py` does
+`peint-paper` where those are cache hits and only the folding runs. `render_panels.py` does
 this automatically via `depends_on`.
 
 Note the cache key includes the checkpoint path as a string, so both passes must use the
@@ -326,7 +329,7 @@ recognized` — that means cache miss, not a broken install.
 
 - `biotite>=1.0` renamed `filter_backbone`, which `fair-esm` 2.0.0 imports at load.
   `paper/esmif.py` shims it; do the same if you import `esm.inverse_folding` yourself.
-- protevo cache keys hash absolute input paths, so a cache copied from another machine
+- peint cache keys hash absolute input paths, so a cache copied from another machine
   never hits. This is why `pcp_panels` is cold unless you built its cache in place.
 - Flash Attention wheel failures: see `../peint/installation.md`.
 - The classical baselines are fit through cherryml, which shells out to `mpirun`. Asking for

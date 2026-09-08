@@ -45,14 +45,14 @@ import numpy as np
 import pandas as pd
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
-from protevo.simulation import simulate_alisim_evolution, simulate_peint_evolution_down_tree
-from protevo.simulation._alisim import (
+from peint import caching as peint_caching
+from peint.simulation import simulate_alisim_evolution, simulate_peint_evolution_down_tree
+from peint.simulation._alisim import (
     MODEL_DEFINITIONS as ALISIM_MODEL_DEFINITIONS,
     PRIOR_MODE_SUPPORTED_MODELS,
     ALISIM_MODES,
 )
-from protevo.utils import read_msa, write_msa
+from peint.utils import read_msa, write_msa
 
 from paper.alignment import clean_msa, run_mafft, run_mafft_add
 from paper.jsd import REAL, REAL_OTHER_SPLIT, family_jsd
@@ -325,9 +325,9 @@ def predict_structures(args, families, aligned_dirs, sequence_types):
 
 
 def main(args):
-    protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_log_level(9)
-    protevo_caching.set_dir_levels(3)
+    peint_caching.set_cache_dir("_cache_peint")
+    peint_caching.set_log_level(9)
+    peint_caching.set_dir_levels(3)
 
     cherryml_caching.set_cache_dir("_cache_benchmarking")
     cherryml_caching.set_log_level(9)
@@ -343,6 +343,33 @@ def main(args):
     else:
         families = fams["families"]
         in_fams = families  # no split provided: treat everything as in-family
+
+    # Skip families whose simulation inputs are absent rather than dying on the first one.
+    # Training families have transitions but were never given a re-rooted tree, a root
+    # sequence or an empirical MSA, so a family list sampled from the train/test split (as
+    # data/example_families.json once was) would otherwise fail with FileNotFoundError on
+    # family #1 and give the reader no way to tell how many others were affected.
+    _required = {"tree": args.tree_dir, "root sequence": args.root_sequences_dir,
+                 "real sequences": args.real_sequences_dir}
+    _missing = {}
+    for fam in families:
+        absent = [what for what, d in _required.items()
+                  if d and not os.path.exists(os.path.join(d, fam + ".txt"))]
+        if absent:
+            _missing[fam] = absent
+    if _missing:
+        print(f"WARNING: skipping {len(_missing)} of {len(families)} families with no "
+              f"simulation inputs (e.g. {', '.join(list(_missing)[:5])})")
+        for fam, absent in list(_missing.items())[:5]:
+            print(f"    {fam}: missing {', '.join(absent)}")
+        families = [f for f in families if f not in _missing]
+        in_fams = [f for f in in_fams if f not in _missing]
+        if not families:
+            raise SystemExit(
+                "No families left: none of the requested families have simulation inputs. "
+                "The sim/ archive covers the 545 simulation families only, not the training "
+                "families -- check --families_path against local_data/sim/trees_newick."
+            )
 
     print(f"Families to evaluate: {len(families)}")
     training_fams_map = {fam: fam in in_fams for fam in families}
@@ -507,8 +534,12 @@ def main(args):
     if args.include_conservation:
         print("Generating conservation JSD plots aggregated across all families")
         if args.include_3di:
-            write_jsd_boxplots(all_jsd_3di, training_fams_map, os.path.join(results_output_path, "jsd/3di"))
-        write_jsd_boxplots(all_jsd, training_fams_map, os.path.join(results_output_path, "jsd/aa"))
+            write_jsd_boxplots(all_jsd_3di, training_fams_map,
+                               os.path.join(results_output_path, "jsd/3di"),
+                               args.peint_checkpoint_path)
+        write_jsd_boxplots(all_jsd, training_fams_map,
+                           os.path.join(results_output_path, "jsd/aa"),
+                           args.peint_checkpoint_path)
 
     if args.include_plddt:
         print("Generating pLDDT score plots aggregated across all families")
@@ -530,7 +561,7 @@ def main(args):
 AF2_SCORES_TO_PLOT = ["plddt", "rmsd_io", "pae", "composite"]
 
 
-def write_jsd_boxplots(all_jsd, training_fams_map, output_path):
+def write_jsd_boxplots(all_jsd, training_fams_map, output_path, peint_checkpoint_path):
     """Aggregate per-family mean JSD into all / in-family / held-out boxplots.
 
     Reuses the conservation figure's boxplot so the driver and the figure cannot drift.
@@ -546,7 +577,7 @@ def write_jsd_boxplots(all_jsd, training_fams_map, output_path):
     in_family = jsd_df.loc[[f for f in jsd_df.index if training_fams_map[f]]]
     held_out = jsd_df.loc[[f for f in jsd_df.index if not training_fams_map[f]]]
 
-    backbone = peint_encoder_backbone(args.peint_checkpoint_path)
+    backbone = peint_encoder_backbone(peint_checkpoint_path)
     plot_jsd_boxplot(jsd_df, output_path, filename_stem="all", peint_backbone=backbone)
     if not in_family.empty:
         plot_jsd_boxplot(in_family, output_path, filename_stem="in_family",

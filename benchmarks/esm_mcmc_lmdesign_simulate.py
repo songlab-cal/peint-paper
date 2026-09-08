@@ -18,8 +18,8 @@ import torch
 import torch.nn.functional as F
 
 import paper_config as cfg
-from protevo.io import read_tree
-from protevo.utils import read_msa, write_msa
+from peint.io import read_tree
+from peint.utils import read_msa, write_msa
 from paper import esmif  # biotite shim
 from paper import esm_mcmc
 from paper import lmdesign_energy as lm

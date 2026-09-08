@@ -45,11 +45,11 @@ fi
 [[ -n "$LINKS" ]] || { echo "empty link plan from paper.manifest" >&2; exit 1; }
 
 # The benchmarks WRITE into these two, so they point at the warm caches this machine already
-# has. They are not deposit roles -- protevo cache keys hash absolute input paths, so a cache
+# has. They are not deposit roles -- peint cache keys hash absolute input paths, so a cache
 # is worthless anywhere but where it was built -- which is why they are appended here rather
 # than declared in the manifest.
 DATA_ROOT="${PEINT_PAPER_DATA_ROOT:-/scratch/users/akoehl/protein-evolution}"
-LINKS+=$'\n'"derived/_cache_protevo|$DATA_ROOT/_cache_protevo"
+LINKS+=$'\n'"derived/_cache_peint|$DATA_ROOT/_cache_peint"
 LINKS+=$'\n'"derived/_cache_benchmarking|$DATA_ROOT/_cache_benchmarking"
 
 rc=0

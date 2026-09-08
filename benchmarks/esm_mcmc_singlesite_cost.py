@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 import paper_config as cfg
-from protevo.utils import read_msa
+from peint.utils import read_msa
 from paper import esmif  # biotite shim
 from paper import esm_mcmc
 from paper import lmdesign_energy as lm

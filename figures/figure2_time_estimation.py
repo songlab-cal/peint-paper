@@ -8,13 +8,19 @@ likelihood under PEINT, and compared against the WAG time it was labelled with. 
 ``nll``    the PEINT likelihood as a function of time for one representative transition,
            with the WAG time marked — the curve whose argmax the estimate is taking.
 
-REQUIRES A GPU. Every panel depends on PEINT forward passes (time-MLE optimisation and the
-likelihood sweep), so there is no CPU-runnable subset. Not yet validated end to end —
-run this on a GPU node.
+Computing the estimates REQUIRES A GPU: the time-MLE optimisation and the likelihood sweep are
+PEINT forward passes. Redrawing them does not. `--from-csv` replots the `all` and `single`
+panels from the per-transition table, on CPU, in seconds::
+
+    python -m figures.figure2_time_estimation --from-csv          # no GPU, no checkpoint
+    python -m figures.figure2_time_estimation --checkpoint <ckpt> # ~4 h on one A100
+
+The table is looked up in the deposit's `figure_data/` first, then in `--output-dir`. The `nll`
+panel is not redrawn: it needs the likelihood curve itself, not the table.
 
 Run from the repo root::
 
-    python -m figures.figure2_time_estimation
+    python -m figures.figure2_time_estimation --from-csv
 """
 
 import argparse
@@ -32,16 +38,21 @@ import seaborn as sns
 import torch
 from scipy.stats import pearsonr
 
-from protevo import caching as protevo_caching
-from protevo.io import read_transitions
-from protevo.simulation import load_model
-from protevo.time_mle.t_mle import estimate_transition_times
+from peint import caching as peint_caching
+from peint.io import read_transitions
+
+# `load_model` and `estimate_transition_times` are imported inside main()'s compute branch:
+# both pull in the training stack (lightning), which a plotting-only environment does not
+# have. Importing them at module level would make `--from-csv` fail on exactly the machines
+# it exists to serve.
 
 import paper_config as cfg
 
-# Families whose per-family spread is shown in the `single` panel.
-HIGHLIGHT_FAMILIES = ["2b3y_1_A", "1j1v_1_A"]
-HIGHLIGHT_COLORS = ["purple", "green"]
+# The family whose per-family spread is shown in the `single` panel. The published
+# "Family Transitions" panel shows one family, in green; the released script also drew
+# 2b3y_1_A in purple, which is not in the figure.
+HIGHLIGHT_FAMILIES = ["1j1v_1_A"]
+HIGHLIGHT_COLORS = ["green"]
 
 TIME_AXIS_MAX = 1.5
 
@@ -101,6 +112,7 @@ def collect_time_estimates(
     rows = []
     representative = None
     skipped = {}
+    truncated = {}
 
     for family in families:
         try:
@@ -110,8 +122,16 @@ def collect_time_estimates(
             skipped[family] = str(exc)
             continue
 
+        # Re-estimation can drop transitions (a family whose sequences exceed the model's
+        # length limit comes back short, occasionally empty). Pair only as far as both
+        # sides go, and report it -- indexing `original`'s length into `re_estimated`
+        # raises IndexError and discards the whole run, GPU hours included.
+        n = min(len(original), len(re_estimated))
+        if n < len(original):
+            truncated[family] = (len(original), len(re_estimated))
+
         # Transitions are stored in both directions; take every other one.
-        for i in range(0, len(original), 2):
+        for i in range(0, n, 2):
             wag_t = original[i][2]
             new_t = re_estimated[i][2]
             rows.append(
@@ -128,10 +148,82 @@ def collect_time_estimates(
         )
     if skipped:
         print(f"Skipped {len(skipped)}/{len(families)} families with missing transitions.")
+    if truncated:
+        worst = sorted(truncated.items(), key=lambda kv: kv[1][1] - kv[1][0])[:5]
+        print(
+            f"WARNING: {len(truncated)}/{len(families)} families came back short from "
+            f"re-estimation and were paired only as far as both sides go: "
+            + ", ".join(f"{f} ({b}/{a})" for f, (a, b) in worst)
+        )
 
     return (
         pd.DataFrame(rows, columns=["wag_time", "new_time", "length_difference", "family"]),
         representative,
+    )
+
+
+TABLE_NAME = "figure2_time_estimation.csv"
+
+
+def warn_if_saturated(data: pd.DataFrame) -> None:
+    """Flag estimates that have piled up against the optimiser's reach rather than converged.
+
+    The time-MLE starts at `initializer` and takes `num_steps` Adam steps at `lr` under an
+    exponential decay, so the largest time it can physically return is bounded. At this
+    module's `--lr 1e-2` that bound is ~1.15; the t_mle library's own default of 1e-1 puts it
+    near 6. If the WAG times extend well past the largest estimate, the estimator ran out of
+    reach and the upper end of the panel shows a plateau, not a measurement.
+    """
+    ceiling = data.new_time.max()
+    beyond = int((data.wag_time > ceiling).sum())
+    if beyond > 0.02 * len(data):
+        print(
+            f"  WARNING: {beyond} of {len(data)} transitions ({100 * beyond / len(data):.1f}%) "
+            f"have a WAG time above the largest estimate returned ({ceiling:.3f}). The "
+            f"optimiser is bounded by --lr / --num-steps from --initializer, so these are "
+            f"pinned at its reach, not converged. Compare --lr against t_mle's default (1e-1) "
+            f"before reading the high-time end of the panel."
+        )
+
+
+def report_axis_coverage(data: pd.DataFrame) -> None:
+    """State how much of the evaluated set lies outside the plotted range.
+
+    The panels are drawn on 0..TIME_AXIS_MAX axes but the reported correlation is over **every**
+    evaluated transition, which is the manuscript's convention -- Fig. 2b quotes Pearson's
+    r = 0.95 across the 150 held-out families, not across a plotted subset. One population is
+    used for the hexbin and for the statistic, so the figure and its number can never describe
+    different data; this function only says how much of it falls beyond the axes.
+
+    An earlier revision of this file restricted both to the plotted range. That was a
+    workaround for a learning-rate bug: at the old --lr 1e-2 the estimator saturated
+    near 1.15, so the out-of-range points were noise and excluding them recovered ~0.95. At the
+    documented --lr 1e-1 no such correction is needed or wanted -- the unrestricted correlation
+    is already the reported one, and restricting would overstate it.
+    """
+    outside = int(((data.wag_time > TIME_AXIS_MAX) | (data.new_time > TIME_AXIS_MAX)).sum())
+    if outside:
+        print(
+            f"  {outside} of {len(data)} transitions ({100 * outside / len(data):.1f}%) fall "
+            f"beyond the 0-{TIME_AXIS_MAX} axes. They are INCLUDED in the reported correlation "
+            f"-- which is over the full evaluated set -- and are simply off the visible range."
+        )
+
+
+def load_table(output_dir: str) -> pd.DataFrame:
+    """Read the per-transition table, preferring the deposited copy."""
+    candidates = []
+    figure_data = getattr(cfg, "FIGURE_DATA_DIR", None)
+    if figure_data:
+        candidates.append(os.path.join(str(figure_data), TABLE_NAME))
+    candidates.append(os.path.join(output_dir, TABLE_NAME))
+    for path in candidates:
+        if os.path.exists(path):
+            print(f"replotting from {path}")
+            return pd.read_csv(path)
+    raise FileNotFoundError(
+        f"No {TABLE_NAME} found. Looked in: " + ", ".join(candidates) + ". "
+        "Fetch the summary data tier, or generate it with a GPU run (no --from-csv)."
     )
 
 
@@ -175,6 +267,12 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     fig, ax = plt.subplots(figsize=(2, 2))
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.05)
 
+    # The hexbin and the quoted R are computed from the same frame. Do not reintroduce a
+    # separate population for either: annotating a figure with a statistic taken over
+    # different data than it displays is indefensible however it is labelled.
+    r = pearsonr(data.wag_time, data.new_time)[0]
+    print(f"  hexbin and Pearson R both over the same {len(data)} transitions: R = {r:.4f}")
+
     ax.hexbin(
         data=data, x="wag_time", y="new_time", cmap="Greens", gridsize=45, mincnt=10,
         extent=(0, TIME_AXIS_MAX, 0, TIME_AXIS_MAX), linewidths=0, vmin=0, vmax=300,
@@ -182,7 +280,7 @@ def plot_all_transitions(data: pd.DataFrame, output_dir: str) -> None:
     ax.plot([0, TIME_AXIS_MAX], [0, TIME_AXIS_MAX], color="black", linestyle="--", linewidth=0.25)
     ax.text(
         0.05, 0.95,
-        f"Pearson R: {pearsonr(data.wag_time, data.new_time)[0]:.2f}",
+        f"Pearson R: {r:.2f}",
         transform=ax.transAxes, fontsize=8, verticalalignment="top", horizontalalignment="left",
         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", boxstyle="round,pad=0.1"),
     )
@@ -206,9 +304,42 @@ def plot_single_families(data: pd.DataFrame, output_dir: str) -> None:
     _save(fig, output_dir, "figure2_time_estimation_single")
 
 
+NLL_TABLE_NAME = "figure2_time_estimation_nll.csv"
+
+
+def load_nll_table(output_dir: str):
+    """Read the likelihood curve, preferring the deposited copy. None if absent."""
+    figure_data = getattr(cfg, "FIGURE_DATA_DIR", None)
+    for path in ([os.path.join(str(figure_data), NLL_TABLE_NAME)] if figure_data else []) + [
+        os.path.join(output_dir, NLL_TABLE_NAME)
+    ]:
+        if os.path.exists(path):
+            print(f"replotting the nll panel from {path}")
+            return pd.read_csv(path)
+    return None
+
+
+def plot_nll_curve_from_table(df: pd.DataFrame, output_dir: str) -> None:
+    """Redraw the `nll` panel from the persisted curve -- no model, no GPU."""
+    _plot_nll(df["likelihood"].to_numpy(), df["time"].to_numpy(),
+              float(df["wag_time"].iloc[0]), output_dir)
+
+
 def plot_nll_curve(nlls, times, wag_time: float, output_dir: str) -> None:
     likelihoods = np.exp(-1 * nlls.cpu().numpy().squeeze())
     times = times.cpu().numpy().squeeze()
+
+    # Persist the curve so the panel can be redrawn without a GPU. It is ~100 points; the
+    # sweep that produced it is PEINT forward passes over one transition, which --from-csv
+    # cannot do, so without this the paper's third 2b sub-panel is level-3 only.
+    os.makedirs(output_dir, exist_ok=True)
+    pd.DataFrame({"time": times, "likelihood": likelihoods, "wag_time": wag_time}).to_csv(
+        os.path.join(output_dir, NLL_TABLE_NAME), index=False
+    )
+    _plot_nll(likelihoods, times, wag_time, output_dir)
+
+
+def _plot_nll(likelihoods, times, wag_time: float, output_dir: str) -> None:
 
     max_likelihood = float(np.max(likelihoods))
     t_argmax = times[np.argmax(likelihoods)]
@@ -254,20 +385,54 @@ def main() -> None:
              "point this at your own checkpoint to reproduce the figure with a different model.",
     )
     parser.add_argument("--num-families", type=int, default=150)
-    parser.add_argument("--lr", type=float, default=1e-2)
+    # The manuscript's Branch Length Estimation methods specify Adam at an initial learning
+    # rate of 1e-1 decaying with gamma = 0.99, converging in under 80 steps -- which is also
+    # t_mle's own default. This script previously passed 1e-2, ten times smaller, which bounds
+    # the reachable time at ~1.15 and puts a plateau in the upper third of the panel.
+    # The documented value is the one to run.
+    parser.add_argument("--lr", type=float, default=1e-1)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--num-steps", type=int, default=80)
     parser.add_argument("--max-nll-time", type=float, default=2.0)
     parser.add_argument("--output-dir", default=str(cfg.FIGURES_DIR))
+    parser.add_argument(
+        "--from-csv", "--replot", dest="from_csv", action="store_true",
+        help="Redraw the `all` and `single` panels from the per-transition table. "
+             "No GPU, no checkpoint, no cache.",
+    )
     args = parser.parse_args()
+
+    # Return before any GPU check, cache setup or checkpoint load: the replot path must work
+    # on a laptop with nothing but the summary data tier.
+    if args.from_csv:
+        data = load_table(args.output_dir)
+        print(f"Read {len(data)} transitions across {data.family.nunique()} families.")
+        warn_if_saturated(data)
+        report_axis_coverage(data)
+        _apply_paper_style()
+        os.makedirs(args.output_dir, exist_ok=True)
+        plot_all_transitions(data, args.output_dir)
+        plot_single_families(data, args.output_dir)
+        nll = load_nll_table(args.output_dir)
+        if nll is not None:
+            plot_nll_curve_from_table(nll, args.output_dir)
+        else:
+            print(f"  no {NLL_TABLE_NAME}: skipping the nll panel (it needs a GPU sweep to "
+                  f"produce, then replots from the table like the others)")
+        print(f"Wrote time-estimation panels to {args.output_dir}")
+        return
 
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "Figure 2 time estimation requires a GPU: every panel needs PEINT forward passes."
+            "Figure 2 time estimation requires a GPU: every panel needs PEINT forward passes. "
+            "To redraw the panels from the shipped table instead, pass --from-csv."
         )
 
-    protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_read_only(False)
+    from peint.simulation import load_model
+    from peint.time_mle.t_mle import estimate_transition_times
+
+    peint_caching.set_cache_dir("_cache_peint")
+    peint_caching.set_read_only(False)
 
     device = torch.device("cuda")
     checkpoint = args.checkpoint or str(cfg.require(cfg.PEINT_CHECKPOINT))
@@ -285,6 +450,12 @@ def main() -> None:
 
     data, representative = collect_time_estimates(families, transitions_dir, re_estimated_dir)
     print(f"Collected {len(data)} transitions across {data.family.nunique()} families.")
+    # Deposit the UNRESTRICTED table: the axis range is a presentation choice, and a reader
+    # replotting later must be able to see -- and re-decide -- what the panels leave out.
+    os.makedirs(args.output_dir, exist_ok=True)
+    data.to_csv(os.path.join(args.output_dir, TABLE_NAME), index=False)
+    warn_if_saturated(data)
+    report_axis_coverage(data)
 
     _apply_paper_style()
     plot_all_transitions(data, args.output_dir)
@@ -302,8 +473,6 @@ def main() -> None:
         )
         plot_nll_curve(nlls, times, representative["t"], args.output_dir)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    data.to_csv(os.path.join(args.output_dir, "figure2_time_estimation.csv"), index=False)
     print(f"Wrote time-estimation panels to {args.output_dir}")
 
 

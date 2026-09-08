@@ -14,7 +14,7 @@ The leaf subset is chosen by calling the REAL ``_subsample_selection`` + ``gener
 folded -- seeded by md5(family+root), PEINT uses ``subsampled_a`` (seq1 + 29 from split-A). We
 fold those leaves' RAW simulated sequences (gap-stripped by OmegaFold), so no alignment is
 needed and this can run before the classical pipeline finishes. GPU + omegafold on PATH
-(protevo-env). Per (family, model) is cherryml-cached -> resumes after preemption, shards
+(peint-paper). Per (family, model) is cherryml-cached -> resumes after preemption, shards
 cleanly over GPUs (disjoint families -> shared out dir, no collision).
 """
 
@@ -23,9 +23,9 @@ import json
 import os
 from argparse import Namespace
 
-from protevo import caching as pc
-from protevo.utils import read_msa
-from protevo.io import write_msa
+from peint import caching as pc
+from peint.utils import read_msa
+from peint.io import write_msa
 from paper.splits import generate_tree_split
 from paper.structure_prediction import generate_omegafold_predictions
 from benchmarks.generate_all_results import _subsample_selection

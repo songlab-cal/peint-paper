@@ -1,6 +1,6 @@
 """MAFFT alignment helpers for the paper benchmarks.
 
-Ported from the model repo's ``protevo/datasets/_msa.py``. MAFFT is a *benchmarking*
+Ported from the model repo's ``peint/datasets/_msa.py``. MAFFT is a *benchmarking*
 dependency (expected as ``mafft`` on PATH), not a dependency of the ``peint`` model
 library. Only the three helpers actually used by the paper figures are kept here
 (``run_mafft``, ``run_mafft_add``, ``sanitize_fastas``); the SeqKernel / patristic /
@@ -16,9 +16,9 @@ from typing import List, Optional, Tuple, Dict
 
 import tqdm
 
-from protevo import caching as protevo_caching
-from protevo.caching import secure_parallel_output
-from protevo.utils import (
+from peint import caching as peint_caching
+from peint.caching import secure_parallel_output
+from peint.utils import (
     get_process_args,
     read_msa,
     write_msa,
@@ -44,7 +44,7 @@ def _map_func_run_mafft(args):
         secure_parallel_output(output_msa_dir, family)
 
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     output_dirs=["output_msa_dir"],
     exclude_args=["num_processes"],
@@ -150,7 +150,7 @@ def _map_func_run_mafft_add(args):
                     secure_parallel_output(outfolder_path, family)
 
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     output_dirs=[
         "output_all_sequences_msa_dir",
@@ -209,7 +209,7 @@ def _map_func_clean_msa(args):
         secure_parallel_output(output_msa_dir, family)
 
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     output_dirs=["output_msa_dir"],
     exclude_args=["num_processes"],
@@ -272,7 +272,7 @@ def _map_func_sanitize_fastas(args):
         secure_parallel_output(output_sequences_dir, family)
 
 
-@protevo_caching.cached_parallel_computation(
+@peint_caching.cached_parallel_computation(
     parallel_arg="families",
     output_dirs=["output_sequences_dir"],
     exclude_args=["num_processes"],

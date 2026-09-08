@@ -43,10 +43,10 @@ from cherryml import caching as cherryml_caching
 from cherryml.benchmarking import pfam_15k
 from cherryml.markov_chain import get_lg_path, get_wag_path
 
-from protevo import caching as protevo_caching
-from protevo.io import read_msa, read_site_rates, write_msa
-from protevo.simulation import load_model
-from protevo.simulation.classical import evolve_classical
+from peint import caching as peint_caching
+from peint.io import read_msa, read_site_rates, write_msa
+from peint.simulation import load_model
+from peint.simulation.classical import evolve_classical
 
 from paper.historian import analyze_star_topology
 from paper.model_style import model_colors
@@ -68,7 +68,7 @@ def default_peint_arms():
     }
 
 
-@protevo_caching.cached_computation(
+@peint_caching.cached_computation(
     output_dirs=["output_sequences_dir"],
     exclude_args=["device"],
     exclude_args_if_default=["num_samples_per_time", "temperature", "p", "max_time", "delta_time"],
@@ -100,7 +100,7 @@ def simulate_evolution_peint(
 
     all_outputs = {ROOT_RECORD: starting_sequence}
     for i in range(num_samples_per_time):
-        # bfloat16 autocast, matching protevo.simulation._simulate_on_tree: with Flash
+        # bfloat16 autocast, matching peint.simulation._simulate_on_tree: with Flash
         # Attention the model is a PeintGenerator (cached decoder) and its kernels take only
         # fp16/bf16, so generating in the ambient fp32 raises "FlashAttention only support
         # fp16 and bf16 data type". Dropping to the Vanilla path instead would also throw
@@ -122,7 +122,7 @@ def simulate_evolution_peint(
     write_msa(all_outputs, os.path.join(output_sequences_dir, "result.txt"))
 
 
-@protevo_caching.cached_computation(
+@peint_caching.cached_computation(
     output_dirs=["output_sequences_dir"],
     exclude_args_if_default=["num_samples_per_time", "max_time", "delta_time"],
 )
@@ -418,8 +418,8 @@ def main() -> None:
     # directory and silently missed the cache from anywhere else.
     cherryml_caching.set_cache_dir(str(cfg.CHERRYML_CACHE_DIR))
     cherryml_caching.set_read_only(False)
-    protevo_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
-    protevo_caching.set_read_only(False)
+    peint_caching.set_cache_dir(str(cfg.PROTEVO_CACHE_DIR))
+    peint_caching.set_read_only(False)
 
     a3m_dir = str(cfg.require(cfg.INPUT_A3M_DIR))
     family = args.family or pick_family(a3m_dir)

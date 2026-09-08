@@ -20,6 +20,7 @@ Run from the repo root, e.g.::
 """
 
 import argparse
+from pathlib import Path
 import glob
 import os
 
@@ -38,8 +39,8 @@ mpl.rcParams["pdf.fonttype"] = 42
 
 # Revision-1 holds the classical/mixture baselines + PEINT-ESM2 + real; revision-2
 # holds the fresh ESM-C run (per the user, both live under DATA_ROOT/local_data).
-R1 = cfg.DATA_ROOT / "local_data" / "results_revision1"
-R2 = cfg.DATA_ROOT / "local_data" / "results_revision2_esmc"
+R1 = cfg.RESULTS_R1_DIR
+R2 = cfg.RESULTS_R2_DIR
 OUT = cfg.FIGURES_DIR
 
 MODEL_ORDER = [
@@ -132,26 +133,50 @@ def _ecdf(df, xlabel, stem):
     print(f"  -> {OUT}/{stem}.png")
 
 
-def make_omegafold_ecdf():
-    _ecdf(pd.concat([_rev1_df("omegafold_plddt.csv"), _esmc_omegafold()], ignore_index=True),
-          "OmegaFold leaf pLDDT", "figure3_omegafold_plddt_ecdf")
+def _from_figure_data(stem):
+    """Load the per-panel table this module itself writes (`_ecdf` saves `<stem>.csv`).
+
+    That same table ships in the deposit's `figure_data` tier, so the replot path and the
+    recompute path converge on `_ecdf` with an identical dataframe -- there is one plotting
+    implementation, not two.
+    """
+    for cand in (Path(cfg.FIGURE_DATA_DIR) / f"{stem}.csv", Path(OUT) / f"{stem}.csv"):
+        if cand.exists():
+            print(f"replotting {stem} from {cand}")
+            return pd.read_csv(cand)
+    raise SystemExit(
+        f"No saved table for {stem}. Looked in {cfg.FIGURE_DATA_DIR} and {OUT}. "
+        f"Fetch the figure_data tier, or run without --from-csv to recompute it."
+    )
 
 
-def make_af2rank_ecdf():
-    _ecdf(pd.concat([_rev1_df("af2rank_comparisons.csv", scale100=True), _esmc_af2()], ignore_index=True),
-          "AF2Rank pLDDT", "figure3_af2rank_plddt_ecdf")
+def make_omegafold_ecdf(from_csv=False):
+    stem = "figure3_omegafold_plddt_ecdf"
+    df = _from_figure_data(stem) if from_csv else pd.concat(
+        [_rev1_df("omegafold_plddt.csv"), _esmc_omegafold()], ignore_index=True)
+    _ecdf(df, "OmegaFold leaf pLDDT", stem)
+
+
+def make_af2rank_ecdf(from_csv=False):
+    stem = "figure3_af2rank_plddt_ecdf"
+    df = _from_figure_data(stem) if from_csv else pd.concat(
+        [_rev1_df("af2rank_comparisons.csv", scale100=True), _esmc_af2()], ignore_index=True)
+    _ecdf(df, "AF2Rank pLDDT", stem)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--panels", nargs="+", choices=["omegafold", "af2"],
                     default=["omegafold", "af2"])
+    ap.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                    help="Redraw from the shipped figure_data table instead of walking "
+                         "r1/r2 structures. Same plotting code, same figure.")
     args = ap.parse_args()
     _set_publication_style()
     if "omegafold" in args.panels:
-        make_omegafold_ecdf()
+        make_omegafold_ecdf(args.from_csv)
     if "af2" in args.panels:
-        make_af2rank_ecdf()
+        make_af2rank_ecdf(args.from_csv)
 
 
 if __name__ == "__main__":

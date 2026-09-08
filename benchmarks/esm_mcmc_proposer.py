@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 
 import paper_config as cfg
-from protevo.utils import read_msa
+from peint.utils import read_msa
 from paper import esmif  # applies the biotite<->fair-esm shim before esm.inverse_folding is imported
 from paper import esm_mcmc, lmdesign_energy as lm
 
@@ -165,7 +165,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     esm_mcmc.load_model("esm2_t33_650M_UR50D")
     lm.load_struct_model()
-    from protevo.models._loading import load_model as peint_load
+    from peint.models._loading import load_model as peint_load
     peint_model, vocab = peint_load(str(cfg.PEINT_CHECKPOINT), use_cached_model=True, device=device)
     rng = random.Random(args.seed)
 

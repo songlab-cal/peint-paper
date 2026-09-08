@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import paper_config as cfg
-from protevo.utils import write_msa
+from peint.utils import write_msa
 from paper import esm_mcmc, lmdesign_energy as lm
 from benchmarks import esm_mcmc_lmdesign_simulate as sim
 from benchmarks import esm_mcmc_eval as ev

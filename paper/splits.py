@@ -10,8 +10,8 @@ import re
 from typing import Dict, List
 
 from ete3 import Tree as Ete3Tree
-from protevo.datasets._datasets import find_optimal_edge_split, split_tree_on_edge
-from protevo.io import read_tree
+from peint.datasets._datasets import find_optimal_edge_split, split_tree_on_edge
+from peint.io import read_tree
 
 SPLIT_A = "A"
 SPLIT_B = "B"

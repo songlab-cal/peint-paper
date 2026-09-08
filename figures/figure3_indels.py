@@ -8,8 +8,8 @@ import seaborn as sns
 import matplotlib as mpl
 from scipy.stats import pearsonr, spearmanr
 
-from protevo import caching as protevo_caching
-from protevo.utils import read_msa
+from peint import caching as peint_caching
+from peint.utils import read_msa
 
 from paper.historian import (
     prepare_simulated_vs_real_historian,
@@ -24,9 +24,9 @@ import paper_config as cfg
 if __name__ == "__main__":
     num_processes = 20
 
-    protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_read_only(False)  # remove this line when training a new model
-    protevo_caching.set_log_level(9)
+    peint_caching.set_cache_dir("_cache_peint")
+    peint_caching.set_read_only(False)  # remove this line when training a new model
+    peint_caching.set_log_level(9)
 
     FIG_OUT = str(cfg.FIGURES_DIR)
     os.makedirs(FIG_OUT, exist_ok=True)

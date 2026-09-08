@@ -13,7 +13,7 @@ Sources (all overridable via CLI) match historian_compare_esmc_vs_rev1.py:
   * reconstruction sequences: rev1 ``real_msa_historian`` / ``peint_msa_historian`` and the rev2
     ESM-C remove-dummy reconstruction (the same one figure3_pcp_mutation_counts uses).
 
-Run from the repo root (env with protevo, e.g. protevo-env)::
+Run from the repo root (env with peint, e.g. peint-paper)::
 
     python -m benchmarks.historian_indel_vs_length
 """
@@ -21,6 +21,7 @@ Run from the repo root (env with protevo, e.g. protevo-env)::
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -32,8 +33,8 @@ matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
-from protevo import caching as protevo_caching
-from protevo.utils import read_msa
+from peint import caching as peint_caching
+from peint.utils import read_msa
 from paper.historian import (
     esmc_historian_dirs,
     get_all_evolutionary_counts_from_historian_output,
@@ -106,54 +107,99 @@ def main():
     ap.add_argument("--esmc-events", default=None,
                     help="Explicit ESM-C events dir, overriding --esmc_variant.")
     ap.add_argument("--families-path", default=FAM_JSON)
+    ap.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                    help="Redraw from the shipped figure_data table.")
     ap.add_argument("--out-dir", default=FIG_OUT)
     ap.add_argument("--out-suffix", default="")
     ap.add_argument("--num-processes", type=int, default=16)
     args = ap.parse_args()
 
-    esmc = esmc_historian_dirs(R2, args.esmc_variant)
-    esmc_events_dir = args.esmc_events or esmc["events"]
-    esmc_recon_dir = args.esmc_recon or esmc["reconstructions"]
-
-    families = json.load(open(args.families_path))["families"]
-    protevo_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
-    protevo_caching.set_dir_levels(3)
-
-    # Real + ESM2 events from rev1 reconstructions (cached; same call as historian_compare).
-    real_events = get_all_evolutionary_counts_from_historian_output(
-        sequences_dir=args.real_recon, tree_dir=args.tree_dir,
-        families=families, num_processes=args.num_processes,
-    )["output_events_dir"]
-    esm2_events = get_all_evolutionary_counts_from_historian_output(
-        sequences_dir=args.esm2_recon, tree_dir=args.tree_dir,
-        families=families, num_processes=args.num_processes,
-    )["output_events_dir"]
-
-    # Per model: (events dir, reconstruction dir, display, color).
-    mc = model_colors()
-    models = [
-        ("real", real_events, args.real_recon, "Real (inferred)", mc["Real"]),
-        ("esm2", esm2_events, args.esm2_recon, "PEINT (ESM2)", mc["PEINT (ESM2)"]),
-        ("esmc", esmc_events_dir, esmc_recon_dir, "PEINT (ESM-C)", mc["PEINT (ESM-C)"]),
-    ]
-
-    # Keep families present (events AND length) for ALL three models, so the panels share a set.
-    rows = []
-    for fam in families:
-        vals = {}
-        ok = True
-        for key, ev_dir, recon_dir, _, _ in models:
-            e = indel_events(ev_dir, fam)
-            L = median_leaf_length(recon_dir, fam)
-            if e is None or L is None:
-                ok = False
+    # Replot short-circuit. This has to come BEFORE esmc_historian_dirs(), which resolves the
+    # cached Historian event dirs on disk and raises if they are absent -- so on a figure_data
+    # -only install the panel died before --from-csv could take effect, even though its table
+    # ships. Loads the shipped table and hands it to the same plotting code below.
+    _shipped = None
+    if args.from_csv:
+        for _c in (Path(cfg.FIGURE_DATA_DIR) / f"historian_indel_vs_length{args.out_suffix}.csv",
+                   Path(cfg.FIGURE_DATA_DIR) / "historian_indel_vs_length.csv"):
+            if _c.exists():
+                _shipped = pd.read_csv(_c)
+                print(f"replotting from {_c} ({len(_shipped)} families)")
                 break
-            vals[f"{key}_events"] = e
-            vals[f"{key}_med_len"] = L
-        if ok:
-            vals["family"] = fam
-            rows.append(vals)
-    df = pd.DataFrame(rows)
+        if _shipped is None:
+            raise SystemExit(
+                f"No shipped historian_indel_vs_length.csv under {cfg.FIGURE_DATA_DIR}. "
+                f"Fetch the figure_data tier, or omit --from-csv to recompute."
+            )
+
+    esmc = (None if _shipped is not None
+            else esmc_historian_dirs(R2, args.esmc_variant))
+    esmc_events_dir = None if esmc is None else (args.esmc_events or esmc["events"])
+    esmc_recon_dir = None if esmc is None else (args.esmc_recon or esmc["reconstructions"])
+
+    # Only the recompute path needs the Historian event tables; --from-csv skips it.
+    if _shipped is None:
+        families = json.load(open(args.families_path))["families"]
+        peint_caching.set_cache_dir(f"{R2}/simulations/historian_compare/_cache")
+        peint_caching.set_dir_levels(3)
+
+        # Real + ESM2 events from rev1 reconstructions (cached; same call as historian_compare).
+        real_events = get_all_evolutionary_counts_from_historian_output(
+            sequences_dir=args.real_recon, tree_dir=args.tree_dir,
+            families=families, num_processes=args.num_processes,
+        )["output_events_dir"]
+        esm2_events = get_all_evolutionary_counts_from_historian_output(
+            sequences_dir=args.esm2_recon, tree_dir=args.tree_dir,
+            families=families, num_processes=args.num_processes,
+        )["output_events_dir"]
+
+        # Per model: (events dir, reconstruction dir, display, color).
+        mc = model_colors()
+        models = [
+            ("real", real_events, args.real_recon, "Real (inferred)", mc["Real"]),
+            ("esm2", esm2_events, args.esm2_recon, "PEINT (ESM2)", mc["PEINT (ESM2)"]),
+            ("esmc", esmc_events_dir, esmc_recon_dir, "PEINT (ESM-C)", mc["PEINT (ESM-C)"]),
+        ]
+
+        # Keep families present (events AND length) for ALL three models, so the panels share a set.
+        # Replot path: the deposit ships this table as figure_data/historian_indel_vs_length.csv.
+        # Load it and fall through to the same plotting code below.
+        _shipped = None
+        if getattr(args, 'from_csv', False):
+            for _c in (Path(cfg.FIGURE_DATA_DIR) / f'historian_indel_vs_length{args.out_suffix}.csv',
+                       Path(cfg.FIGURE_DATA_DIR) / 'historian_indel_vs_length.csv'):
+                if _c.exists():
+                    _shipped = pd.read_csv(_c); print(f'replotting from {_c}'); break
+            if _shipped is None:
+                raise SystemExit('No shipped historian_indel_vs_length.csv in ' + str(cfg.FIGURE_DATA_DIR))
+    
+        rows = []
+        for fam in families:
+            vals = {}
+            ok = True
+            for key, ev_dir, recon_dir, _, _ in models:
+                e = indel_events(ev_dir, fam)
+                L = median_leaf_length(recon_dir, fam)
+                if e is None or L is None:
+                    ok = False
+                    break
+                vals[f"{key}_events"] = e
+                vals[f"{key}_med_len"] = L
+            if ok:
+                vals["family"] = fam
+                rows.append(vals)
+    if _shipped is not None:
+        # The plotting loop below reads only key/display/colour from `models`; the event and
+        # reconstruction dirs it also carries are recompute-only, so a metadata-only version
+        # is enough for the replot path.
+        mc = model_colors()
+        models = [
+            ("real", None, None, "Real (inferred)", mc["Real"]),
+            ("esm2", None, None, "PEINT (ESM2)", mc["PEINT (ESM2)"]),
+            ("esmc", None, None, "PEINT (ESM-C)", mc["PEINT (ESM-C)"]),
+        ]
+
+    df = _shipped if _shipped is not None else pd.DataFrame(rows)
     os.makedirs(args.out_dir, exist_ok=True)
     csv_path = os.path.join(args.out_dir, f"historian_indel_vs_length{args.out_suffix}.csv")
     df.to_csv(csv_path, index=False)

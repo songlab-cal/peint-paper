@@ -69,7 +69,7 @@ shipped artifacts, and re-running them is section 3.
 ### The one panel that is genuinely cold
 
 `pcp_panels` re-runs AliSim over ~500 families × 3 models unless it finds a warm cache.
-The caches are deliberately **not** distributed: protevo keys a cached computation on a
+The caches are deliberately **not** distributed: peint keys a cached computation on a
 sha512 of its arguments *including absolute input paths*, so a cache is only valid at the
 path where it was built. Copying one elsewhere produces a directory that will never be hit.
 
@@ -97,12 +97,21 @@ in prose so it cannot drift. The shape of it:
 | `r2/omegafold` | `benchmarks/omegafold_peint_esmc.py` |
 | `r2/af2` | `benchmarks/af2rank_peint_esmc.py` |
 | `r1/3di`, `r2/3di` | `benchmarks/threedi_jsd_all_models.py` without `--skip-3di-generation` |
+| `sim` (trees, root sequences, empirical MSAs) | **not regenerable from this repo** — see below |
 | `blast_sequences` | `blastp` against nr, run outside this repo |
 
 The exact rev2 invocation, recovered from its own slurm log, is in the `r2_simulations`
 role's `producer` field — including the checkpoint path and the shard list.
 
 ### Not regenerable from this deposit
+
+- **The simulation inputs** (`sim/`: `trees_newick`, `root_sequences`,
+  `empirical_msas`) come from the upstream 512-leaf simulation setup, which is not part
+  of either public repo — nothing here writes a re-rooted tree or picks a root sequence
+  (`paper/splits.py:generate_tree_split` only *splits* a tree that already exists). The
+  deposit is therefore the only source. It covers the **545 simulation families**; the
+  14,498 training families have transitions but no simulation inputs, so a family list
+  taken from the train/test split cannot be simulated.
 
 - **PEINT checkpoints** now ship in the `full` tier (`peint_checkpoints`, 3.3 GB, four
   files), so a step that simulates or scores is covered by the deposit alone. What is still
@@ -149,13 +158,13 @@ sentence is a field in the manifest.
 The benchmarks span stacks that do not pin together: JAX (AF2Rank), PyTorch (PEINT,
 OmegaFold, ESM-C), and the older `transformers` ProstT5 was pinned against.
 `render_panels.py` subprocesses each panel with the right interpreter, so you only need to
-set `PEINT_PAPER_PY_ESMC` and `PEINT_PAPER_PY_PROTEVO`.
+set `PEINT_PAPER_PY_ESMC` and `PEINT_PAPER_PY_PEINT`.
 
 The simulations need the ESM-C stack and the folding needs the JAX stack, and no environment
 has both — which works because what crosses the boundary is **sequences in text files, not
 models**. The folding benchmarks never construct a PEINT model; they read the simulated
 sequences off disk. The one exception is `figure2_simulation`, which is the same script run
-twice and joined by protevo's computation cache: the model load sits *inside* the cached
+twice and joined by peint's computation cache: the model load sits *inside* the cached
 function, so on a cache hit it is never reached. `installation.md` has the full account,
 including the one failure mode worth recognising — a cache miss in the folding pass surfaces
 as `model type 'esmc' not recognized`, which means *miss*, not *broken install*.

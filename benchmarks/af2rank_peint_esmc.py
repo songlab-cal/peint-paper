@@ -8,7 +8,7 @@ strictly evidence-preserving and needs NO re-alignment.
 
 Per family: take the same 30-leaf subsample AF2 uses (subsampled_a = seq1 + 29 from split-A, via
 the real _subsample_selection), pull those leaves' ALIGNED sequences from the peint mafft-add
-alignment, and score them with AF2Rank against the experimental structure. GPU (protevo-env);
+alignment, and score them with AF2Rank against the experimental structure. GPU (peint-paper);
 cached per (family, model) so it shards over GPUs and resumes. Output ->
 <R2>/af2/<family>/<MODEL_KEY>/{structures,scores,sites}, matching rev1's layout for the ECDF.
 """
@@ -18,9 +18,9 @@ import json
 import os
 from argparse import Namespace
 
-from protevo import caching as pc
-from protevo.utils import read_msa
-from protevo.io import write_msa
+from peint import caching as pc
+from peint.utils import read_msa
+from peint.io import write_msa
 from paper.splits import generate_tree_split
 from paper.structure_prediction import generate_af2_predictions
 from benchmarks.generate_all_results import _subsample_selection

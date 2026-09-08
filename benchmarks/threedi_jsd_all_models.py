@@ -34,6 +34,7 @@ Run from the repo root, e.g.::
 import argparse
 import json
 import os
+from pathlib import Path
 from typing import Dict, List
 
 import matplotlib
@@ -42,11 +43,13 @@ import pandas as pd
 from tqdm import tqdm
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
+from peint import caching as peint_caching
 
 from paper.jsd import REAL, REAL_OTHER_SPLIT, family_jsd
 from paper.splits import generate_tree_split
-from paper.threedi import generate_3di_annotations
+# Imported lazily inside the function that generates 3Di states: it pulls in ProstT5 via
+# `transformers`, which the replot path (--from-csv) has no need of. Keeping it at module
+# level made redrawing a shipped CSV require the whole folding stack.
 from figures.figure3_conservation import plot_jsd_boxplot
 import paper_config as cfg
 
@@ -64,8 +67,8 @@ STANDARD_MODELS: List[str] = [
 # The cross-revision model generated here; its boxplot key (matches BOXPLOT_MODELS).
 ESMC_MODEL = "PEINT (ESM-C)"
 
-_R1 = str(cfg.DATA_ROOT / "local_data" / "results_revision1")
-_R2 = str(cfg.DATA_ROOT / "local_data" / "results_revision2_esmc")
+_R1 = str(cfg.RESULTS_R1_DIR)
+_R2 = str(cfg.RESULTS_R2_DIR)
 
 
 def _threedi_dir(sequences_dir: str) -> Dict[str, str]:
@@ -124,6 +127,7 @@ def generate_esmc_3di(args, families: List[str]) -> Dict[str, str]:
     ):
         # Slugless subdir per model under esmc-3di-root, mirroring process_3di_pipeline's
         # "3di/<model>/{sequences,probabilities}" layout so it reads back identically.
+        from paper.threedi import generate_3di_annotations  # heavy: ProstT5/transformers
         result = generate_3di_annotations(
             input_dir=cfg.require(input_dir),
             families=families,
@@ -142,7 +146,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--families_path",
-        default=str(cfg.DATA_ROOT / "local_data" / "final_sim_held_out_family.json"),
+        default=str(cfg.HELDOUT_FAMILIES_JSON),
         help="JSON with a 'families' list (the simulation eval set).",
     )
     # Standard (rev1) 3Di annotations, already on disk, one <name>/sequences dir per model.
@@ -165,6 +169,9 @@ def main() -> None:
                              "you have the GPU memory for more).")
     parser.add_argument("--skip-3di-generation", action="store_true",
                         help="Assume rev2 3Di already exists under --esmc-3di-root (CPU-only run).")
+    parser.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                        help="Redraw from the shipped figure_data table instead of scoring "
+                             "3Di states again. Same plotting code (plot_jsd_boxplot).")
     parser.add_argument("--output-dir", default=str(cfg.FIGURES_DIR / "esmc_summary"),
                         help="Where the 3Di JSD CSV + boxplot are written.")
     parser.add_argument("--max-families", type=int, default=None,
@@ -172,9 +179,27 @@ def main() -> None:
                              "cached per family, so a capped run only annotates that subset.")
     args = parser.parse_args()
 
-    protevo_caching.set_cache_dir("_cache_protevo")
-    protevo_caching.set_log_level(9)
-    protevo_caching.set_dir_levels(3)
+    if args.from_csv:
+        # Replot path: load the table this script itself writes (shipped as
+        # figure_data/esmc_summary/conservation_jsd_3di.csv) and hand it to the SAME
+        # plot_jsd_boxplot the recompute path uses -- one figure implementation.
+        stem = "conservation_jsd_3di.csv"
+        for cand in (Path(cfg.FIGURE_DATA_DIR) / "esmc_summary" / stem,
+                     Path(args.output_dir) / stem):
+            if cand.exists():
+                jsd_df = pd.read_csv(cand, index_col=0)
+                print(f"replotting 3Di JSD from {cand} ({len(jsd_df)} families)")
+                os.makedirs(args.output_dir, exist_ok=True)
+                plot_jsd_boxplot(jsd_df, args.output_dir,
+                                 filename_stem="conservation_jsd_3di_boxplot")
+                return
+        raise SystemExit(
+            f"No saved {stem} in {cfg.FIGURE_DATA_DIR}/esmc_summary or {args.output_dir}."
+        )
+
+    peint_caching.set_cache_dir("_cache_peint")
+    peint_caching.set_log_level(9)
+    peint_caching.set_dir_levels(3)
     cherryml_caching.set_cache_dir("_cache_benchmarking")
     cherryml_caching.set_log_level(9)
     cherryml_caching.set_dir_levels(3)

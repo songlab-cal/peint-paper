@@ -14,11 +14,23 @@ Only the ESM-C arm is computed fresh, via the same
 ``evaluate_peint_model_transitions_log_likelihood__cached`` used for ESM2 (per-family cached,
 so a rerun is a no-op once done).
 
-Env: ``peint-esmc`` (has the Biohub ESM-C backbone + sentencepiece). Needs a GPU and
-``HF_HOME`` set for the ESM-C backbone. Run from the repo root::
+Two ways to produce the panels:
 
-    HF_HOME=/scratch/users/akoehl/hf_cache \
-      python -m figures.figure2_ll_eval_esmc
+* **Recompute** -- score the transitions. Env: ``peint-esmc`` (Biohub ESM-C backbone +
+  sentencepiece); needs a GPU, ``HF_HOME``, a checkpoint, and the
+  ``peint_transitions_{aligned,unaligned}`` roles. Run from the repo root::
+
+      HF_HOME=/path/to/hf_cache python -m figures.figure2_ll_eval_esmc
+
+  Each run also writes ``<stem>.csv`` -- the per-(model, time bin) totals behind the panel.
+
+* **Replot** -- ``--from-csv`` redraws both panels from those tables. No GPU, no checkpoint,
+  no transitions, so it works at the ``figure_data`` tier::
+
+      python -m figures.figure2_ll_eval_esmc --from-csv
+
+Both paths converge on ``plot_mean_likelihood`` with identical arrays, so a difference
+between them is a bug rather than a choice.
 """
 
 import argparse
@@ -30,6 +42,7 @@ import os
 import random
 
 import numpy as np
+import pandas as pd
 import matplotlib as mpl
 mpl.use("Agg")
 # Editable TrueType text in the PDF for Illustrator (not outlined Type3).
@@ -40,15 +53,15 @@ import seaborn as sns
 from tqdm import tqdm
 
 from cherryml import caching as cherryml_caching
-from protevo import caching as protevo_caching
-from protevo.evaluation import (
+from peint import caching as peint_caching
+from peint.evaluation import (
     evaluate_peint_model_transitions_log_likelihood__cached,
 )
-from protevo.io import (
+from peint.io import (
     read_transitions,
     read_transitions_log_likelihood_per_site,
 )
-from protevo.utils import (
+from peint.utils import (
     get_quantile_idx,
     get_quantization_points_from_geometric_grid,
 )
@@ -56,7 +69,7 @@ from protevo.utils import (
 import paper_config as cfg
 from paper.model_style import model_colors
 
-# The peint repo ships the data and the _cache_peint cache alongside the protevo
+# The peint repo ships the data and the _cache_peint cache alongside the peint
 # package, so it is resolved from the installed package rather than hardcoded.
 PEINT_REPO = str(cfg.PEINT_REPO)
 
@@ -119,6 +132,13 @@ MODEL_COLORS = {
 }
 # Plot order (Random first as the floor, ESM-C last).
 PLOT_ORDER = ["Random guess", "WAG", "LG (4 rate categories)", "PEINT (ESM2)", "PEINT (ESM-C)"]
+
+# The two panels this module emits. Shared by the recompute and the --from-csv paths so the
+# labels and file stems cannot drift apart.
+PANEL_SPECS = (
+    ("Test families (held out)", "figure2_likelihood_eval_test_esmc"),
+    ("Train held-out subset (in-family)", "figure2_likelihood_eval_train_held_out_esmc"),
+)
 
 
 def build_family_split(transitions_dir):
@@ -211,7 +231,7 @@ def compute_baseline_per_site_dir(name, families, families_train, num_processes)
     aligned/train_transitions_dir (LG additionally on train_site_rates_4cat_dir), then scored
     on the held-out test transitions. Cached like everything else, so this is paid once.
     """
-    from protevo import models
+    from peint import models
 
     num_processes = usable_mpi_processes(num_processes)
 
@@ -289,6 +309,68 @@ def accumulate_by_time_bin(families, per_site_dirs, quantization_points):
     return totals, counts
 
 
+def panel_table(totals, counts, quantization_points):
+    """The tidy table behind one panel: one row per (model, time bin).
+
+    ``total_ll`` and ``n_sites`` are exactly what ``plot_mean_likelihood`` consumes, so the
+    table is a lossless record of the panel rather than a summary of it. The mean per-site
+    likelihood it actually draws -- exp(total_ll / n_sites) -- is stored alongside so the
+    file is readable on its own.
+    """
+    rows = []
+    for name in PLOT_ORDER:
+        if name not in totals:
+            continue
+        for i, t in enumerate(quantization_points):
+            n = int(counts[name][i])
+            rows.append({
+                "model": name,
+                "t_bin": float(t),
+                "total_ll": float(totals[name][i]),
+                "n_sites": n,
+                "mean_per_site_likelihood": float(np.exp(totals[name][i] / n)) if n else np.nan,
+            })
+    return pd.DataFrame(rows)
+
+
+def table_to_totals_counts(df):
+    """Inverse of :func:`panel_table` -- rebuild what ``plot_mean_likelihood`` needs.
+
+    The time grid is recovered from the table itself rather than recomputed, so a replot does
+    not depend on the quantization grid still matching the run that produced the table.
+    """
+    quantization_points = sorted(float(t) for t in df["t_bin"].unique())
+    index = {t: i for i, t in enumerate(quantization_points)}
+    totals, counts = {}, {}
+    for name, sub in df.groupby("model", sort=False):
+        totals[name] = np.zeros(len(quantization_points))
+        counts[name] = np.zeros(len(quantization_points), dtype=int)
+        for t, total_ll, n_sites in zip(sub["t_bin"], sub["total_ll"], sub["n_sites"]):
+            i = index[float(t)]
+            totals[name][i] = float(total_ll)
+            counts[name][i] = int(n_sites)
+    return totals, counts, quantization_points
+
+
+def load_panel_table(stem, out_dir):
+    """Load the table this module writes, preferring the deposited copy.
+
+    Mirrors ``figure3_structure_metrics._from_figure_data``: the same file ships in the
+    deposit's ``figure_data`` tier, so the replot path and the recompute path converge on
+    ``plot_mean_likelihood`` with identical arrays -- there is one plotting implementation,
+    not two.
+    """
+    for cand in (os.path.join(str(cfg.FIGURE_DATA_DIR), stem + ".csv"),
+                 os.path.join(out_dir, stem + ".csv")):
+        if os.path.exists(cand):
+            print(f"replotting {stem} from {cand}")
+            return pd.read_csv(cand)
+    raise SystemExit(
+        f"No saved table for {stem}. Looked in {cfg.FIGURE_DATA_DIR} and {out_dir}. "
+        f"Fetch the figure_data tier, or run without --from-csv to recompute it."
+    )
+
+
 def plot_mean_likelihood(totals, counts, quantization_points, output_path, title):
     sns.set_theme(style="white")
     plt.rcParams["xtick.bottom"] = True
@@ -353,14 +435,29 @@ def main():
                          "Needed with --no-esmc, where the ESM-C dir cannot be excluded "
                          "automatically and both cover every family.")
     ap.add_argument("--out-dir", default=str(cfg.FIGURES_DIR))
+    ap.add_argument("--from-csv", "--replot", dest="from_csv", action="store_true",
+                    help="Redraw both panels from the saved per-(model, time bin) tables "
+                         "instead of scoring transitions. Same plotting code, same figure; "
+                         "needs no GPU, no checkpoint and no transitions.")
     args = ap.parse_args()
 
-    protevo_caching.set_cache_dir(CACHE_DIR)
+    # Replot first: this path must not touch the transitions dirs, a checkpoint or a cache,
+    # because the whole point is that it runs at the figure_data tier.
+    if args.from_csv:
+        os.makedirs(args.out_dir, exist_ok=True)
+        for label, stem in PANEL_SPECS:
+            totals, counts, quantization_points = table_to_totals_counts(
+                load_panel_table(stem, args.out_dir))
+            plot_mean_likelihood(totals, counts, quantization_points,
+                                 os.path.join(args.out_dir, stem + ".pdf"), label)
+        return
+
+    peint_caching.set_cache_dir(CACHE_DIR)
     # cherryml has its own cache, and fitting the WAG/LG rate matrices goes through it. Without
     # this its cached functions hand back None output dirs and training dies in os.stat.
     cherryml_caching.set_cache_dir(CHERRYML_CACHE_DIR)
     cherryml_caching.set_read_only(False)
-    protevo_caching.set_read_only(False)
+    peint_caching.set_read_only(False)
 
     if args.families_path:
         # Same JSON convention as benchmarks/generate_all_results --families_path:
@@ -420,10 +517,12 @@ def main():
 
     quantization_points = [float(q) for q in get_quantization_points_from_geometric_grid()]
 
-    for label, families, stem in (
-        ("Test families (held out)", families_test, "figure2_likelihood_eval_test_esmc"),
-        ("Train held-out subset (in-family)", train_held_out_subset, "figure2_likelihood_eval_train_held_out_esmc"),
-    ):
+    panel_families = {
+        "figure2_likelihood_eval_test_esmc": families_test,
+        "figure2_likelihood_eval_train_held_out_esmc": train_held_out_subset,
+    }
+    for label, stem in PANEL_SPECS:
+        families = panel_families[stem]
         print(f"\n=== {label}: binning {len(families)} families ===")
         totals, counts = accumulate_by_time_bin(families, per_site_dirs, quantization_points)
         for name in PLOT_ORDER:
@@ -433,6 +532,12 @@ def main():
             mean_ll = totals[name].sum() / sites if sites else float("nan")
             print(f"  {name:24s} mean per-site LL = {mean_ll:+.4f} over {sites} sites")
         os.makedirs(args.out_dir, exist_ok=True)
+        # Save the table BEFORE plotting, so an expensive run is never lost to a plotting
+        # error, and so the panel can be redrawn later with --from-csv. This file is what the
+        # deposit should ship in figure_data (a few KB).
+        table_path = os.path.join(args.out_dir, stem + ".csv")
+        panel_table(totals, counts, quantization_points).to_csv(table_path, index=False)
+        print(f"Wrote {table_path}")
         plot_mean_likelihood(
             totals, counts, quantization_points, os.path.join(args.out_dir, stem + ".pdf"), label
         )
