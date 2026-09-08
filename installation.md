@@ -89,12 +89,39 @@ EOF
 
 `[CpuDevice(id=0)]` means something moved `jax`/`jaxlib` after the install. Rebuild the env.
 
+### `fig4d` — in-vivo growth curves (Fig. 4d only)
+
+Fig. 4d fits plate-reader traces with
+[tecantaloupe](https://github.com/flamholz/tecantaloupe), which is not on PyPI and is not
+vendored here. Clone it at the commit this release was tested against:
+
+```bash
+git clone https://github.com/flamholz/tecantaloupe
+git -C tecantaloupe checkout 8199fbb48e4764f96c172de7009dc70c229ae4e6
+```
+
+It calls `DataFrame.iteritems`, removed in pandas 2.0, so it needs its own environment rather
+than a change to `peint-paper`:
+
+```bash
+python -m venv envs/fig4d
+envs/fig4d/bin/pip install numpy==1.26.4 pandas==1.5.3 scipy==1.10.1 \
+                           xlrd==1.2.0 openpyxl matplotlib seaborn
+```
+
+`xlrd` is needed for the parser's import and `openpyxl` for the `.xlsx` read itself; both are
+required. Nothing here needs a GPU, and the whole panel takes about fifteen seconds.
+
 ### Point the renderer at both
 
 ```bash
 export PEINT_PAPER_PY_ESMC=/path/to/envs/peint-esmc/bin/python
 export PEINT_PAPER_PY_PEINT=/path/to/envs/peint-paper/bin/python
 export HF_HOME=/path/to/hf_cache          # ESM-C and ProstT5 weights land here
+
+# Fig. 4d only
+export PEINT_PAPER_PY_FIG4D=/path/to/envs/fig4d/bin/python
+export TECANTALOUPE_DIR=/path/to/tecantaloupe
 ```
 
 `render_panels.py` runs each panel in the right one. Unset, everything runs in the current

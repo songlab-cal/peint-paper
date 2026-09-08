@@ -141,7 +141,7 @@ python scripts/check_local_data.py     # lists roles present and missing
 |---|---|---|---|
 | `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2c regenerates at level 3 |
 | `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | |
-| `Figure4.ipynb` | 4a, 4b, 4c, 4e, 4f | 1 | inputs are in the repository; 4d needs a fitting helper not yet packaged |
+| `Figure4.ipynb` | 4a, 4b, 4c, 4d, 4e, 4f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env |
 | `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
 | `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
 | `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | |
@@ -157,13 +157,12 @@ marks `MATCH` or `CHECK`.
 
 ## Reproduction gaps
 
-These notebooks ship **53 panels with their outputs embedded**. Five entries in the figure list
+These notebooks ship **53 panels with their outputs embedded**. Four entries in the figure list
 are not reproduced by a notebook cell. In each case what is missing is a script or an input, not
 a result we have reason to doubt; where we are recovering the missing piece, that is said.
 
 | figure | what is missing | status |
 |---|---|---|
-| **Fig. 4d** | the `tecantaloupe` fitting helper that turns the committed plate-reader export into lag times, growth rates and yields | being packaged for release; the inputs and the published panel are both committed to this repository |
 | **ED Fig. 5b, 5c** | the AlphaFold2-with-MSA prediction table these two panels compare against | produced for the original analysis, not yet recovered from the run that made it |
 | **ED Fig. 8e** | a script for the single worked alignment example; its inputs are the same categorical-Jacobian tensors as 8b | not scripted |
 | **ED Fig. 1b, 1c** | the ablation sweep itself — fifteen checkpoints, not rerunnable from this release | the numbers ship as `figure_data/ed1/master_sweep_553fam.csv` with `make_report.py`, so both panels redraw at level 1 |
