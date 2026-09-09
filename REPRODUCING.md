@@ -3,7 +3,9 @@
 Three questions, answered separately, because conflating them is how reproducibility
 claims become untrue:
 
-1. **Can you redraw the published panels?** Yes, all of them, from ~40 MB.
+1. **Can you redraw the published panels?** Most of them, from a 20 MB download. Six sit
+   outside that tier (Fig. 2c, Fig. 3b, Fig. 3e, ED Fig. 3d, ED Fig. 5d/5e) and need section 2
+   or 3; `notebooks/README.md` has the panel-by-panel table.
 2. **Can you recompute the numbers behind them?** Most of them, from ~53 GB.
 3. **Can you regenerate that 53 GB from raw inputs?** Partly, and the parts you cannot
    are named below rather than glossed.

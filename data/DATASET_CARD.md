@@ -11,13 +11,13 @@ Model library: https://github.com/songlab-cal/peint (tag `zenodo-22151902`)
 The paper evaluates PEINT, a learned protein-evolution simulator, against classical
 substitution models (WAG, LG, LG4X, LG+C60, LG+S256) and against real sequence data, on
 553 held-out protein families. This deposit holds the simulation outputs and the derived
-per-family metrics behind every published panel.
+per-family metrics behind the published panels.
 
 It is organised in two tiers, because most people want the first one.
 
 | tier | download | unpacked | what you can do |
 |---|---|---|---|
-| `figure_data.tar.zst` | 19 MB | 21 MB | re-render **every** panel exactly. No models, no GPU, nothing else. |
+| `figure_data.tar.zst` | 20 MB | 28 MB | re-render **most** panels exactly. No models, no GPU, nothing else. |
 | \+ `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` | ~11 GB | ~52 GB | recompute the metrics from the simulated alignments themselves. |
 | \+ `peint_transitions_aligned`, `..._unaligned` | ~14 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
 | \+ `r1_af2`, `r1_omegafold` | ~24 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
@@ -69,7 +69,7 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
 | file | unpacked | files | what it is |
 |---|---|---|---|
-| `figure_data.tar.zst` | 21 MB | 20 | per-panel tables — the values actually plotted |
+| `figure_data.tar.zst` | 28 MB | 39 | per-panel tables — the values actually plotted |
 | `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
@@ -134,8 +134,8 @@ download and 99 GB on disk, and leaves every figure reproducible.
 
 ## What recomputes, and what needs a full rerun
 
-**Every panel re-renders** from `figure_data.tar.zst` alone — no models, no GPU, nothing else
-downloaded.
+**Most panels re-render** from `figure_data.tar.zst` alone — no models, no GPU, nothing else
+downloaded. A few read the simulation archives instead; `notebooks/README.md` says which.
 
 **Most panels also recompute** their statistic from the archives here rather than replotting a
 stored number: the conservation JSD panels, the 3Di panel, both pLDDT ECDFs, the generalization

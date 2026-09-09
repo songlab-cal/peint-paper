@@ -13,8 +13,11 @@ Each cell is marked with the level it runs at.
 | 2 | `local_data/r1/`, `r2/`, `sim/` | released intermediate results | minutes to an hour |
 | 3 | model checkpoints + raw data | regenerated intermediates | hours to days, GPU |
 
-Every notebook runs at level 1 by default. Level-2 and level-3 commands are given in the
-cells, commented out.
+Most cells run at level 1 by default; the coverage table below names the exceptions. Six
+panels are outside the replot tier — Fig. 2c, Fig. 3b, Fig. 3e, ED Fig. 3d and ED Fig. 5d/5e —
+because they need a larger archive, a GPU, or the folding environment; their level-2/3 commands
+are given in the cells. `render_panels.py --from-csv` skips them rather than silently starting a
+full recomputation.
 
 ## Why level 1 is the default, and what the embedded outputs are
 
@@ -61,12 +64,32 @@ either directory; no environment variables are needed for level 1.
 conda create -p ./envs/peint-paper python=3.10 -y
 conda activate ./envs/peint-paper
 
+# Install torch FIRST. Several figure producers import `peint`, which depends on torch, so
+# leaving it to the resolver picks the newest release and a CUDA build that may not match the
+# driver on the machine. Level-1 replotting never runs a model, so the CPU wheel is enough and
+# avoids CUDA entirely:
+pip install "torch==2.5.*" --index-url https://download.pytorch.org/whl/cpu
+
 pip install -e ../peint      # model library
 pip install -e .             # this repository, plotting and analysis
 pip install jupyterlab
 ```
 
-This covers every level-1 cell.
+That covers the level-1 cells, on CPU: no GPU, and flash-attn is not required.
+
+For level 2 and 3 on a GPU, install the CUDA build that matches your driver instead of the CPU
+wheel; the tested stack is torch 2.5.0+cu124. `../installation.md` has the details.
+
+Figure 4's producer notebooks need two extras of their own — `ete3` renders the tree through
+Qt for 4a-4c, and the stopped-flow fits use scikit-learn for 4e:
+
+```bash
+pip install -e ".[figure4]"            # PyQt5 + scikit-learn
+conda install -c conda-forge poppler   # Fig. 4 panels are PDF; this shows them inline
+```
+
+Fig. 4d additionally needs a `tecantaloupe` clone and its own pandas<2 environment; the Fig. 4d
+cell in `Figure4.ipynb` gives the recipe.
 
 Structure panels (Fig. 3f, 3g; ED Fig. 4b, 5d, 5e) also need the folding stack. Two of its
 packages are not on PyPI:
@@ -75,13 +98,6 @@ packages are not on PyPI:
 pip install -e ".[folding]"
 pip install -q git+https://github.com/sokrypton/ColabDesign.git@v1.1.3 --no-deps
 pip install --no-deps -e <OmegaFold checkout>
-```
-
-Optional, for display only:
-
-```bash
-conda install -c conda-forge poppler   # Fig. 4 panels are PDF; this shows them inline
-pip install PyQt5                      # Fig. 4a/4b render a tree through Qt
 ```
 
 Headless machines need `QT_QPA_PLATFORM=offscreen`; the Figure 4 notebook sets it.
@@ -94,9 +110,21 @@ pinned versions are in `../REPRODUCING.md`.
 
 Everything downloads into `local_data/`. Paths in the notebooks are relative to it.
 
+`fetch_local_data.py` needs to know which Zenodo record to read, either through
+`PEINT_PAPER_ZENODO_RECORD` or `--record`, and it unpacks `.tar.zst` archives, so **`zstd`
+must be on `PATH`**:
+
 ```bash
+export PEINT_PAPER_ZENODO_RECORD=<record-id>             # see the top-level README
 python scripts/fetch_local_data.py --list                # archives, sizes, contents
-python scripts/fetch_local_data.py --tier figure_data    # 20 MB, covers all of level 1
+python scripts/fetch_local_data.py --tier figure_data    # 20 MB, the level-1 tables
+```
+
+While the Zenodo record is unreachable, the same 20 MB archive is mirrored on this
+repository's `zenodo-22151902` release; unpack it into `local_data/` by hand:
+
+```bash
+tar --use-compress-program=unzstd -xf figure_data.tar.zst -C local_data/
 ```
 
 Level 2 needs specific archives:
@@ -139,15 +167,15 @@ python scripts/check_local_data.py     # lists roles present and missing
 
 | notebook | panels | default level | notes |
 |---|---|---|---|
-| `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2c regenerates at level 3 |
-| `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | |
+| `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2a, 2b redraw at level 1; **2c** is level 3 — a checkpoint, a GPU and Historian, with no replot path |
+| `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | 3c, 3d, 3f, 3g redraw at level 1; **3b** needs `sim/` (a per-site logo, so no table can redraw it) and **3e** needs `r2` (per-event lengths are not in the shipped per-family table) |
 | `Figure4.ipynb` | 4a, 4b, 4c, 4d, 4e, 4f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env |
 | `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
 | `ExtendedData1.ipynb` | 1b, 1c | 1 | |
 | `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
-| `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | |
-| `ExtendedData4.ipynb` | 4b, 4c | 2 | |
-| `ExtendedData5.ipynb` | 5d, 5e | 2 | 5b, 5c need a table not yet recovered |
+| `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | 3a–3c redraw at level 1; **3d** recomputes from `r1`/`r2` — its producer has no replot path |
+| `ExtendedData4.ipynb` | 4b, 4c | 1 | both redraw from shipped tables |
+| `ExtendedData5.ipynb` | 5d, 5e | 2 | needs the folding environment — ESM-IF's GVP-Transformer is imported at module load (`torch_geometric`) even when the scored tables are complete; 5b, 5c need a table not yet recovered |
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
 | `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are diagrams; 8e is not scripted |

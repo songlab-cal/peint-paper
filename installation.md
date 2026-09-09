@@ -10,8 +10,11 @@ ProstT5) require incompatible `transformers` versions.
 ## Prerequisites
 
 - Linux, Python 3.10, conda
-- NVIDIA GPU, compute capability >= 8.0, CUDA 12.4 driver. Tested on an A100 80GB.
-- MAFFT on `PATH`
+- `zstd` on `PATH` (every data archive is a `.tar.zst`)
+- MAFFT on `PATH` — for the panels that re-simulate or realign
+- An NVIDIA GPU, compute capability >= 8.0, CUDA 12.4 driver, tested on an A100 80GB — needed
+  only to recompute or regenerate. Redrawing the published panels from the shipped tables is
+  CPU-only and needs neither a GPU nor flash-attn; see `notebooks/README.md`.
 
 Use pip inside a bare conda env; do not `conda install` torch, JAX or CUDA packages.
 
@@ -134,7 +137,7 @@ Everything resolves under `local_data/`. Pick a tier:
 ```bash
 export PEINT_PAPER_ZENODO_RECORD=<record-id>
 
-scripts/fetch_local_data.py --tier figure_data   # 19 MB   plots only
+scripts/fetch_local_data.py --tier figure_data   # 20 MB   replot tier
 scripts/fetch_local_data.py --tier full          # ~22 GB  recompute + rerun
 ```
 
