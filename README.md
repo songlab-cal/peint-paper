@@ -25,11 +25,27 @@ novel-vs-seen OmegaFold panel runs the pLDDT ECDF that writes its input.
 
 ## Data
 
+The archive of record is this paper's Zenodo deposit, record `22151902`; its DOI is added here
+once the record is published. Most published panels can be redrawn from one 20 MB file in it,
+`figure_data.tar.zst` — no models, no GPU. A few need the larger archives;
+`notebooks/README.md` says which.
+
+**Temporary mirror, September 2026.** `zenodo.org` was unreachable on 9 September 2026. While
+that lasts, a copy of that single archive is attached to this repository's `zenodo-22151902`
+release:
+
+    https://github.com/songlab-cal/peint-paper/releases/download/zenodo-22151902/figure_data.tar.zst
+    sha256  32d6a21c7f484eb7102a0f47127502421f009c24cf421538a0f830a0fed670d6
+
+It is byte-identical to the deposited file, and it is a convenience during the outage rather
+than a second source of record: cite the Zenodo DOI, and prefer the deposit once it resolves
+again. The larger archives are on Zenodo only.
+
 Everything the figures read resolves under `local_data/`:
 
 ```
 local_data/
-  figure_data/   per-panel tables — enough to re-render every panel, no models needed
+  figure_data/   per-panel tables — enough to re-render most panels, no models needed
   vep/           per-run ProteinGym Spearman tables (git-tracked, ships with the code)
   r1/  r2/       revision 1 (classical + PEINT-ESM2) and revision 2 (the ESM-C rerun)
   sim/           trees, root sequences, empirical + simulated MSAs

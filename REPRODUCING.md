@@ -19,10 +19,11 @@ scripts/render_panels.py --list       # the panels, their env, and what each cos
 
 ---
 
-## 1. Redraw everything — `figure_data`, ~40 MB
+## 1. Redraw from the shipped tables — `figure_data`, 20 MB packed
 
-Every published panel has a table that fully determines it. No models, no GPU, no
-structures, no cluster.
+Most published panels have a table that fully determines them: no models, no GPU, no
+structures, no cluster. The exceptions are listed in `notebooks/README.md`; they recompute
+from the archives in section 2.
 
 ```bash
 scripts/fetch_local_data.py --tier figure_data

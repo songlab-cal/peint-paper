@@ -146,7 +146,7 @@ scripts/check_local_data.py                      # what is present, what is miss
 
 | Archive | Download | Unpacked | Contents |
 |---|---|---|---|
-| `figure_data` | 19 MB | 21 MB | the table behind every panel |
+| `figure_data` | 20 MB | 28 MB | the tables behind most panels |
 | `aux` | 23 MB | 127 MB | annotations, split lists, site rates |
 | `sim` | 201 MB | 543 MB | trees, root sequences, empirical MSAs |
 | `r1` | 2.8 GB | 20 GB | revision 1: classical + PEINT-ESM2 |
@@ -206,7 +206,7 @@ scripts/render_panels.py --only figure3_jsd_boxplot
 
 ### Tier 1 — replot from the shipped tables
 
-`figure_data` (19 MB) holds the values behind every published panel. No models, no GPU.
+`figure_data` (20 MB) holds the values behind most published panels. No models, no GPU.
 `pcp_panels --from-csv` redraws in ~20 s; the other panels recompute their statistic even
 in this mode, so this tier is mainly for checking plotted numbers against the paper.
 
