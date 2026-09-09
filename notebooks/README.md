@@ -89,7 +89,7 @@ conda install -c conda-forge poppler   # Fig. 4 panels are PDF; this shows them 
 ```
 
 Fig. 4d additionally needs a `tecantaloupe` clone and its own pandas<2 environment; the Fig. 4d
-cell in `Figure4.ipynb` gives the recipe.
+cell in `Figure4.ipynb` gives the recipe and can also be run from a terminal.
 
 Structure panels (Fig. 3f, 3g; ED Fig. 4b, 5d, 5e) also need the folding stack. Two of its
 packages are not on PyPI:
@@ -179,7 +179,7 @@ python scripts/check_local_data.py     # lists roles present and missing
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
 | `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are diagrams; 8e is not scripted |
-| `ExtendedData9.ipynb` | 9a, 9b | 1 | |
+| `ExtendedData9.ipynb` | 9a, 9b | 1 | plots from the shipped label cache; a fresh run may still contact the public annotation sources |
 
 Where the manuscript prints a number, the notebook prints the computed value beside it and
 marks `MATCH` or `CHECK`.

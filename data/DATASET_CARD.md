@@ -17,7 +17,7 @@ It is organised in two tiers, because most people want the first one.
 
 | tier | download | unpacked | what you can do |
 |---|---|---|---|
-| `figure_data.tar.zst` | 20 MB | 28 MB | re-render **most** panels exactly. No models, no GPU, nothing else. |
+| `figure_data.tar.zst` | 20 MB | 28 MB | re-render **most** panels exactly. No models, no GPU, no other archive. |
 | \+ `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` | ~11 GB | ~52 GB | recompute the metrics from the simulated alignments themselves. |
 | \+ `peint_transitions_aligned`, `..._unaligned` | ~14 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
 | \+ `r1_af2`, `r1_omegafold` | ~24 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
@@ -120,7 +120,8 @@ These are third-party or too large to redistribute; the code fetches them:
 - **trRosetta training set** — the input a3m alignments and ground-truth PDBs
   (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, ~20 GB).
 - **Pfam-A HMMs, ECOD, CATH, SCOPe** — fetched on demand by `paper.generalization`. The
-  *derived* labels are in `aux.tar.zst`, so the generalization panels work offline.
+  *derived* labels are in `aux.tar.zst` and in the figure_data tier, and those are what the
+  generalization panels plot; a fresh run may still contact these public sources.
 - **AlphaFold weights, TM-align, ProstT5, ProteinGym** — see the repo's `scripts/fetch_*.sh`.
 - **The held-out transition trees and the `peint` evaluation cache** — declared in
   `MANIFEST.toml` as `tier = "on_request"`. The cache is keyed on absolute paths, so a copy is
@@ -134,8 +135,8 @@ download and 99 GB on disk, and leaves every figure reproducible.
 
 ## What recomputes, and what needs a full rerun
 
-**Most panels re-render** from `figure_data.tar.zst` alone — no models, no GPU, nothing else
-downloaded. A few read the simulation archives instead; `notebooks/README.md` says which.
+**Most panels re-render** from `figure_data.tar.zst` alone — no models, no GPU, no other
+archive. A few read the simulation archives instead; `notebooks/README.md` says which.
 
 **Most panels also recompute** their statistic from the archives here rather than replotting a
 stored number: the conservation JSD panels, the 3Di panel, both pLDDT ECDFs, the generalization
