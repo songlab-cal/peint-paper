@@ -364,7 +364,7 @@ def reroot_trees_from_fasttree(
         os.system(' '.join(command))
         
         #The reroot script leads to a duplicate node name, so we need to fix that.
-        #It's some rando internal node, so that really doesn't matter.
+        #The duplicate is an unnamed internal node, so the choice of new name is arbitrary.
         #This part is more general and can detect an number of duplicate nodes
         with open(output_tree_file, 'r') as f:
             newick_str = f.read().strip()

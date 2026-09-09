@@ -1,7 +1,7 @@
 # peint-paper
 
 Figures and benchmarks for the PEINT paper. The models live in the separate
-[`peint`](../peint) repo and are imported here as `peint`.
+[`peint`](https://github.com/songlab-cal/peint) repo and are imported here as `peint`.
 
 **Start with [`installation.md`](installation.md)** — clone, two conda environments, data,
 and the three tiers of reproduction (replot / recompute / rerun from a checkpoint).

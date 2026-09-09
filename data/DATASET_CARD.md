@@ -4,7 +4,7 @@ Everything needed to reproduce the figures in *Deep models of protein evolution 
 generate realistic evolutionary trajectories and functional proteins*.
 
 Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-22151902`)
-Model library: https://github.com/songlab-cal/peint (commit `731bff1`)
+Model library: https://github.com/songlab-cal/peint (tag `zenodo-22151902`)
 
 ## What this is
 

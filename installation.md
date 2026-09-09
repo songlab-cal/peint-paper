@@ -3,7 +3,7 @@
 Three things to do: clone both repos, build two conda environments, get the data.
 Then see [Reproducing figures](#reproducing-figures) for what you can run at each tier.
 
-The models live in the separate [`peint`](../peint) repo and are imported here as `peint`.
+The models live in the separate [`peint`](https://github.com/songlab-cal/peint) repo and are imported here as `peint`.
 Two environments are needed because ESM-C and the folding stack (OmegaFold, JAX/AF2Rank,
 ProstT5) require incompatible `transformers` versions.
 
@@ -29,7 +29,7 @@ Sibling directories — the defaults assume it.
 
 ### `peint-esmc` — ESM-C generation, most panels
 
-Build it per [`../peint/installation.md`](../peint/installation.md), then add:
+Build it per [the model repo's `installation.md`](https://github.com/songlab-cal/peint/blob/main/installation.md), then add:
 
 ```bash
 conda activate peint-esmc
