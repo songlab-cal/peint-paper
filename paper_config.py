@@ -324,6 +324,10 @@ EVAL_FAMILIES_FILE = _first_existing(
 ANNOTATION_DIR = _first_existing(
     DATA_ROOT / "local_data" / "generalization" / "annotations",
     LOCAL_DATA / "annotations",
+    # Last resort: the versioned family labels shipped in the figure_data tier. Without this,
+    # a replot-only checkout misses the label cache and paper.generalization rebuilds it from
+    # live ECOD/SCOPe/SIFTS/Pfam downloads, which drift against the published panel.
+    FIGURE_DATA_DIR / "annotations",
     env="PEINT_PAPER_ANNOTATION_DIR",
 )
 GENERALIZATION_DIR = Path(os.environ.get(

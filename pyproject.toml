@@ -45,6 +45,14 @@ folding = [
     "transformers==4.45.2",   # ProstT5 (sequence -> 3Di states)
     "sentencepiece",          # ProstT5 tokenizer
 ]
+# Figure 4's producer notebooks only. ete3 renders the carbonic-anhydrase tree through Qt
+# (4a-4c), and the stopped-flow endpoint fits use scikit-learn (4e). Nothing else needs
+# either, so they stay out of the core install: Level-1 replotting of the other panels does
+# not want a GUI toolkit pulled in.
+figure4 = [
+    "PyQt5",
+    "scikit-learn",
+]
 dev = [
     "pytest>=7.0.0",
     "ruff>=0.1.0",

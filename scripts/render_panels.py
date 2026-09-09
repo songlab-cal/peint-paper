@@ -28,6 +28,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+import paper_config as cfg  # noqa: E402  (needs REPO_ROOT on sys.path)
+
+
+def output_path(rel):
+    """Where a declared output actually lands.
+
+    Outputs are named relative to ``figures/``. Those under ``output/`` are written to
+    ``cfg.FIGURES_DIR``, which ``PEINT_PAPER_FIGURES_DIR`` overrides, so they must be checked
+    there rather than under the repository -- otherwise an override reports every panel as
+    MISSING. The rest (the VEP panels) are written beside them under ``figures/`` and are not
+    affected by that variable.
+    """
+    if rel.startswith("output/"):
+        return Path(cfg.FIGURES_DIR) / rel[len("output/"):]
+    return REPO_ROOT / "figures" / rel
+
 # Interpreters. "esmc" covers everything except the panels that need cherryml + ete3 +
 # AliSim/MAFFT (the PCP panels) or the Historian event counter.
 PY = {
@@ -50,6 +66,14 @@ class Panel:
     # argv that redraws this panel from a saved table instead of recomputing it. Only the
     # panels where recomputing is genuinely expensive have one.
     from_csv_argv: list = field(default_factory=list)
+    # True for panels with no replot path by design: they need a checkpoint, a GPU, or an
+    # archive the replot tier does not carry. --from-csv skips these rather than silently
+    # launching the full recomputation. Panels that read a shipped table by default need
+    # neither this flag nor from_csv_argv.
+    recompute_only: bool = False
+    # The outputs the replot path produces, when it is a subset of `outputs`. Checking the
+    # full list under --from-csv would report a panel the replot path never writes as MISSING.
+    from_csv_outputs: list = field(default_factory=list)
 
 
 PANELS = [
@@ -69,14 +93,14 @@ PANELS = [
     Panel("figure2_simulation_generate", "main", "figures.figure2_simulation",
           argv=["--skip-structures"], env="esmc",
           outputs=["output/figure2_simulation_mutations.pdf"],
-          cost="GPU; ~2 min",
+          cost="GPU; ~2 min", recompute_only=True,
           note="Star-topology simulation from one sequence: both PEINT backbones + WAG + LG. "
                "Needs a GPU and Historian. Populates the sequence cache the folding pass reads."),
     Panel("figure2_simulation_plddt", "main", "figures.figure2_simulation",
           env="peint",
           outputs=["output/figure2_simulation_plddt.pdf"],
           depends_on=["figure2_simulation_generate"],
-          cost="GPU; ~1.5 h (folds ~1200 structures)",
+          cost="GPU; ~1.5 h (folds ~1200 structures)", recompute_only=True,
           note="OmegaFold pLDDT vs time. Must run in peint-paper (the only env with omegafold); "
                "the sequence sims are cache hits here, so no ESM-C model is constructed."),
     Panel("figure3_af2rank_ecdf", "main", "figures.figure3_structure_metrics",
@@ -95,7 +119,9 @@ PANELS = [
     Panel("figure3_conservation_logo", "main", "figures.figure3_conservation",
           argv=["--panels", "logo"],
           outputs=["output/figure3_conservation_lg_s256.pdf"], cost="seconds",
-          note="Needs logomaker."),
+          recompute_only=True,
+          note="Needs logomaker, plus sim/trees and the per-model MSAs: the logo is computed "
+               "per site, so no summary table can redraw it."),
 
     # ---------------- extended data ----------------
     Panel("pcp_panels", "extended", "figures.figure3_pcp_mutation_counts", env="peint",
@@ -109,11 +135,16 @@ PANELS = [
                "--from-csv redraws from the saved aggregation tables instead."),
     Panel("historian_indel_esmc_vs_rev1", "extended", "benchmarks.historian_compare_esmc_vs_rev1",
           env="peint",
+          from_csv_argv=["--from-csv"],
           outputs=["output/historian_indel_esmc_vs_rev1_refine.pdf",
                    "output/historian_indel_length_cdf_refine.pdf"],
+          # Fig 3e (the length CDF) needs per-event lengths, which the shipped per-family
+          # table does not carry, so the replot path writes the event-count panel only.
+          from_csv_outputs=["output/historian_indel_esmc_vs_rev1_refine.pdf"],
           cost="~5 min"),
     Panel("historian_indel_vs_length", "extended", "benchmarks.historian_indel_vs_length",
           env="peint",
+          from_csv_argv=["--from-csv"],
           outputs=["output/historian_indel_vs_length.pdf"], cost="~5 min"),
     Panel("threedi_jsd_boxplot", "extended", "benchmarks.threedi_jsd_all_models",
           argv=["--skip-3di-generation"], env="peint",
@@ -132,7 +163,7 @@ PANELS = [
     Panel("blast_similarity", "extended", "benchmarks.blast_similarity",
           outputs=["output/blast_similarity.pdf",
                    "output/blast_similarity_with_nohit.pdf"],
-          cost="~40 s",
+          cost="~40 s", recompute_only=True,
           note="Best-hit %identity of simulated leaves vs BLAST nr, family medians. Reads the "
                "two blast_sequences dirs (rev1 + rev2 ESM-C); no model or GPU. The main panel "
                "is hits-only (the original definition) and each row is annotated with the "
@@ -140,6 +171,10 @@ PANELS = [
                "sequences have no hit at all; blast_similarity_coverage.csv has the raw counts."),
     Panel("esmif_validation", "extended", "benchmarks.esmif_validation",
           argv=["--approach", "both"], env="peint",
+          # paper.esmif imports ESM-IF's GVP-Transformer at module load, which pulls
+          # torch_geometric: the panel needs the folding environment even when its scored
+          # tables are complete, so it is not part of the replot tier.
+          recompute_only=True,
           outputs=["output/esmif/esmif_approach1_gt_likelihood.pdf",
                    "output/esmif/esmif_approach1_divergence_controlled.pdf",
                    "output/esmif/esmif_approach2_selfconsistency.pdf"],
@@ -236,12 +271,14 @@ def cmd_check(sel):
 
 def run(panel, dry, from_csv=False):
     interp = PY[panel.env]
+    if from_csv and panel.recompute_only:
+        print(f"\n=== {panel.name}  SKIPPED under --from-csv "
+              f"(no replot path by design; full render costs {panel.cost})")
+        return 0
     if from_csv and panel.from_csv_argv:
         argv = [interp, "-m", panel.module, *panel.from_csv_argv]
-    elif from_csv and not panel.from_csv_argv:
-        # No replot path: the panel is already cheap, or reads a saved table by default.
-        argv = [interp, "-m", panel.module, *panel.argv]
     else:
+        # Either the panel reads a saved table by default, or this is a full render.
         argv = [interp, "-m", panel.module, *panel.argv]
     print(f"\n=== {panel.name}  (env={panel.env}, {panel.cost})")
     print("    " + " ".join(argv))
@@ -255,9 +292,10 @@ def run(panel, dry, from_csv=False):
     if r.returncode:
         print(f"    FAILED (exit {r.returncode})")
         return r.returncode
-    for o in panel.outputs:
-        path = REPO_ROOT / "figures" / o
-        print(f"    {'wrote' if path.exists() else 'MISSING'}  figures/{o}")
+    expected = panel.from_csv_outputs if (from_csv and panel.from_csv_outputs) else panel.outputs
+    for o in expected:
+        path = output_path(o)
+        print(f"    {'wrote' if path.exists() else 'MISSING'}  {o}")
     return 0
 
 
@@ -270,7 +308,9 @@ def main():
     ap.add_argument("--only", nargs="+", metavar="NAME", help="Panel name or name prefix.")
     ap.add_argument("--group", choices=("main", "extended"))
     ap.add_argument("--from-csv", action="store_true",
-                    help="Prefer each panel's replot-from-saved-table path where it has one.")
+                    help="Redraw from saved tables: use each panel's replot path where it has "
+                         "one, and skip the panels that have none by design (they need a "
+                         "checkpoint, a GPU, or an archive the replot tier does not carry).")
     ap.add_argument("--keep-going", action="store_true",
                     help="Continue after a panel fails instead of stopping.")
     args = ap.parse_args()

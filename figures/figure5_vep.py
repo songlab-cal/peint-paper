@@ -5,12 +5,10 @@ import numpy as np
 import matplotlib as mpl
 import scipy
 from tqdm import tqdm
-import os
 import json
 from pathlib import Path
 
 from peint.vep._vep_utils import (
-    PROTEINGYM_DIR,
     _format_time_dir_suffix,
     _discover_time_dirs,
 )
@@ -33,8 +31,6 @@ apply Illustrator-friendly, publication-ready defaults before plotting.
 # __file__), git-committed, so nothing is written to the model (peint) repo:
 #   * figures                -> peint-paper/figures/<category>/
 #   * per-run scored results -> peint-paper/local_data/vep/test_lls/production/<run>/spearman_results.csv
-# The ProteinGym family reference (transition pairs) is still read from the model
-# repo's ProteinGym3, which PEINT is meant to be used in conjunction with.
 PAPER_ROOT = Path(__file__).resolve().parents[1]
 FIG_DIR = PAPER_ROOT / "figures"
 # Via cfg.LOCAL_DATA rather than PAPER_ROOT/local_data: the two are the same by default, but
@@ -188,17 +184,13 @@ def _make_spearman_plot(
     output_dir = VEP_RESULTS_DIR
     if save_spearman_path is None:
         save_spearman_path = output_dir / "spearman_results.csv"
-    # Load all families
-    transition_dir = (
-        PROTEINGYM_DIR
-        / "_cache_cherryml/create_test_transition_pairs/3a13efc22507796bfec09150d959917b6e034c3c29639e25c0cadf0f02921d4c/output_transition_pairs_dir/"
-    )
-    families = [
-        f.split(".")[0] for f in os.listdir(transition_dir) if f.endswith(".txt")
-    ]
-
     df_results_all = []
-    families_overlap = set(families)
+    # These panels compare models over the assays that all of them scored, so the family set is
+    # the intersection of the per-run tables themselves. It used to be seeded from a ProteinGym
+    # CherryML cache directory; that supplied assay identifiers only, and was a strict superset
+    # of the shipped runs, so seeding from it was a no-op that nonetheless required a ProteinGym
+    # checkout in order to replot these panels.
+    families_overlap = None
     for name, info in run_names.items():
         run_dir = info.get("run_name")
         t_wag = info.get("t_wag")
@@ -217,7 +209,8 @@ def _make_spearman_plot(
         df = pd.read_csv(per_assay_spearman_fpath)
         df["model"] = name
         df_results_all.append(df)
-        families_overlap = set(df["family"]).intersection(families_overlap)
+        fams = set(df["family"])
+        families_overlap = fams if families_overlap is None else families_overlap & fams
     df_results_all = pd.concat(df_results_all, ignore_index=True)
     df_results_all = df_results_all[
         df_results_all["family"].isin(families_overlap)
@@ -383,17 +376,13 @@ def _make_esm_vs_peint_plot(
 
     output_dir = VEP_RESULTS_DIR
 
-    # Load all families
-    transition_dir = (
-        PROTEINGYM_DIR
-        / "_cache_cherryml/create_test_transition_pairs/3a13efc22507796bfec09150d959917b6e034c3c29639e25c0cadf0f02921d4c/output_transition_pairs_dir/"
-    )
-    families = [
-        f.split(".")[0] for f in os.listdir(transition_dir) if f.endswith(".txt")
-    ]
-
     df_results_all = []
-    families_overlap = set(families)
+    # These panels compare models over the assays that all of them scored, so the family set is
+    # the intersection of the per-run tables themselves. It used to be seeded from a ProteinGym
+    # CherryML cache directory; that supplied assay identifiers only, and was a strict superset
+    # of the shipped runs, so seeding from it was a no-op that nonetheless required a ProteinGym
+    # checkout in order to replot these panels.
+    families_overlap = None
     for name, info in run_names.items():
         run_dir = info.get("run_name")
         t_wag = info.get("t_wag")
@@ -412,7 +401,8 @@ def _make_esm_vs_peint_plot(
         df = pd.read_csv(per_assay_spearman_fpath)
         df["model"] = name
         df_results_all.append(df)
-        families_overlap = set(df["family"]).intersection(families_overlap)
+        fams = set(df["family"])
+        families_overlap = fams if families_overlap is None else families_overlap & fams
 
     if not df_results_all:
         raise ValueError("No valid data files found for any of the specified models")
