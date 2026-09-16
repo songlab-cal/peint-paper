@@ -42,8 +42,8 @@ is there for anyone who wants to go further back.
 ### 1. Repositories
 
 ```bash
-git clone https://github.com/<org>/peint-paper.git
-git clone https://github.com/<org>/peint.git
+git clone https://github.com/songlab-cal/peint-paper.git
+git clone https://github.com/songlab-cal/peint.git
 cd peint-paper
 ```
 
@@ -97,7 +97,10 @@ packages are not on PyPI:
 ```bash
 pip install -e ".[folding]"
 pip install -q git+https://github.com/sokrypton/ColabDesign.git@v1.1.3 --no-deps
-pip install --no-deps -e <OmegaFold checkout>
+
+# OmegaFold is not on PyPI: clone it, then install that checkout
+git clone https://github.com/HeliXonProtein/OmegaFold /path/to/OmegaFold
+pip install --no-deps /path/to/OmegaFold
 ```
 
 Headless machines need `QT_QPA_PLATFORM=offscreen`; the Figure 4 notebook sets it.
@@ -115,13 +118,13 @@ Everything downloads into `local_data/`. Paths in the notebooks are relative to 
 must be on `PATH`**:
 
 ```bash
-export PEINT_PAPER_ZENODO_RECORD=<record-id>             # see the top-level README
+export PEINT_PAPER_ZENODO_RECORD=22151902                # doi.org/10.5281/zenodo.22151902
 python scripts/fetch_local_data.py --list                # archives, sizes, contents
 python scripts/fetch_local_data.py --tier figure_data    # 20 MB, the level-1 tables
 ```
 
-While the Zenodo record is unreachable, the same 20 MB archive is mirrored on this
-repository's `zenodo-22151902` release; unpack it into `local_data/` by hand:
+That 20 MB archive is also mirrored on this repository's `zenodo-22151902` release — see the
+top-level README for the URL and its checksum. Unpack a hand-downloaded copy with:
 
 ```bash
 tar --use-compress-program=unzstd -xf figure_data.tar.zst -C local_data/

@@ -25,21 +25,34 @@ novel-vs-seen OmegaFold panel runs the pLDDT ECDF that writes its input.
 
 ## Data
 
-The archive of record is this paper's Zenodo deposit, record `22151902`; its DOI is added here
-once the record is published. Most published panels can be redrawn from one 20 MB file in it,
-`figure_data.tar.zst` — no models, no GPU. A few need the larger archives;
-`notebooks/README.md` says which.
+The archive of record is this paper's Zenodo deposit:
 
-**Temporary mirror, September 2026.** `zenodo.org` was unreachable on 9 September 2026. While
-that lasts, a copy of that single archive is attached to this repository's `zenodo-22151902`
-release:
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22151902.svg)](https://doi.org/10.5281/zenodo.22151902)
+
+Cite [`10.5281/zenodo.22151902`](https://doi.org/10.5281/zenodo.22151902) — record `22151902`,
+the exact version the figures were reproduced from; pass it to the fetch script as
+`PEINT_PAPER_ZENODO_RECORD=22151902`. This repository and
+[`peint`](https://github.com/songlab-cal/peint) both carry the matching tag `zenodo-22151902`.
+
+Most published panels can be redrawn from one 20 MB file in it, `figure_data.tar.zst` — no models,
+no GPU. A few need the larger archives; `notebooks/README.md` maps panels to archives.
+
+**Second source for that archive.** The same 20 MB file is also attached to this repository's
+`zenodo-22151902` release, byte-identical to the deposited copy:
 
     https://github.com/songlab-cal/peint-paper/releases/download/zenodo-22151902/figure_data.tar.zst
     sha256  32d6a21c7f484eb7102a0f47127502421f009c24cf421538a0f830a0fed670d6
 
-It is byte-identical to the deposited file, and it is a convenience during the outage rather
-than a second source of record: cite the Zenodo DOI, and prefer the deposit once it resolves
-again. The larger archives are on Zenodo only.
+That checksum is the one in the deposit's own `CHECKSUMS.sha256`, so either copy verifies against
+it. Use whichever is faster to reach — but cite the Zenodo DOI, which is the record of origin. The
+larger archives are on Zenodo only.
+
+**Which archive belongs to which repository.** Of the deposit's archives, only
+`peint_checkpoints.tar.zst` is needed by [`peint`](https://github.com/songlab-cal/peint) — plus
+the two `peint_transitions_*` archives to rerun its likelihood evaluation. Every other archive is
+consumed by this repository. `data/MANIFEST.toml` is the per-role inventory and the authoritative
+version of this split; `scripts/check_local_data.py` reports what is present and what supplies
+the rest.
 
 Everything the figures read resolves under `local_data/`:
 
