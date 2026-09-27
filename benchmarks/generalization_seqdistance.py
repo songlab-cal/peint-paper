@@ -335,10 +335,30 @@ ESMIF_GRADES = [
     ("1-10 hits", lambda v: v.between(1, 10)),
     (">10 hits", lambda v: v > 10),
 ]
+# The identity grading, which is the one to prefer. Grading on hit count is badly non-linear in
+# similarity -- its 0 -> 1-10 step crosses 73 points of identity and its 1-10 -> >10 step only 19 --
+# so evenly drawn boxes are nowhere near evenly spaced in the thing being varied. These bins are
+# in identity directly and come out close to balanced (99/126/144/183 families).
+IDENTITY_GRADES = [
+    ("no homolog", lambda v: v <= 0),
+    (">0-50%", lambda v: (v > 0) & (v < 50)),
+    ("50-80%", lambda v: (v >= 50) & (v < 80)),
+    (">=80%", lambda v: v >= 80),
+]
+# grade_by -> (grade list, family-table column, axis caption, annotation label + column)
+GRADINGS = {
+    "hits": (ESMIF_GRADES, "med_n_families",
+             "Distinct training families reached by the typical held-out sequence",
+             "median {:.0f}% identity to training", "median_pident"),
+    "identity": (IDENTITY_GRADES, "median_pident",
+                 "Identity to the closest training sequence (per-family median)",
+                 "median {:.0f} training families reached", "med_n_families"),
+}
 ESMIF_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
 
 
-def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
+def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
+                            grade_by: str = "identity") -> None:
     """ESM-IF self-consistency against connectivity to training, graded in three steps.
 
     Both rows are template-free: each sequence is scored on its own OmegaFold structure, so
@@ -354,10 +374,11 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
     from paper.model_style import model_colors
 
     _set_publication_style()
+    grades, grade_col, axis_label, annot_fmt, annot_col = GRADINGS[grade_by]
     t = family_distance_table(level).set_index("family")
     grade = {}
-    for name, rule in ESMIF_GRADES:
-        for f in t[rule(t["med_n_families"])].index:
+    for name, rule in grades:
+        for f in t[rule(t[grade_col])].index:
             grade[f] = name
 
     df = load_esmif_selfconsistency()
@@ -366,7 +387,7 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
     df = df.dropna(subset=["grade"])
     df["model"] = pd.Categorical(df["model"], categories=ESMIF_MODELS, ordered=True)
 
-    order = [g for g, _ in ESMIF_GRADES]
+    order = [g for g, _ in grades]
     # Family counts come from one model's rows, not from len(df): every model contributes a row
     # per family, so counting the frame would report four times the families there are.
     ref = df[df["model"] == "Real"]
@@ -379,9 +400,9 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
         # grades are not evenly spaced in similarity: the jump from 0 to 1-10 crosses most of the
         # identity range, while 1-10 to >10 barely moves. Computed over the same families the
         # boxes are drawn from, as the median of each family's own median closest-match identity.
-        pid = t.reindex([f for f in fams if f in t.index])["median_pident"].median()
+        annot = t.reindex([f for f in fams if f in t.index])[annot_col].median()
         ticks.append(f"{g}\n{n} families ({100 * n / total:.0f}%)\n"
-                     f"median {pid:.0f}% identity to training")
+                     + annot_fmt.format(annot))
 
     colors = model_colors()
     rows = [("ll", "ESM-IF log-likelihood\n(self-consistency)"),
@@ -397,7 +418,7 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
         # very different absolute levels, so a per-model reference is the only way to compare
         # those falls by eye.
         for m in ESMIF_MODELS:
-            v = df[(df["model"] == m) & (df["grade"] == ">10 hits")][value].median()
+            v = df[(df["model"] == m) & (df["grade"] == order[-1])][value].median()
             ax.axhline(v, color=colors[m], lw=0.6, ls=":", alpha=0.7, zorder=0)
         ax.set_ylabel(ylabel, fontsize=9)
         ax.set_xlabel("")
@@ -407,18 +428,17 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
     axes[-1].set_xticks(range(len(order)))
     axes[-1].set_xticklabels(ticks, fontsize=8)
     axes[-1].set_xlabel(
-        "Distinct training families reached by the typical held-out sequence\n"
-        "(DIAMOND blastp, very-sensitive, E < 1e-3; identity is per-family median of the "
-        "closest training match)", fontsize=8.5)
+        axis_label + "\n(DIAMOND blastp, very-sensitive, E < 1e-3; identity is the per-family "
+        "median of the closest training match)", fontsize=8.5)
     handles = [plt.Rectangle((0, 0), 1, 1, fc=colors[m]) for m in ESMIF_MODELS]
     axes[0].legend(handles, ESMIF_MODELS, fontsize=8, frameon=False, ncol=len(ESMIF_MODELS),
                    loc="lower center", bbox_to_anchor=(0.5, 1.01))
     fig.tight_layout()
     out_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png"):
-        fig.savefig(out_dir / f"esmif_by_hit_count_{level}.{ext}", bbox_inches="tight", dpi=300)
+        fig.savefig(out_dir / f"esmif_by_{grade_by}_{level}.{ext}", bbox_inches="tight", dpi=300)
     plt.close(fig)
-    print(f"  wrote {out_dir}/esmif_by_hit_count_{level}.{{pdf,png}}")
+    print(f"  wrote {out_dir}/esmif_by_{grade_by}_{level}.{{pdf,png}}")
 
 
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
@@ -557,7 +577,8 @@ def main() -> None:
         plot_similarity_cdf(out_dir)
     if args.hit_bins:
         report_by_hit_count(out_dir, args.level)
-        plot_esmif_by_hit_count(out_dir, args.level)
+        for grading in GRADINGS:
+            plot_esmif_by_hit_count(out_dir, args.level, grading)
 
     allstats = []
     for metric in args.metrics:
