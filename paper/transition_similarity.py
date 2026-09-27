@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
 
 import paper_config as cfg
@@ -27,7 +28,15 @@ ID_SEP = "|"
 
 LEVELS = ("full", "domain")
 
-# DIAMOND tabular fields, in the order requested on the command line.
+# DIAMOND tabular fields, in the order requested on the command line. Changing this list
+# invalidates every hit table already written, since they carry no header.
+#
+# ``nident`` and ``qlen`` are what make the headline statistic trustworthy: identity is reported
+# as nident/qlen, over the whole query, so a short high-identity stretch cannot inflate it.
+# ``qstart``/``qend`` are deliberately absent, which is the one thing this list cannot express:
+# without them, query coverage can only be approximated as length/qlen, and ``length`` counts gap
+# columns, so that ratio exceeds 100% for a gapped alignment (43% of hits in the first run). It is
+# an upper bound on the query span, never a lower one. Add both fields if exact span is ever needed.
 BLAST_FIELDS = [
     "qseqid", "sseqid", "pident", "length", "nident",
     "qlen", "slen", "evalue", "bitscore",
@@ -256,6 +265,53 @@ def write_fasta(
 # ======================================================================================
 # DIAMOND
 # ======================================================================================
+def split_fasta(path, n_parts: int, out_dir=None) -> List[Path]:
+    """Split a fasta into ``n_parts`` files of whole records, round-robin by record.
+
+    This is the lever for DIAMOND's peak memory. ``--block-size`` chunks the *database*, but the
+    hit buffer holds hits for every query against the current database block, so query count is
+    what drives it: the domain search needed 496 GB in one pass. Splitting the queries bounds that
+    directly, at the cost of re-reading the database once per part. Round-robin rather than
+    contiguous so each part draws on all families and the parts cost roughly the same.
+
+    Parts hold disjoint query sets, so concatenating their outputs keeps every query's hits
+    contiguous -- which is what :func:`density_profile` relies on.
+    """
+    path = Path(path)
+    out_dir = Path(out_dir) if out_dir else path.parent / f"{path.stem}_parts"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    parts = [out_dir / f"{path.stem}.part{i}.fasta" for i in range(n_parts)]
+    if all(p.exists() and p.stat().st_size for p in parts):
+        return parts
+    handles = [open(p.with_suffix(".partial"), "w") for p in parts]
+    try:
+        i = -1
+        for line in _open_text(path):
+            if line.startswith(">"):
+                i += 1
+            handles[i % n_parts].write(line)
+    finally:
+        for h in handles:
+            h.close()
+    for p in parts:
+        os.replace(p.with_suffix(".partial"), p)
+    return parts
+
+
+def concat_gzip(parts: Sequence[Path], out) -> Path:
+    """Concatenate gzip members into one file. A concatenation of gzip streams is itself a valid
+    gzip stream, so this needs no recompression and reads back normally."""
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(out.suffix + ".partial")
+    with open(tmp, "wb") as fout:
+        for p in parts:
+            with open(p, "rb") as fin:
+                shutil.copyfileobj(fin, fout, length=1 << 22)
+    os.replace(tmp, out)
+    return out
+
+
 def diamond_binary() -> str:
     """The DIAMOND executable: ``PEINT_PAPER_DIAMOND`` if set, else whatever is on PATH."""
     explicit = os.environ.get("PEINT_PAPER_DIAMOND")
@@ -399,3 +455,70 @@ def _open_text(path) -> Iterator[str]:
     with opener(path, "rt") as fh:
         for line in fh:
             yield line
+
+
+# Ranks profiled below. Chosen to separate "the nearest match is one lucky sequence" from "this
+# query sits inside a dense cluster of training data" -- the two look identical at rank 1.
+DENSITY_RANKS = (1, 2, 3, 5, 10, 25, 50, 100)
+# Identity thresholds for counting how many distinct training families are within reach.
+DENSITY_THRESHOLDS = (30.0, 50.0, 70.0, 90.0)
+
+
+def density_profile(
+    tsv_gz,
+    ranks: Sequence[int] = DENSITY_RANKS,
+    thresholds: Sequence[float] = DENSITY_THRESHOLDS,
+) -> pd.DataFrame:
+    """Per query: the identity of its Nth-closest training sequence, and of its Nth-closest
+    training *family*.
+
+    One row per query that had at least one hit. ``gident_rank{N}`` walks the raw hit list;
+    ``gident_fam{N}`` walks it after collapsing each training family to its own best hit. The
+    family version is the one that answers whether a neighbourhood is genuinely dense: a family
+    contributes ~1,000 near-duplicate sequences to the database, so the top of a raw hit list is
+    usually the same protein over and over, and raw rank alone would read that redundancy as
+    density.
+
+    Streams the file and holds one query's hits at a time, so a 40M-row table costs no more
+    memory than a 2M-row one. Relies only on all rows of a query being contiguous, which DIAMOND
+    guarantees; ordering within the query is redone here rather than assumed.
+    """
+    rows: List[dict] = []
+    cols = {name: i for i, name in enumerate(BLAST_FIELDS)}
+
+    def _flush(qid: str, hits: List[tuple]) -> None:
+        if not qid or not hits:
+            return
+        hits.sort(key=lambda r: -r[0])                     # bitscore, descending
+        idents = [r[1] for r in hits]
+        rec = {"qseqid": qid, "n_hits": len(hits)}
+        for n in ranks:
+            rec[f"gident_rank{n}"] = idents[n - 1] if len(idents) >= n else np.nan
+        best_by_fam: Dict[str, float] = {}
+        for _, gid, fam in hits:                           # hits are already sorted
+            if fam not in best_by_fam:
+                best_by_fam[fam] = gid
+        fam_idents = list(best_by_fam.values())
+        rec["n_families"] = len(fam_idents)
+        for n in ranks:
+            rec[f"gident_fam{n}"] = fam_idents[n - 1] if len(fam_idents) >= n else np.nan
+        for t in thresholds:
+            rec[f"n_fam_ge{int(t)}"] = sum(1 for g in fam_idents if g >= t)
+        rows.append(rec)
+
+    cur_q = ""
+    buf: List[tuple] = []
+    for line in _open_text(tsv_gz):
+        p = line.rstrip("\n").split("\t")
+        qid = p[cols["qseqid"]]
+        if qid != cur_q:
+            _flush(cur_q, buf)
+            cur_q, buf = qid, []
+        qlen = float(p[cols["qlen"]])
+        buf.append((
+            float(p[cols["bitscore"]]),
+            100.0 * float(p[cols["nident"]]) / qlen if qlen else np.nan,
+            p[cols["sseqid"]].split(ID_SEP, 1)[0],
+        ))
+    _flush(cur_q, buf)
+    return pd.DataFrame(rows)

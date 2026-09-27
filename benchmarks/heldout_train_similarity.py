@@ -18,6 +18,7 @@ partition; ``report`` is cheap and runs anywhere.
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -102,14 +103,32 @@ def stage_blastp(args) -> None:
         query = fasta_path("test", level)
         if not query.exists():
             raise FileNotFoundError(f"{query} missing -- run the `fasta` stage first.")
-        print(f"  blastp test x {level}")
-        ts.blastp(
-            db_path(level), query, out,
-            threads=args.threads, sensitivity=args.sensitivity,
-            max_target_seqs=args.max_target_seqs, evalue=args.evalue,
-            block=args.block, index_chunks=args.index_chunks,
-            tmpdir=str(work_dir() / "tmp"), hit_membuf=not args.no_hit_membuf,
-        )
+        n_parts = args.query_chunks_domain if level == "domain" else args.query_chunks_full
+        print(f"  blastp test x {level} ({n_parts} query chunk(s))")
+
+        parts = ([query] if n_parts <= 1
+                 else ts.split_fasta(query, n_parts, work_dir() / "fasta" / f"test_{level}_parts"))
+        hit_parts = []
+        for i, part in enumerate(parts):
+            hp = out.parent / f"{out.name.replace('.tsv.gz', '')}.part{i}.tsv.gz"
+            hit_parts.append(hp)
+            if hp.exists() and not args.force:
+                print(f"    part {i}: exists, skipping")
+                continue
+            print(f"    part {i+1}/{len(parts)}")
+            ts.blastp(
+                db_path(level), part, hp,
+                threads=args.threads, sensitivity=args.sensitivity,
+                max_target_seqs=args.max_target_seqs, evalue=args.evalue,
+                block=args.block, index_chunks=args.index_chunks,
+                tmpdir=str(work_dir() / "tmp"), hit_membuf=not args.no_hit_membuf,
+            )
+        if len(hit_parts) == 1:
+            os.replace(hit_parts[0], out)
+        else:
+            ts.concat_gzip(hit_parts, out)
+            for hp in hit_parts:
+                hp.unlink()
         print(f"    -> {out} ({out.stat().st_size / 1e6:.0f} MB)")
 
 
@@ -262,6 +281,53 @@ def plot(d: pd.DataFrame, fam: pd.DataFrame, out_dir: Path) -> None:
     print(f"  wrote {out_dir}/heldout_train_similarity.{{pdf,png}}")
 
 
+def report_density(out_dir: Path) -> None:
+    """Is the nearest training sequence an isolated match, or one of a crowd?
+
+    Rank 1 alone cannot tell those apart, and they mean opposite things: a query whose closest
+    training sequence is 50% identical and whose next-closest is 25% sits at the edge of the
+    training distribution, while one where the next twenty are all ~50% sits inside it. Reports
+    the identity profile down the ranked hit list, both raw and after collapsing each training
+    family to its best hit, plus how many distinct training families clear each identity level.
+    """
+    for level in ts.LEVELS:
+        tsv = hits_path(level)
+        if not tsv.exists():
+            continue
+        cache = work_dir() / f"density_{level}.csv.gz"
+        if cache.exists():
+            prof = pd.read_csv(cache)
+        else:
+            print(f"  profiling hit density for {level}")
+            prof = ts.density_profile(tsv)
+            prof.to_csv(cache, index=False)
+        if prof.empty:
+            continue
+        prof.to_csv(out_dir / f"heldout_train_similarity_density_{level}.csv.gz", index=False)
+
+        ranks = [n for n in ts.DENSITY_RANKS if f"gident_rank{n}" in prof.columns]
+        tbl = pd.DataFrame({
+            "rank": ranks,
+            "median_gident_raw": [round(prof[f"gident_rank{n}"].median(), 1) for n in ranks],
+            "n_queries_raw": [int(prof[f"gident_rank{n}"].notna().sum()) for n in ranks],
+            "median_gident_by_family": [round(prof[f"gident_fam{n}"].median(), 1) for n in ranks],
+            "n_queries_by_family": [int(prof[f"gident_fam{n}"].notna().sum()) for n in ranks],
+        })
+        tbl.to_csv(out_dir / f"heldout_train_similarity_density_{level}_summary.csv", index=False)
+        print(f"\n[{level}] identity of the Nth-closest training sequence / training family:")
+        print(tbl.to_string(index=False))
+
+        thr_cols = [c for c in prof.columns if c.startswith("n_fam_ge")]
+        if thr_cols:
+            print(f"[{level}] distinct training families within reach, per query (median / mean):")
+            for c in thr_cols:
+                print(f"    >={c.replace('n_fam_ge','')}% identity: "
+                      f"{prof[c].median():.0f} / {prof[c].mean():.1f}")
+        capped = 100 * (prof["n_hits"] >= prof["n_hits"].max()).mean()
+        print(f"[{level}] queries at the --max-target-seqs cap: {capped:.1f}% "
+              f"(a high value means the profile is truncated, not that the neighbourhood ends)")
+
+
 def stage_report(args) -> None:
     out_dir = Path(cfg.SIMILARITY_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -273,6 +339,7 @@ def stage_report(args) -> None:
     for level in sorted(fam["level"].unique()):
         sub = fam[fam["level"] == level]
         v = d[d["level"] == level]
+        hit = v.dropna(subset=["bitscore"])
         rows.append({
             "level": level,
             "n_families": len(sub),
@@ -283,9 +350,17 @@ def stage_report(args) -> None:
             "median_qcov": round(sub["median_qcov"].median(), 2),
             "q25_gident": round(sub["median_gident"].quantile(0.25), 2),
             "q75_gident": round(sub["median_gident"].quantile(0.75), 2),
+            # How much of the query the alignment actually spans. Without these, a reader cannot
+            # tell whether the identity above describes a whole protein or a short stretch of one
+            # -- the first question anyone asks of a percent-identity number.
+            # Denominator is queries WITH a hit: a no-hit query has no coverage to report, and
+            # folding it in as a zero would conflate "matched a short stretch" with "matched
+            # nothing", which the no_hit_pct column above already reports on its own.
+            "pct_hits_qcov_ge80": round(100 * (hit["qcov"] >= 80).mean(), 2),
+            "pct_hits_qcov_ge95": round(100 * (hit["qcov"] >= 95).mean(), 2),
             # Leakage check. The families are held out at the PDB level, so nothing here should
-            # have a near-identical twin in training; these two columns are what would show it
-            # if the split were leaky, and are worth reporting even when they come out at zero.
+            # have a near-identical twin in training; these columns are what would show it if the
+            # split leaked, and are worth reporting even when they come out at zero.
             "pct_ge95_identical": round(100 * (v["gident"] >= 95).mean(), 3),
             "pct_ge99_identical": round(100 * (v["gident"] >= 99).mean(), 3),
             "max_gident": round(v["gident"].max(), 2),
@@ -294,6 +369,8 @@ def stage_report(args) -> None:
     table.to_csv(out_dir / "heldout_train_similarity_summary.csv", index=False)
     print("\nClosest training match for held-out sequences (per-family medians):")
     print(table.to_string(index=False))
+
+    report_density(out_dir)
 
     # Name the families behind any near-identical match, so a leak is traceable rather than a
     # percentage. Written only when there is something to write.
@@ -357,7 +434,10 @@ def main() -> None:
     p.add_argument("--sensitivity", default="very-sensitive",
                    choices=("fast", "mid-sensitive", "sensitive", "more-sensitive",
                             "very-sensitive", "ultra-sensitive"))
-    p.add_argument("--max-target-seqs", type=int, default=6,
+    # Deep enough to see past a single training family's near-duplicates. At k=6, 96.7% of queries
+    # hit the cap and 46.1% drew all six hits from one training family, so the list could not
+    # distinguish an isolated nearest neighbour from a dense cluster of training data.
+    p.add_argument("--max-target-seqs", type=int, default=100,
                    help="Training matches kept per query, best first (DIAMOND -k).")
     p.add_argument("--evalue", type=float, default=1e-3)
     p.add_argument("--block", type=float, default=None, help="DIAMOND -b (block size, GB).")
@@ -365,6 +445,14 @@ def main() -> None:
     p.add_argument("--no-hit-membuf", action="store_true",
                    help="Spill DIAMOND's intermediate hits to --tmpdir instead of holding them "
                         "in RAM. Only if the node has less memory than the temp files need disk.")
+    # Peak memory scales with how many queries are in flight against a database block, so this is
+    # the lever that keeps --hit-membuf inside the node. The domain search needs a smaller chunk:
+    # its database is nearly twice the full-length one (24.7M vs 13.3M sequences) against twice the
+    # queries, and in a single pass it peaked at 496 GB on a 512 GB node.
+    p.add_argument("--query-chunks-full", type=int, default=2,
+                   help="Split the full-length query set into this many DIAMOND runs.")
+    p.add_argument("--query-chunks-domain", type=int, default=8,
+                   help="Split the domain query set into this many DIAMOND runs.")
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=stage_blastp)
 

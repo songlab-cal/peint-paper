@@ -3,7 +3,7 @@
 #SBATCH --partition=epurdom
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=320G
+#SBATCH --mem=460G
 #SBATCH --time=2-00:00:00
 #SBATCH --output=/scratch/users/akoehl/peint-paper/local_data/derived/heldout_similarity/slurm-%x-%j.out
 
@@ -38,7 +38,12 @@ $BENCH makedb --threads "$THREADS"
 # Block size stays at the DIAMOND default rather than the 6 the first attempt used. At -b6 -c1 that
 # run already peaked at 191 GB resident with the hits going to disk; the buffer has to fit beside
 # that, so a smaller reference block is what keeps the total inside the 320 G requested.
+#
+# Queries are split into chunks because peak memory tracks how many queries are in flight against
+# a database block, not the block size. Run whole, the domain search peaked at 496 GB on a 512 GB
+# node and died; the full-length one, with half the database and half the queries, fit.
 echo "=== blastp ==="
-$BENCH blastp --threads "$THREADS" --sensitivity very-sensitive --block 2 --index-chunks 1
+$BENCH blastp --threads "$THREADS" --sensitivity very-sensitive --block 2 --index-chunks 1 \
+  --query-chunks-full 2 --query-chunks-domain 8
 
 echo "=== done; now run: $BENCH report ==="
