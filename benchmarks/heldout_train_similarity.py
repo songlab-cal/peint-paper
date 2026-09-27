@@ -323,9 +323,14 @@ def report_density(out_dir: Path) -> None:
             for c in thr_cols:
                 print(f"    >={c.replace('n_fam_ge','')}% identity: "
                       f"{prof[c].median():.0f} / {prof[c].mean():.1f}")
-        capped = 100 * (prof["n_hits"] >= prof["n_hits"].max()).mean()
-        print(f"[{level}] queries at the --max-target-seqs cap: {capped:.1f}% "
-              f"(a high value means the profile is truncated, not that the neighbourhood ends)")
+        # Read against the deepest hit list actually seen, not an assumed k: if most queries sit
+        # at that depth the profile is truncated by --max-target-seqs, and the tail ranks say
+        # where the list was cut off rather than where the neighbourhood ends.
+        deepest = int(prof["n_hits"].max())
+        capped = 100 * (prof["n_hits"] >= deepest).mean()
+        print(f"[{level}] deepest hit list seen: {deepest}; queries at that depth: {capped:.1f}%"
+              + ("  <-- truncated by --max-target-seqs, tail ranks are a floor"
+                 if capped > 20 else ""))
 
 
 def stage_report(args) -> None:
