@@ -373,8 +373,15 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
     total = ref["family"].nunique()
     ticks = []
     for g in order:
-        n = ref.loc[ref["grade"] == g, "family"].nunique()
-        ticks.append(f"{g}\n{n} families ({100 * n / total:.0f}%)")
+        fams = set(ref.loc[ref["grade"] == g, "family"])
+        n = len(fams)
+        # Spell out what the bin means in identity terms. "0 hits" is jargon on its own, and the
+        # grades are not evenly spaced in similarity: the jump from 0 to 1-10 crosses most of the
+        # identity range, while 1-10 to >10 barely moves. Computed over the same families the
+        # boxes are drawn from, as the median of each family's own median closest-match identity.
+        pid = t.reindex([f for f in fams if f in t.index])["median_pident"].median()
+        ticks.append(f"{g}\n{n} families ({100 * n / total:.0f}%)\n"
+                     f"median {pid:.0f}% identity to training")
 
     colors = model_colors()
     rows = [("ll", "ESM-IF log-likelihood\n(self-consistency)"),
@@ -398,9 +405,11 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
         sns.despine(ax=ax)
 
     axes[-1].set_xticks(range(len(order)))
-    axes[-1].set_xticklabels(ticks, fontsize=9)
-    axes[-1].set_xlabel("Distinct training families reached by the typical held-out sequence",
-                        fontsize=9)
+    axes[-1].set_xticklabels(ticks, fontsize=8)
+    axes[-1].set_xlabel(
+        "Distinct training families reached by the typical held-out sequence\n"
+        "(DIAMOND blastp, very-sensitive, E < 1e-3; identity is per-family median of the "
+        "closest training match)", fontsize=8.5)
     handles = [plt.Rectangle((0, 0), 1, 1, fc=colors[m]) for m in ESMIF_MODELS]
     axes[0].legend(handles, ESMIF_MODELS, fontsize=8, frameon=False, ncol=len(ESMIF_MODELS),
                    loc="lower center", bbox_to_anchor=(0.5, 1.01))
