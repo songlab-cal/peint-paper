@@ -257,6 +257,68 @@ def run(metric: str, level: str, out_dir: Path) -> pd.DataFrame:
     return stats
 
 
+# Families grouped by how many DISTINCT training families their typical sequence reaches. Counting
+# distinct families rather than hits is deliberate: one training family contributes ~1,000
+# near-duplicates, so a raw hit count measures database redundancy, not how well connected a
+# held-out family is to training.
+HIT_BINS = [
+    ("0 hits", lambda v: v == 0),
+    ("1-2 hits", lambda v: v.between(1, 2)),
+    ("3-4 hits", lambda v: v.between(3, 4)),
+    ("5-10 hits", lambda v: v.between(5, 10)),
+    (">10 hits", lambda v: v > 10),
+]
+
+
+def report_by_hit_count(out_dir: Path, level: str = "full",
+                        metrics=("esmif_recovery", "esmif_sc_ll", "esmif_gt_ll",
+                                 "omegafold_plddt")) -> pd.DataFrame:
+    """Metric medians against how many training families a held-out family actually reaches.
+
+    A binary distant/close split cannot show whether a metric degrades smoothly with distance from
+    training or falls off a cliff at zero. It does the latter here: the 0-hit bin is far below the
+    rest, while 3-4, 5-10 and >10 are indistinguishable, so connectivity saturates almost
+    immediately. Reading Real down the same column is what separates "this region is hard for the
+    whole pLM and folding stack" from "this model fails here".
+    """
+    t = family_distance_table(level).set_index("family")
+    groups = [(name, set(t[rule(t["med_n_families"])].index)) for name, rule in HIT_BINS]
+
+    rows = []
+    for name, fams in groups:
+        sub = t.reindex([f for f in fams if f in t.index])
+        rows.append({"metric": "identity_to_train", "bin": name, "n_families": len(sub),
+                     "median_pident": round(sub["median_pident"].median(), 2),
+                     "mean_pident": round(sub["median_pident"].mean(), 2),
+                     "median_no_hit_pct": round(sub["no_hit_pct"].median(), 2)})
+    for metric in metrics:
+        spec = METRICS[metric]
+        try:
+            df = LOADERS[metric]()
+        except FileNotFoundError as exc:
+            print(f"  ({metric} skipped: {exc})")
+            continue
+        for name, fams in groups:
+            rec = {"metric": metric, "bin": name}
+            for model in spec["models"]:
+                g = df[(df["model"] == model) & (df["family"].isin(fams))]
+                if g.empty:
+                    continue
+                rec[f"{model}__median"] = round(g[spec["value"]].median(), 4)
+                rec[f"{model}__mean"] = round(g[spec["value"]].mean(), 4)
+                rec["n_families"] = g["family"].nunique()
+            rows.append(rec)
+    out = pd.DataFrame(rows)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out.to_csv(out_dir / f"seqdistance_by_hit_count_{level}.csv", index=False)
+    print(f"\nMetrics by number of distinct training families reached ({level}-length):")
+    for metric in out["metric"].unique():
+        d = out[out["metric"] == metric].dropna(axis=1, how="all")
+        print(f"\n[{metric}]")
+        print(d.drop(columns=["metric"]).to_string(index=False))
+    return out
+
+
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
     """CDFs of identity to the closest training sequence, Pfam-seen vs Pfam-novel.
 
@@ -377,6 +439,8 @@ def main() -> None:
     ap.add_argument("--level", choices=("full", "domain"), default="full")
     ap.add_argument("--metrics", nargs="*", default=list(METRICS))
     ap.add_argument("--cdf", action="store_true", help="Also draw the similarity-to-training CDFs.")
+    ap.add_argument("--hit-bins", action="store_true",
+                    help="Also tabulate metrics against the number of training families reached.")
     args = ap.parse_args()
 
     out_dir = Path(cfg.SIMILARITY_DIR)
@@ -389,6 +453,8 @@ def main() -> None:
     pfam_crosstab(t, out_dir, args.level)
     if args.cdf:
         plot_similarity_cdf(out_dir)
+    if args.hit_bins:
+        report_by_hit_count(out_dir, args.level)
 
     allstats = []
     for metric in args.metrics:
