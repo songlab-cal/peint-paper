@@ -191,6 +191,51 @@ def run(metric: str, level: str, out_dir: Path) -> pd.DataFrame:
     return stats
 
 
+def pfam_crosstab(t: pd.DataFrame, out_dir: Path, level: str) -> pd.DataFrame:
+    """Where the Pfam-label novelty split and the sequence-distance split agree, and where not.
+
+    They are not the same families, and the difference is not noise. Pfam calls a family novel when
+    its domain *accession* never appears in training, but Pfam splits one superfamily across many
+    accessions: 2a6c_1_B is novel on PF13744 (HTH_37) while training is full of HTH domains under
+    PF01381, PF13560 and PF13443 -- all clan CL0123 -- and some of its sequences are 100% identical
+    to training sequences. 58 of the 81 family-novel families share a clan with training.
+
+    So the label axis over-calls novelty for a sizeable minority, and this table is what shows it.
+    """
+    pf, pc = gen.partition("pfam_family"), gen.partition("pfam_clan")
+    lut = {f: "pfam_novel" for f in pf["novel"]}
+    lut.update({f: "pfam_seen" for f in pf["seen"]})
+    lut.update({f: "pfam_unlabeled" for f in pf["unlabeled"]})
+    t = t.copy()
+    t["pfam"] = t["family"].map(lut).fillna("not_partitioned")
+    t["pfam_clan_novel"] = t["family"].isin(pc["novel"])
+
+    rows = []
+    for label, mask in (
+        ("pfam family-novel, clan SEEN", t["family"].isin(pf["novel"] - pc["novel"])),
+        ("pfam family-novel AND clan-novel", t["family"].isin(pf["novel"] & pc["novel"])),
+        ("pfam seen", t["pfam"] == "pfam_seen"),
+        ("pfam unlabeled", t["pfam"] == "pfam_unlabeled"),
+    ):
+        sub = t[mask]
+        if sub.empty:
+            continue
+        rows.append({
+            "group": label, "n": len(sub),
+            "median_closest_pident": round(sub["median_pident"].median(), 1),
+            "mean_closest_pident": round(sub["median_pident"].mean(), 1),
+            "pct_families_zero_hits": round(100 * (sub["no_hit_pct"] >= 100).mean(), 1),
+            "pct_families_with_ge95_match": round(100 * (sub["max_pident"] >= 95).mean(), 1),
+            "median_n_train_families_ge30": round(sub["med_n_fam_ge30"].median(), 1),
+            **{f"pct_{k}": round(100 * (sub[k] == "novel").mean(), 1) for k in SCHEMES},
+        })
+    out = pd.DataFrame(rows)
+    out.to_csv(out_dir / f"seqdistance_vs_pfam_{level}.csv", index=False)
+    print("\nPfam-label novelty vs sequence distance:")
+    print(out.to_string(index=False))
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -205,6 +250,7 @@ def main() -> None:
         n = (t[name] == "novel").sum()
         print(f"  {name:<14} novel={n:>4}  seen={len(t) - n:>4}")
     t.to_csv(out_dir / f"seqdistance_strata_{args.level}.csv", index=False)
+    pfam_crosstab(t, out_dir, args.level)
 
     allstats = []
     for metric in args.metrics:
