@@ -281,6 +281,48 @@ def plot(d: pd.DataFrame, fam: pd.DataFrame, out_dir: Path) -> None:
     print(f"  wrote {out_dir}/heldout_train_similarity.{{pdf,png}}")
 
 
+def family_distance_table(level: str = "full", force: bool = False) -> pd.DataFrame:
+    """One row per held-out family: how far its sequences sit from the training set.
+
+    Built from every *submitted* query, not just the ones that matched, so a family whose
+    sequences found nothing in training survives as a row of zeros instead of vanishing -- that
+    family is the most distant case there is, and dropping it would remove exactly the evidence
+    the table exists to show. No-hit queries score 0% identity and 0 reachable families.
+    """
+    cache = work_dir() / f"family_distance_{level}.csv"
+    if cache.exists() and not force:
+        return pd.read_csv(cache)
+    prof_cache = work_dir() / f"density_{level}.csv.gz"
+    if not prof_cache.exists():
+        prof = ts.density_profile(hits_path(level))
+        prof.to_csv(prof_cache, index=False)
+    else:
+        prof = pd.read_csv(prof_cache)
+
+    ids = [ln[1:].strip() for ln in ts._open_text(fasta_path("test", level))
+           if ln.startswith(">")]
+    d = pd.DataFrame({"qseqid": ids}).merge(prof, on="qseqid", how="left")
+    d["family"] = d["qseqid"].str.split(ts.ID_SEP).str[0]
+    d["pident0"] = d["pident_rank1"].fillna(0.0)
+    for c in ("n_fam_ge30", "n_fam_ge50", "n_fam_ge70", "n_fam_ge90", "n_families"):
+        if c in d.columns:
+            d[c] = d[c].fillna(0)
+
+    g = d.groupby("family").agg(
+        n_queries=("qseqid", "size"),
+        no_hit_pct=("pident_rank1", lambda x: 100.0 * x.isna().mean()),
+        median_pident=("pident0", "median"),
+        mean_pident=("pident0", "mean"),
+        max_pident=("pident0", "max"),
+        med_n_fam_ge30=("n_fam_ge30", "median"),
+        med_n_fam_ge50=("n_fam_ge50", "median"),
+        med_n_families=("n_families", "median"),
+    ).reset_index()
+    g["level"] = level
+    g.to_csv(cache, index=False)
+    return g
+
+
 def report_density(out_dir: Path) -> None:
     """Is the nearest training sequence an isolated match, or one of a crowd?
 
