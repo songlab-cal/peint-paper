@@ -352,7 +352,7 @@ GRADINGS = {
              "median {:.0f}% identity to training", "median_pident"),
     "identity": (IDENTITY_GRADES, "median_pident",
                  "Identity to the closest training sequence (per-family median)",
-                 "median {:.0f} training families reached", "med_n_families"),
+                 None, None),
 }
 ESMIF_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
 
@@ -400,9 +400,11 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
         # grades are not evenly spaced in similarity: the jump from 0 to 1-10 crosses most of the
         # identity range, while 1-10 to >10 barely moves. Computed over the same families the
         # boxes are drawn from, as the median of each family's own median closest-match identity.
-        annot = t.reindex([f for f in fams if f in t.index])[annot_col].median()
-        ticks.append(f"{g}\n{n} families ({100 * n / total:.0f}%)\n"
-                     + annot_fmt.format(annot))
+        label = f"{g}\n{n} families ({100 * n / total:.0f}%)"
+        if annot_fmt:
+            annot = t.reindex([f for f in fams if f in t.index])[annot_col].median()
+            label += "\n" + annot_fmt.format(annot)
+        ticks.append(label)
 
     colors = model_colors()
     rows = [("ll", "ESM-IF log-likelihood\n(self-consistency)"),
@@ -426,10 +428,8 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
         sns.despine(ax=ax)
 
     axes[-1].set_xticks(range(len(order)))
-    axes[-1].set_xticklabels(ticks, fontsize=8)
-    axes[-1].set_xlabel(
-        axis_label + "\n(DIAMOND blastp, very-sensitive, E < 1e-3; identity is the per-family "
-        "median of the closest training match)", fontsize=8.5)
+    axes[-1].set_xticklabels(ticks, fontsize=9)
+    axes[-1].set_xlabel(axis_label, fontsize=9)
     handles = [plt.Rectangle((0, 0), 1, 1, fc=colors[m]) for m in ESMIF_MODELS]
     axes[0].legend(handles, ESMIF_MODELS, fontsize=8, frameon=False, ncol=len(ESMIF_MODELS),
                    loc="lower center", bbox_to_anchor=(0.5, 1.01))
