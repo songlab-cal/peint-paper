@@ -472,8 +472,11 @@ def density_profile(
     """Per query: the identity of its Nth-closest training sequence, and of its Nth-closest
     training *family*.
 
-    One row per query that had at least one hit. ``gident_rank{N}`` walks the raw hit list;
-    ``gident_fam{N}`` walks it after collapsing each training family to its own best hit. The
+    Identity is DIAMOND's ``pident``, over the aligned region. Read it next to ``qcov`` from
+    :func:`reduce_hits`, which says how much of the query that region covers.
+
+    One row per query that had at least one hit. ``pident_rank{N}`` walks the raw hit list;
+    ``pident_fam{N}`` walks it after collapsing each training family to its own best hit. The
     family version is the one that answers whether a neighbourhood is genuinely dense: a family
     contributes ~1,000 near-duplicate sequences to the database, so the top of a raw hit list is
     usually the same protein over and over, and raw rank alone would read that redundancy as
@@ -493,15 +496,15 @@ def density_profile(
         idents = [r[1] for r in hits]
         rec = {"qseqid": qid, "n_hits": len(hits)}
         for n in ranks:
-            rec[f"gident_rank{n}"] = idents[n - 1] if len(idents) >= n else np.nan
+            rec[f"pident_rank{n}"] = idents[n - 1] if len(idents) >= n else np.nan
         best_by_fam: Dict[str, float] = {}
-        for _, gid, fam in hits:                           # hits are already sorted
+        for _, pid, fam in hits:                           # hits are already sorted
             if fam not in best_by_fam:
-                best_by_fam[fam] = gid
+                best_by_fam[fam] = pid
         fam_idents = list(best_by_fam.values())
         rec["n_families"] = len(fam_idents)
         for n in ranks:
-            rec[f"gident_fam{n}"] = fam_idents[n - 1] if len(fam_idents) >= n else np.nan
+            rec[f"pident_fam{n}"] = fam_idents[n - 1] if len(fam_idents) >= n else np.nan
         for t in thresholds:
             rec[f"n_fam_ge{int(t)}"] = sum(1 for g in fam_idents if g >= t)
         rows.append(rec)
@@ -514,10 +517,9 @@ def density_profile(
         if qid != cur_q:
             _flush(cur_q, buf)
             cur_q, buf = qid, []
-        qlen = float(p[cols["qlen"]])
         buf.append((
             float(p[cols["bitscore"]]),
-            100.0 * float(p[cols["nident"]]) / qlen if qlen else np.nan,
+            float(p[cols["pident"]]),
             p[cols["sseqid"]].split(ID_SEP, 1)[0],
         ))
     _flush(cur_q, buf)

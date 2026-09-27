@@ -223,14 +223,14 @@ def plot(d: pd.DataFrame, fam: pd.DataFrame, out_dir: Path) -> None:
     # Left: ECDF over sequences, one labelled line per granularity.
     ax = axes[0]
     for level in levels:
-        x = np.sort(d.loc[d["level"] == level, "gident"].fillna(0.0).to_numpy())
+        x = np.sort(d.loc[d["level"] == level, "pident"].fillna(0.0).to_numpy())
         if x.size:
             ax.step(x, 100 * np.arange(1, x.size + 1) / x.size, where="post",
                     color=colors[level], lw=1.5,
                     label=f"{level}-length query (n={x.size:,})")
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
-    ax.set_xlabel("% identity to closest training sequence", fontsize=9)
+    ax.set_xlabel("% identity to closest training sequence (aligned region)", fontsize=9)
     ax.set_ylabel("Cumulative % of held-out sequences", fontsize=9)
     ax.legend(fontsize=7.5, frameon=False, loc="lower right")
     sns.despine(ax=ax)
@@ -246,7 +246,7 @@ def plot(d: pd.DataFrame, fam: pd.DataFrame, out_dir: Path) -> None:
                if key in d.columns else None)
         merged = sub.merge(nov.rename("novelty"), on="family", how="left")
         for s in ("seen", "novel"):
-            vals = merged.loc[merged["novelty"] == s, "median_gident"].dropna().to_numpy()
+            vals = merged.loc[merged["novelty"] == s, "median_pident"].dropna().to_numpy()
             if not vals.size:
                 continue
             positions.append(pos)
@@ -265,7 +265,7 @@ def plot(d: pd.DataFrame, fam: pd.DataFrame, out_dir: Path) -> None:
         ax.set_xticks(positions)
         ax.set_xticklabels(ticks, fontsize=7)
     ax.set_ylim(0, 100)
-    ax.set_ylabel("Per-family median % identity", fontsize=9)
+    ax.set_ylabel("Per-family median % identity (aligned region)", fontsize=9)
     handles = [plt.Rectangle((0, 0), 1, 1, fc=nov_colors[s]) for s in ("seen", "novel")]
     ax.legend(handles, ["Pfam seen in training", "Pfam novel"],
               fontsize=7.5, frameon=False, loc="lower left")
@@ -305,13 +305,18 @@ def report_density(out_dir: Path) -> None:
             continue
         prof.to_csv(out_dir / f"heldout_train_similarity_density_{level}.csv.gz", index=False)
 
-        ranks = [n for n in ts.DENSITY_RANKS if f"gident_rank{n}" in prof.columns]
+        # Ranks nobody reached are dropped: a row of NaN medians says nothing and makes the
+        # table look like the neighbourhood was measured out to a depth it never had.
+        ranks = [n for n in ts.DENSITY_RANKS
+                 if f"pident_rank{n}" in prof.columns and prof[f"pident_rank{n}"].notna().any()]
         tbl = pd.DataFrame({
             "rank": ranks,
-            "median_gident_raw": [round(prof[f"gident_rank{n}"].median(), 1) for n in ranks],
-            "n_queries_raw": [int(prof[f"gident_rank{n}"].notna().sum()) for n in ranks],
-            "median_gident_by_family": [round(prof[f"gident_fam{n}"].median(), 1) for n in ranks],
-            "n_queries_by_family": [int(prof[f"gident_fam{n}"].notna().sum()) for n in ranks],
+            "median_pident_raw": [round(prof[f"pident_rank{n}"].median(), 1) for n in ranks],
+            "n_queries_raw": [int(prof[f"pident_rank{n}"].notna().sum()) for n in ranks],
+            "median_pident_by_family": [
+                round(prof[f"pident_fam{n}"].median(), 1)
+                if prof[f"pident_fam{n}"].notna().any() else float("nan") for n in ranks],
+            "n_queries_by_family": [int(prof[f"pident_fam{n}"].notna().sum()) for n in ranks],
         })
         tbl.to_csv(out_dir / f"heldout_train_similarity_density_{level}_summary.csv", index=False)
         print(f"\n[{level}] identity of the Nth-closest training sequence / training family:")
@@ -351,10 +356,10 @@ def stage_report(args) -> None:
             "n_sequences": len(v),
             "no_hit_pct": round(100 * v["bitscore"].isna().mean(), 2),
             "median_pident": round(sub["median_pident"].median(), 2),
-            "median_gident": round(sub["median_gident"].median(), 2),
+            "q25_pident": round(sub["median_pident"].quantile(0.25), 2),
+            "q75_pident": round(sub["median_pident"].quantile(0.75), 2),
             "median_qcov": round(sub["median_qcov"].median(), 2),
-            "q25_gident": round(sub["median_gident"].quantile(0.25), 2),
-            "q75_gident": round(sub["median_gident"].quantile(0.75), 2),
+            "median_gident": round(sub["median_gident"].median(), 2),
             # How much of the query the alignment actually spans. Without these, a reader cannot
             # tell whether the identity above describes a whole protein or a short stretch of one
             # -- the first question anyone asks of a percent-identity number.
@@ -366,9 +371,9 @@ def stage_report(args) -> None:
             # Leakage check. The families are held out at the PDB level, so nothing here should
             # have a near-identical twin in training; these columns are what would show it if the
             # split leaked, and are worth reporting even when they come out at zero.
-            "pct_ge95_identical": round(100 * (v["gident"] >= 95).mean(), 3),
-            "pct_ge99_identical": round(100 * (v["gident"] >= 99).mean(), 3),
-            "max_gident": round(v["gident"].max(), 2),
+            "pct_ge95_identical": round(100 * (v["pident"] >= 95).mean(), 3),
+            "pct_ge99_identical": round(100 * (v["pident"] >= 99).mean(), 3),
+            "max_pident": round(v["pident"].max(), 2),
         })
     table = pd.DataFrame(rows)
     table.to_csv(out_dir / "heldout_train_similarity_summary.csv", index=False)
@@ -379,10 +384,10 @@ def stage_report(args) -> None:
 
     # Name the families behind any near-identical match, so a leak is traceable rather than a
     # percentage. Written only when there is something to write.
-    leaks = d[d["gident"] >= 95]
+    leaks = d[d["pident"] >= 95]
     if not leaks.empty:
-        cols = ["level", "qseqid", "sseqid", "pident", "gident", "qcov", "qlen", "family"]
-        leaks[cols].sort_values("gident", ascending=False).to_csv(
+        cols = ["level", "qseqid", "sseqid", "pident", "qcov", "gident", "qlen", "family"]
+        leaks[cols].sort_values("pident", ascending=False).to_csv(
             out_dir / "heldout_train_similarity_near_identical.csv", index=False)
         print(f"\n{len(leaks)} held-out queries are >=95% identical to a training sequence, "
               f"across {leaks['family'].nunique()} families -- see "
@@ -394,8 +399,8 @@ def stage_report(args) -> None:
         key = "domain_novelty" if level == "domain" else "family_novelty"
         nov = d[d["level"] == level].groupby("family")[key].first().rename("novelty")
         merged = fam[fam["level"] == level].merge(nov, on="family", how="left")
-        a = merged.loc[merged["novelty"] == "novel", "median_gident"].dropna()
-        b = merged.loc[merged["novelty"] == "seen", "median_gident"].dropna()
+        a = merged.loc[merged["novelty"] == "novel", "median_pident"].dropna()
+        b = merged.loc[merged["novelty"] == "seen", "median_pident"].dropna()
         if len(a) and len(b):
             stats.append({"level": level, **gen.mann_whitney(a, b)})
     if stats:
