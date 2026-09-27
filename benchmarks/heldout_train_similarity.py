@@ -108,7 +108,7 @@ def stage_blastp(args) -> None:
             threads=args.threads, sensitivity=args.sensitivity,
             max_target_seqs=args.max_target_seqs, evalue=args.evalue,
             block=args.block, index_chunks=args.index_chunks,
-            tmpdir=str(work_dir() / "tmp"),
+            tmpdir=str(work_dir() / "tmp"), hit_membuf=not args.no_hit_membuf,
         )
         print(f"    -> {out} ({out.stat().st_size / 1e6:.0f} MB)")
 
@@ -283,11 +283,28 @@ def stage_report(args) -> None:
             "median_qcov": round(sub["median_qcov"].median(), 2),
             "q25_gident": round(sub["median_gident"].quantile(0.25), 2),
             "q75_gident": round(sub["median_gident"].quantile(0.75), 2),
+            # Leakage check. The families are held out at the PDB level, so nothing here should
+            # have a near-identical twin in training; these two columns are what would show it
+            # if the split were leaky, and are worth reporting even when they come out at zero.
+            "pct_ge95_identical": round(100 * (v["gident"] >= 95).mean(), 3),
+            "pct_ge99_identical": round(100 * (v["gident"] >= 99).mean(), 3),
+            "max_gident": round(v["gident"].max(), 2),
         })
     table = pd.DataFrame(rows)
     table.to_csv(out_dir / "heldout_train_similarity_summary.csv", index=False)
     print("\nClosest training match for held-out sequences (per-family medians):")
     print(table.to_string(index=False))
+
+    # Name the families behind any near-identical match, so a leak is traceable rather than a
+    # percentage. Written only when there is something to write.
+    leaks = d[d["gident"] >= 95]
+    if not leaks.empty:
+        cols = ["level", "qseqid", "sseqid", "pident", "gident", "qcov", "qlen", "family"]
+        leaks[cols].sort_values("gident", ascending=False).to_csv(
+            out_dir / "heldout_train_similarity_near_identical.csv", index=False)
+        print(f"\n{len(leaks)} held-out queries are >=95% identical to a training sequence, "
+              f"across {leaks['family'].nunique()} families -- see "
+              f"heldout_train_similarity_near_identical.csv")
 
     # Novel vs seen, at both granularities.
     stats = []
@@ -340,10 +357,14 @@ def main() -> None:
     p.add_argument("--sensitivity", default="very-sensitive",
                    choices=("fast", "mid-sensitive", "sensitive", "more-sensitive",
                             "very-sensitive", "ultra-sensitive"))
-    p.add_argument("--max-target-seqs", type=int, default=5)
+    p.add_argument("--max-target-seqs", type=int, default=6,
+                   help="Training matches kept per query, best first (DIAMOND -k).")
     p.add_argument("--evalue", type=float, default=1e-3)
     p.add_argument("--block", type=float, default=None, help="DIAMOND -b (block size, GB).")
     p.add_argument("--index-chunks", type=int, default=None, help="DIAMOND -c.")
+    p.add_argument("--no-hit-membuf", action="store_true",
+                   help="Spill DIAMOND's intermediate hits to --tmpdir instead of holding them "
+                        "in RAM. Only if the node has less memory than the temp files need disk.")
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=stage_blastp)
 

@@ -30,9 +30,15 @@ $BENCH fasta --workers 32
 echo "=== makedb ==="
 $BENCH makedb --threads "$THREADS"
 
-# -b6 -c1 trades memory for speed: roughly 36 GB resident against the 320 G requested, and a
-# single index chunk means one pass over the database per query block.
+# --hit-membuf holds DIAMOND's intermediate seed hits in RAM. They are the dominant cost here and
+# have nothing to do with the output size: a first attempt spilled 158 GB of them to scratch and
+# died on the 500 G quota, against a 3 GB database and a final table of a few hundred MB. RAM is
+# the resource we actually have, so we spend that instead.
+#
+# Block size stays at the DIAMOND default rather than the 6 the first attempt used. At -b6 -c1 that
+# run already peaked at 191 GB resident with the hits going to disk; the buffer has to fit beside
+# that, so a smaller reference block is what keeps the total inside the 320 G requested.
 echo "=== blastp ==="
-$BENCH blastp --threads "$THREADS" --sensitivity very-sensitive --block 6 --index-chunks 1
+$BENCH blastp --threads "$THREADS" --sensitivity very-sensitive --block 2 --index-chunks 1
 
 echo "=== done; now run: $BENCH report ==="

@@ -295,17 +295,21 @@ def blastp(
     *,
     threads: int = 8,
     sensitivity: str = "very-sensitive",
-    max_target_seqs: int = 25,
+    max_target_seqs: int = 6,
     evalue: float = 1e-3,
     block: Optional[float] = None,
     index_chunks: Optional[int] = None,
     tmpdir: Optional[str] = None,
+    hit_membuf: bool = True,
 ) -> Path:
     """Search ``query`` against ``db``, writing gzipped tabular output to ``out``.
 
-    ``max_target_seqs`` is deliberately >1. The top hits of an in-family query are all from its
-    own family, so keeping a few lets the same search also report the best *cross-family* hit,
-    which is the estimate of what that query would have scored had its family been held out.
+    ``hit_membuf`` keeps DIAMOND's intermediate seed hits in RAM instead of spilling them to
+    ``tmpdir``. Those intermediates dwarf both the database and the output -- a ``--very-sensitive``
+    pass over this database wrote 158 GB of them, against a 3 GB database and a final table of a
+    few hundred MB, because sensitive mode sweeps 16 seed shapes and every seed hit is staged
+    before ranking. Holding them in memory is the right trade here: the node has far more RAM
+    than the scratch quota has free space.
     """
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -322,6 +326,8 @@ def blastp(
         f"--{sensitivity}",
         "--compress", "1",           # DIAMOND appends .gz to -o itself
     ]
+    if hit_membuf:
+        cmd += ["--hit-membuf"]
     if block is not None:
         cmd += ["-b", block]
     if index_chunks is not None:
