@@ -15,6 +15,7 @@ import pandas as pd
 
 import paper_config as cfg
 from paper import generalization as gen
+from paper import transition_similarity as ts
 from benchmarks.heldout_train_similarity import family_distance_table
 
 # Three readings of "far from training", because they are not the same families and a claim that
@@ -59,6 +60,32 @@ METRICS = {
         "higher_is_better": False,
         "baseline": "Real (other split)",
     },
+    # ESM-IF, both readouts. Approach 2 (self-consistency, each sequence on its OWN OmegaFold
+    # structure) is template-free and is the one to lead with. Approach 1 threads onto the fixed GT
+    # structure, and its likelihood tracks identity-to-seq1, so on these families it reports Real
+    # *improving* simply because Real's leaves sit closer to seq1 there -- read it with the
+    # esmif_a1_identity column, not on its own.
+    "esmif_recovery": {
+        "value": "recovery",
+        "label": "ESM-IF sequence recovery (self-consistency)",
+        "models": ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"],
+        "higher_is_better": True,
+        "baseline": "Real",
+    },
+    "esmif_sc_ll": {
+        "value": "ll",
+        "label": "ESM-IF log-likelihood (self-consistency)",
+        "models": ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"],
+        "higher_is_better": True,
+        "baseline": "Real",
+    },
+    "esmif_gt_ll": {
+        "value": "ll",
+        "label": "ESM-IF log-likelihood (threaded on GT structure)",
+        "models": ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"],
+        "higher_is_better": True,
+        "baseline": "Real",
+    },
     "af2rank_plddt": {
         "value": "plddt",
         "label": "AF2Rank pLDDT",
@@ -96,6 +123,22 @@ def load_family_jsd_esmc() -> pd.DataFrame:
             .melt(id_vars="family", var_name="model", value_name="jsd").dropna(subset=["jsd"]))
 
 
+def _load_esmif(name: str) -> pd.DataFrame:
+    for d in (Path(cfg.FIGURE_DATA_DIR) / "esmif", Path(cfg.FIGURES_DIR) / "esmif"):
+        p = d / name
+        if p.exists():
+            return pd.read_csv(p)
+    raise FileNotFoundError(f"{name} not found -- run benchmarks.esmif_validation first")
+
+
+def load_esmif_selfconsistency() -> pd.DataFrame:
+    return _load_esmif("esmif_selfconsistency.csv")
+
+
+def load_esmif_gt() -> pd.DataFrame:
+    return _load_esmif("esmif_gt_likelihood.csv")
+
+
 def load_af2rank() -> pd.DataFrame:
     p = Path(cfg.RESULTS_R1_DIR) / "af2rank_comparisons.csv"
     if not p.exists():
@@ -108,7 +151,9 @@ def load_af2rank() -> pd.DataFrame:
 
 
 LOADERS = {"omegafold_plddt": load_omegafold, "family_jsd": load_family_jsd,
-           "family_jsd_esmc": load_family_jsd_esmc, "af2rank_plddt": load_af2rank}
+           "family_jsd_esmc": load_family_jsd_esmc, "af2rank_plddt": load_af2rank,
+           "esmif_recovery": load_esmif_selfconsistency,
+           "esmif_sc_ll": load_esmif_selfconsistency, "esmif_gt_ll": load_esmif_gt}
 
 
 def strata(level: str) -> pd.DataFrame:
@@ -212,6 +257,79 @@ def run(metric: str, level: str, out_dir: Path) -> pd.DataFrame:
     return stats
 
 
+def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
+    """CDFs of identity to the closest training sequence, split by Pfam novelty.
+
+    The CDF is what a median hides. Two family groups can share a median of 0% and still differ
+    completely in their upper tail, which is exactly the case here: the Pfam-novel families that
+    carry a near-identical training sequence and those that do not both sit at 0% median.
+
+    Left panel counts sequences, right panel counts families by their median, because the two
+    answer different questions -- how much of the evaluation data has a close relative in
+    training, and how many families are close as a whole.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+    from benchmarks.heldout_train_similarity import fasta_path, work_dir
+
+    _set_publication_style()
+    pf, pc = gen.partition("pfam_family"), gen.partition("pfam_clan")
+    fig, axes = plt.subplots(len(levels), 2, figsize=(9.2, 3.5 * len(levels)), squeeze=False)
+
+    for i, level in enumerate(levels):
+        t = family_distance_table(level).set_index("family")
+        tn = t.reindex([f for f in sorted(pf["novel"]) if f in t.index])
+        groups = {
+            "Pfam seen": (set(pf["seen"]), "#4878cf"),
+            "Pfam unlabeled": (set(pf["unlabeled"]), "#9e9e9e"),
+            "Pfam novel, has a >=95% match": (set(tn[tn.max_pident >= 95].index), "#f0a35e"),
+            "Pfam novel, no >=95% match": (set(tn[tn.max_pident < 95].index), "#c44e52"),
+            "Pfam novel AND clan novel": (set(pf["novel"] & pc["novel"]), "#6a3d9a"),
+        }
+        prof = pd.read_csv(work_dir() / f"density_{level}.csv.gz", usecols=["qseqid", "pident_rank1"])
+        ids = [ln[1:].strip() for ln in ts._open_text(fasta_path("test", level)) if ln.startswith(">")]
+        # Reindex onto every submitted query: a sequence with no training hit belongs at 0%, and
+        # dropping it would quietly lift every curve by the no-hit rate of its group.
+        d = pd.DataFrame({"qseqid": ids}).merge(prof, on="qseqid", how="left")
+        d["family"] = d["qseqid"].str.split(ts.ID_SEP).str[0]
+        d["pident"] = d["pident_rank1"].fillna(0.0)
+
+        for ax, (unit, getter) in zip(axes[i], [
+            ("sequences", lambda fams: d.loc[d["family"].isin(fams), "pident"].to_numpy()),
+            ("families (per-family median)",
+             lambda fams: t.reindex([f for f in fams if f in t.index])["median_pident"].dropna().to_numpy()),
+        ]):
+            for label, (fams, color) in groups.items():
+                x = np.sort(getter(fams))
+                if not x.size:
+                    continue
+                ax.step(np.concatenate([[0], x]),
+                        np.concatenate([[0], 100 * np.arange(1, x.size + 1) / x.size]),
+                        where="post", lw=1.5, color=color, label=f"{label} (n={x.size:,})")
+            ax.set_xlim(0, 100)
+            ax.set_ylim(0, 100)
+            ax.axvline(95, color="0.5", ls=":", lw=0.8)
+            ax.set_xlabel("% identity to closest training sequence", fontsize=9)
+            ax.set_ylabel(f"Cumulative % of {unit}", fontsize=9)
+            ax.set_title(f"{level}-length queries, by {unit.split(' ')[0]}", fontsize=9)
+            # Opaque frame, not frameon=False: the novel-group curves jump to ~95% at x=0 and run
+            # straight through the upper-left corner, so an unframed legend is read over the top of
+            # them and its swatches take on the colour of whatever line is behind them.
+            ax.legend(fontsize=6.4, loc="lower right", frameon=True, framealpha=0.92,
+                      edgecolor="0.8", borderpad=0.4)
+            sns.despine(ax=ax)
+
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out_dir / f"similarity_to_train_cdf.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  wrote {out_dir}/similarity_to_train_cdf.{{pdf,png}}")
+
+
 def pfam_crosstab(t: pd.DataFrame, out_dir: Path, level: str) -> pd.DataFrame:
     """Where the Pfam-label novelty split and the sequence-distance split agree, and where not.
 
@@ -262,6 +380,7 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--level", choices=("full", "domain"), default="full")
     ap.add_argument("--metrics", nargs="*", default=list(METRICS))
+    ap.add_argument("--cdf", action="store_true", help="Also draw the similarity-to-training CDFs.")
     args = ap.parse_args()
 
     out_dir = Path(cfg.SIMILARITY_DIR)
@@ -272,6 +391,8 @@ def main() -> None:
         print(f"  {name:<14} novel={n:>4}  seen={len(t) - n:>4}")
     t.to_csv(out_dir / f"seqdistance_strata_{args.level}.csv", index=False)
     pfam_crosstab(t, out_dir, args.level)
+    if args.cdf:
+        plot_similarity_cdf(out_dir)
 
     allstats = []
     for metric in args.metrics:
