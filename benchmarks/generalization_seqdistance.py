@@ -49,6 +49,16 @@ METRICS = {
         "higher_is_better": False,
         "baseline": "Real (other split)",
     },
+    # ESM-C was simulated into its own mafft frame, with its own Real reference, so its JSD is a
+    # separate arm rather than another column beside PEINT (ESM2). Comparing it against the rev1
+    # Real would mix frames; each arm is read against the Real of the frame it was computed in.
+    "family_jsd_esmc": {
+        "value": "jsd",
+        "label": "Mean JSD vs. real (ESM-C frame)",
+        "models": ["PEINT (ESM-C)", "Real (other split)"],
+        "higher_is_better": False,
+        "baseline": "Real (other split)",
+    },
     "af2rank_plddt": {
         "value": "plddt",
         "label": "AF2Rank pLDDT",
@@ -75,6 +85,17 @@ def load_family_jsd() -> pd.DataFrame:
             .melt(id_vars="family", var_name="model", value_name="jsd").dropna(subset=["jsd"]))
 
 
+def load_family_jsd_esmc() -> pd.DataFrame:
+    """Family JSD in the ESM-C frame. Produced by collect_family_jsd_fast over the rev2 mafft
+    dirs; cached because recomputing it needs paper.jsd, which imports a `peint` package that the
+    installed checkout provides under the name `protevo`."""
+    p = Path(cfg.GENERALIZATION_DIR) / "family_jsd_heldout_esmc.csv"
+    if not p.exists():
+        raise FileNotFoundError(f"{p} -- see the module docstring for how it is produced")
+    return (pd.read_csv(p, index_col=0).reset_index(names="family")
+            .melt(id_vars="family", var_name="model", value_name="jsd").dropna(subset=["jsd"]))
+
+
 def load_af2rank() -> pd.DataFrame:
     p = Path(cfg.RESULTS_R1_DIR) / "af2rank_comparisons.csv"
     if not p.exists():
@@ -87,7 +108,7 @@ def load_af2rank() -> pd.DataFrame:
 
 
 LOADERS = {"omegafold_plddt": load_omegafold, "family_jsd": load_family_jsd,
-           "af2rank_plddt": load_af2rank}
+           "family_jsd_esmc": load_family_jsd_esmc, "af2rank_plddt": load_af2rank}
 
 
 def strata(level: str) -> pd.DataFrame:
