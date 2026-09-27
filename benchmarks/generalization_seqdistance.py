@@ -258,11 +258,11 @@ def run(metric: str, level: str, out_dir: Path) -> pd.DataFrame:
 
 
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
-    """CDFs of identity to the closest training sequence, split by Pfam novelty.
+    """CDFs of identity to the closest training sequence, Pfam-seen vs Pfam-novel.
 
-    The CDF is what a median hides. Two family groups can share a median of 0% and still differ
-    completely in their upper tail, which is exactly the case here: the Pfam-novel families that
-    carry a near-identical training sequence and those that do not both sit at 0% median.
+    The CDF is what a median hides: the Pfam-novel curve sits at 0% for most of its mass, but its
+    upper tail reaches all the way to 100%, so the same set contains families with no training
+    homolog at all and families with a near-identical one.
 
     Left panel counts sequences, right panel counts families by their median, because the two
     answer different questions -- how much of the evaluation data has a close relative in
@@ -276,18 +276,14 @@ def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
     from benchmarks.heldout_train_similarity import fasta_path, work_dir
 
     _set_publication_style()
-    pf, pc = gen.partition("pfam_family"), gen.partition("pfam_clan")
+    pf = gen.partition("pfam_family")
     fig, axes = plt.subplots(len(levels), 2, figsize=(9.2, 3.5 * len(levels)), squeeze=False)
 
     for i, level in enumerate(levels):
         t = family_distance_table(level).set_index("family")
-        tn = t.reindex([f for f in sorted(pf["novel"]) if f in t.index])
         groups = {
             "Pfam seen": (set(pf["seen"]), "#4878cf"),
-            "Pfam unlabeled": (set(pf["unlabeled"]), "#9e9e9e"),
-            "Pfam novel, has a >=95% match": (set(tn[tn.max_pident >= 95].index), "#f0a35e"),
-            "Pfam novel, no >=95% match": (set(tn[tn.max_pident < 95].index), "#c44e52"),
-            "Pfam novel AND clan novel": (set(pf["novel"] & pc["novel"]), "#6a3d9a"),
+            "Pfam novel": (set(pf["novel"]), "#c44e52"),
         }
         prof = pd.read_csv(work_dir() / f"density_{level}.csv.gz", usecols=["qseqid", "pident_rank1"])
         ids = [ln[1:].strip() for ln in ts._open_text(fasta_path("test", level)) if ln.startswith(">")]
@@ -318,7 +314,7 @@ def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
             # Opaque frame, not frameon=False: the novel-group curves jump to ~95% at x=0 and run
             # straight through the upper-left corner, so an unframed legend is read over the top of
             # them and its swatches take on the colour of whatever line is behind them.
-            ax.legend(fontsize=6.4, loc="lower right", frameon=True, framealpha=0.92,
+            ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.92,
                       edgecolor="0.8", borderpad=0.4)
             sns.despine(ax=ax)
 
