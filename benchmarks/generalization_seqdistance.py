@@ -327,6 +327,91 @@ def report_by_hit_count(out_dir: Path, level: str = "full",
     return out
 
 
+# Coarser than HIT_BINS: three grades of connectivity to training, for the ESM-IF panel. The fine
+# bins showed 3-4, 5-10 and >10 to be indistinguishable, so collapsing them loses nothing and the
+# three groups that remain are the ones that actually differ.
+ESMIF_GRADES = [
+    ("0 hits", lambda v: v == 0),
+    ("1-10 hits", lambda v: v.between(1, 10)),
+    (">10 hits", lambda v: v > 10),
+]
+ESMIF_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
+
+
+def plot_esmif_by_hit_count(out_dir: Path, level: str = "full") -> None:
+    """ESM-IF self-consistency against connectivity to training, graded in three steps.
+
+    Both rows are template-free: each sequence is scored on its own OmegaFold structure, so
+    nothing here is conditioned on the experimental structure. Real is plotted beside the models
+    on purpose -- it is natural sequence, so wherever Real falls too, the drop belongs to that
+    region of sequence/structure space rather than to any model.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+    from paper.model_style import model_colors
+
+    _set_publication_style()
+    t = family_distance_table(level).set_index("family")
+    grade = {}
+    for name, rule in ESMIF_GRADES:
+        for f in t[rule(t["med_n_families"])].index:
+            grade[f] = name
+
+    df = load_esmif_selfconsistency()
+    df = df[df["model"].isin(ESMIF_MODELS)].copy()
+    df["grade"] = df["family"].map(grade)
+    df = df.dropna(subset=["grade"])
+    df["model"] = pd.Categorical(df["model"], categories=ESMIF_MODELS, ordered=True)
+
+    order = [g for g, _ in ESMIF_GRADES]
+    # Family counts come from one model's rows, not from len(df): every model contributes a row
+    # per family, so counting the frame would report four times the families there are.
+    ref = df[df["model"] == "Real"]
+    total = ref["family"].nunique()
+    ticks = []
+    for g in order:
+        n = ref.loc[ref["grade"] == g, "family"].nunique()
+        ticks.append(f"{g}\n{n} families ({100 * n / total:.0f}%)")
+
+    colors = model_colors()
+    rows = [("ll", "ESM-IF log-likelihood\n(self-consistency)"),
+            ("recovery", "ESM-IF sequence recovery\n(self-consistency)")]
+    fig, axes = plt.subplots(len(rows), 1, figsize=(9.5, 7.2), sharex=True)
+
+    for ax, (value, ylabel) in zip(axes, rows):
+        sns.boxplot(data=df, x="grade", y=value, hue="model", order=order,
+                    hue_order=ESMIF_MODELS, palette={m: colors[m] for m in ESMIF_MODELS},
+                    showfliers=False, width=0.74, linewidth=0.5, ax=ax)
+        # Each model's median in the BEST-connected grade, carried across as a dotted reference.
+        # The panel is about how far each arm falls as connectivity drops, and the arms sit at
+        # very different absolute levels, so a per-model reference is the only way to compare
+        # those falls by eye.
+        for m in ESMIF_MODELS:
+            v = df[(df["model"] == m) & (df["grade"] == ">10 hits")][value].median()
+            ax.axhline(v, color=colors[m], lw=0.6, ls=":", alpha=0.7, zorder=0)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_xlabel("")
+        ax.legend_.remove() if ax.legend_ else None
+        sns.despine(ax=ax)
+
+    axes[-1].set_xticks(range(len(order)))
+    axes[-1].set_xticklabels(ticks, fontsize=9)
+    axes[-1].set_xlabel("Distinct training families reached by the typical held-out sequence",
+                        fontsize=9)
+    handles = [plt.Rectangle((0, 0), 1, 1, fc=colors[m]) for m in ESMIF_MODELS]
+    axes[0].legend(handles, ESMIF_MODELS, fontsize=8, frameon=False, ncol=len(ESMIF_MODELS),
+                   loc="lower center", bbox_to_anchor=(0.5, 1.01))
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out_dir / f"esmif_by_hit_count_{level}.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  wrote {out_dir}/esmif_by_hit_count_{level}.{{pdf,png}}")
+
+
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
     """CDFs of identity to the closest training sequence, Pfam-seen vs Pfam-novel.
 
@@ -463,6 +548,7 @@ def main() -> None:
         plot_similarity_cdf(out_dir)
     if args.hit_bins:
         report_by_hit_count(out_dir, args.level)
+        plot_esmif_by_hit_count(out_dir, args.level)
 
     allstats = []
     for metric in args.metrics:
