@@ -309,13 +309,21 @@ def report_by_hit_count(out_dir: Path, level: str = "full",
                 rec["n_families"] = g["family"].nunique()
             rows.append(rec)
     out = pd.DataFrame(rows)
+    # Share of families each bin holds, per metric: the bins are very unequal (the 0-hit bin is
+    # 18% of families, the >10 bin 8%), so a row read without it looks like four equal groups.
+    # Computed within each metric because the metric tables do not all cover the same families.
+    out["pct_families"] = (
+        100 * out["n_families"] / out.groupby("metric")["n_families"].transform("sum")
+    ).round(1)
     out_dir.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_dir / f"seqdistance_by_hit_count_{level}.csv", index=False)
     print(f"\nMetrics by number of distinct training families reached ({level}-length):")
     for metric in out["metric"].unique():
-        d = out[out["metric"] == metric].dropna(axis=1, how="all")
+        d = out[out["metric"] == metric].dropna(axis=1, how="all").copy()
+        d["bin"] = [f"{b} ({int(n)}, {p:.1f}%)"
+                    for b, n, p in zip(d["bin"], d["n_families"], d["pct_families"])]
         print(f"\n[{metric}]")
-        print(d.drop(columns=["metric"]).to_string(index=False))
+        print(d.drop(columns=["metric", "n_families", "pct_families"]).to_string(index=False))
     return out
 
 
