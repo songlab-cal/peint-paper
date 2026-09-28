@@ -443,14 +443,16 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
 
 def plot_identity_vs_close_count(out_dir: Path, level: str = "full",
                                  threshold: float = 75.0) -> None:
-    """Per family: median identity to training against how many of its sequences clear a
-    high-identity threshold.
+    """Per family: median identity to training against the share of its sequences clearing a
+    high-identity threshold, one panel per Pfam novelty group.
 
     Tests whether a family's near-training sequences are a small fixed clique or most of the
-    family. Both panels are needed because family size is not constant -- it runs from 40 to
-    1,340 sequences -- so a raw count of 10 means something very different in a 40-sequence
-    family than in a 1,200-sequence one, and the count panel alone would invite exactly that
-    misreading.
+    family. Plotted as a share rather than a count because family size runs from 40 to 1,340
+    sequences, so the same count means very different things across the set.
+
+    Faceting by novelty rather than colouring by it is what makes the groups comparable: on
+    shared axes the three panels differ mostly in how much of the low-left corner they occupy,
+    which a single crowded panel hides.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -474,31 +476,24 @@ def plot_identity_vs_close_count(out_dir: Path, level: str = "full",
     pf = gen.partition("pfam_family")
     g["novelty"] = np.where(g["family"].isin(pf["novel"]), "Pfam novel",
                             np.where(g["family"].isin(pf["seen"]), "Pfam seen", "Pfam unlabeled"))
-    # Validated pair (CVD dE 19.3, normal-vision 25.5 against the light surface).
-    colors = {"Pfam seen": "#4878cf", "Pfam novel": "#c44e52", "Pfam unlabeled": "#b0b0b0"}
-    order = ["Pfam unlabeled", "Pfam seen", "Pfam novel"]
+    # Validated against the light surface (CVD dE 19.3 protan, normal-vision 25.5). Each panel
+    # holds one group, so the title carries identity and no legend is needed.
+    panels = [("Pfam seen", "#4878cf"), ("Pfam unlabeled", "#8c8c8c"), ("Pfam novel", "#c44e52")]
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2))
-    panels = [("n_close", f"Sequences >{threshold:.0f}% identical to training", None),
-              ("pct_close", f"% of the family's sequences >{threshold:.0f}% identical", (0, 100))]
-    for ax, (col, ylabel, ylim) in zip(axes, panels):
-        for lab in order:
-            v = g[g["novelty"] == lab]
-            if v.empty:
-                continue
-            ax.scatter(v["median_pident"], v[col], s=13, alpha=0.65,
-                       color=colors[lab], linewidths=0.3, edgecolors="white",
-                       label=f"{lab} (n={len(v)})", zorder=3 if lab != "Pfam unlabeled" else 2)
-        ax.set_xlabel("Median % identity to closest training sequence", fontsize=9)
-        ax.set_ylabel(ylabel, fontsize=9)
-        ax.set_xlim(-2, 102)
-        if ylim:
-            ax.set_ylim(*ylim)
+    fig, axes = plt.subplots(1, 3, figsize=(10.2, 3.6), sharex=True, sharey=True)
+    for ax, (lab, color) in zip(axes, panels):
+        v = g[g["novelty"] == lab]
+        ax.scatter(v["median_pident"], v["pct_close"], s=15, alpha=0.7, color=color,
+                   linewidths=0.3, edgecolors="white", zorder=3)
+        ax.set_title(f"{lab}  (n={len(v)}, median {v['pct_close'].median():.0f}%)", fontsize=9)
+        ax.set_xlabel("Median % identity to training", fontsize=9)
+        ax.set_xlim(-3, 103)
+        ax.set_ylim(-3, 103)
         ax.grid(alpha=0.25, linewidth=0.4)
         ax.set_axisbelow(True)
         sns.despine(ax=ax)
-    axes[0].legend(fontsize=7.5, loc="upper left", frameon=True, framealpha=0.92,
-                   edgecolor="0.8", markerscale=1.6)
+    axes[0].set_ylabel(f"% of the family's sequences\n>{threshold:.0f}% identical to training",
+                       fontsize=9)
     fig.tight_layout()
     out_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png"):
@@ -506,10 +501,10 @@ def plot_identity_vs_close_count(out_dir: Path, level: str = "full",
     plt.close(fig)
     g.to_csv(out_dir / f"identity_vs_close_count_{level}.csv", index=False)
     print(f"  wrote {out_dir}/identity_vs_close_count_{level}.{{pdf,png}}")
-    print(f"    family size: median {g.n_seqs.median():.0f} (range {g.n_seqs.min()}-{g.n_seqs.max()})")
-    print(f"    sequences >{threshold:.0f}%: median {g.n_close.median():.0f} per family "
-          f"({g.pct_close.median():.0f}% of the family)")
-    print(f"    families with 0: {(g.n_close == 0).sum()}   with <=10: {(g.n_close <= 10).sum()}")
+    for lab, _ in panels:
+        v = g[g["novelty"] == lab]
+        print(f"    {lab:<16} n={len(v):>3}  median {v.pct_close.median():5.1f}% of sequences "
+              f">{threshold:.0f}%   families at 0%: {(v.n_close == 0).sum()}")
 
 
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
