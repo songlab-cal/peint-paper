@@ -442,7 +442,7 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
 
 
 def plot_identity_vs_close_count(out_dir: Path, level: str = "full",
-                                 threshold: float = 75.0) -> None:
+                                 threshold: float = 80.0) -> None:
     """Per family: median identity to training against the share of its sequences clearing a
     high-identity threshold, one panel per Pfam novelty group.
 
