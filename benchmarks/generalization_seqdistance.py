@@ -441,6 +441,77 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
     print(f"  wrote {out_dir}/esmif_by_{grade_by}_{level}.{{pdf,png}}")
 
 
+def plot_identity_vs_close_count(out_dir: Path, level: str = "full",
+                                 threshold: float = 75.0) -> None:
+    """Per family: median identity to training against how many of its sequences clear a
+    high-identity threshold.
+
+    Tests whether a family's near-training sequences are a small fixed clique or most of the
+    family. Both panels are needed because family size is not constant -- it runs from 40 to
+    1,340 sequences -- so a raw count of 10 means something very different in a 40-sequence
+    family than in a 1,200-sequence one, and the count panel alone would invite exactly that
+    misreading.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+    from benchmarks.heldout_train_similarity import fasta_path, work_dir
+
+    _set_publication_style()
+    prof = pd.read_csv(work_dir() / f"density_{level}.csv.gz", usecols=["qseqid", "pident_rank1"])
+    ids = [ln[1:].strip() for ln in ts._open_text(fasta_path("test", level)) if ln.startswith(">")]
+    # Every submitted query, so a family whose sequences found nothing keeps its denominator.
+    d = pd.DataFrame({"qseqid": ids}).merge(prof, on="qseqid", how="left")
+    d["family"] = d["qseqid"].str.split(ts.ID_SEP).str[0]
+    d["pident"] = d["pident_rank1"].fillna(0.0)
+    g = d.groupby("family").agg(n_seqs=("pident", "size"),
+                                n_close=("pident", lambda x: int((x > threshold).sum()))).reset_index()
+    g = g.merge(family_distance_table(level)[["family", "median_pident"]], on="family")
+    g["pct_close"] = 100 * g["n_close"] / g["n_seqs"]
+
+    pf = gen.partition("pfam_family")
+    g["novelty"] = np.where(g["family"].isin(pf["novel"]), "Pfam novel",
+                            np.where(g["family"].isin(pf["seen"]), "Pfam seen", "Pfam unlabeled"))
+    # Validated pair (CVD dE 19.3, normal-vision 25.5 against the light surface).
+    colors = {"Pfam seen": "#4878cf", "Pfam novel": "#c44e52", "Pfam unlabeled": "#b0b0b0"}
+    order = ["Pfam unlabeled", "Pfam seen", "Pfam novel"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2))
+    panels = [("n_close", f"Sequences >{threshold:.0f}% identical to training", None),
+              ("pct_close", f"% of the family's sequences >{threshold:.0f}% identical", (0, 100))]
+    for ax, (col, ylabel, ylim) in zip(axes, panels):
+        for lab in order:
+            v = g[g["novelty"] == lab]
+            if v.empty:
+                continue
+            ax.scatter(v["median_pident"], v[col], s=13, alpha=0.65,
+                       color=colors[lab], linewidths=0.3, edgecolors="white",
+                       label=f"{lab} (n={len(v)})", zorder=3 if lab != "Pfam unlabeled" else 2)
+        ax.set_xlabel("Median % identity to closest training sequence", fontsize=9)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_xlim(-2, 102)
+        if ylim:
+            ax.set_ylim(*ylim)
+        ax.grid(alpha=0.25, linewidth=0.4)
+        ax.set_axisbelow(True)
+        sns.despine(ax=ax)
+    axes[0].legend(fontsize=7.5, loc="upper left", frameon=True, framealpha=0.92,
+                   edgecolor="0.8", markerscale=1.6)
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out_dir / f"identity_vs_close_count_{level}.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    g.to_csv(out_dir / f"identity_vs_close_count_{level}.csv", index=False)
+    print(f"  wrote {out_dir}/identity_vs_close_count_{level}.{{pdf,png}}")
+    print(f"    family size: median {g.n_seqs.median():.0f} (range {g.n_seqs.min()}-{g.n_seqs.max()})")
+    print(f"    sequences >{threshold:.0f}%: median {g.n_close.median():.0f} per family "
+          f"({g.pct_close.median():.0f}% of the family)")
+    print(f"    families with 0: {(g.n_close == 0).sum()}   with <=10: {(g.n_close <= 10).sum()}")
+
+
 def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
     """CDFs of identity to the closest training sequence, Pfam-seen vs Pfam-novel.
 
@@ -575,6 +646,7 @@ def main() -> None:
     pfam_crosstab(t, out_dir, args.level)
     if args.cdf:
         plot_similarity_cdf(out_dir)
+        plot_identity_vs_close_count(out_dir, args.level)
     if args.hit_bins:
         report_by_hit_count(out_dir, args.level)
         for grading in GRADINGS:
