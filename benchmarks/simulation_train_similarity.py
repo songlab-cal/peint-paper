@@ -339,6 +339,61 @@ def plot_max_identity(d: pd.DataFrame, out_dir: Path) -> None:
               + "  ".join(f">={t}%: {100 * (v >= t).mean():4.1f}%" for t in (80, 90, 95)))
 
 
+QUALITY_MODELS = ["LG+S256", "PEINT (ESM2)", "PEINT (ESM-C)", "Real"]
+
+
+def plot_root_identity_vs_quality(d: pd.DataFrame, out_dir: Path) -> None:
+    """Does starting from a root close to training buy better simulation quality?
+
+    If a model's quality tracked root identity far more steeply than the real data's does, that
+    would be the memorization signature: the simulation succeeding where it had something to copy.
+    Real is on the same axes as the control, because root identity is confounded with family
+    difficulty -- families whose root sits near training tend to be large, well-conserved ones
+    that everything does better on -- so only the gap to Real means anything. LG+S256 saw no
+    training data at all, so whatever correlation it shows is that confound alone.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+    from paper.model_style import model_colors
+    from benchmarks.generalization_seqdistance import load_omegafold
+
+    _set_publication_style()
+    colors = model_colors()
+    root = (d.assign(p=d["pident"].fillna(0.0))
+             .query("source == 'simroot'").groupby("family")["p"].max().rename("root_pident"))
+    df = load_omegafold()
+
+    fig, axes = plt.subplots(1, len(QUALITY_MODELS), figsize=(11.2, 3.3),
+                             sharex=True, sharey=True)
+    for ax, m in zip(axes, QUALITY_MODELS):
+        g = (df[df["model"] == m].set_index("family")["plddt"].to_frame()
+             .join(root, how="inner").dropna())
+        if len(g) < 10:
+            continue
+        ax.scatter(g["root_pident"], g["plddt"], s=9, alpha=0.45, color=colors[m],
+                   linewidths=0.2, edgecolors="white", zorder=3)
+        # Deliberately no correlation coefficient. A fifth of families have a root with no
+        # training homolog at all and sit at exactly x=0, so the ranks are massively tied and
+        # any rank statistic is reporting that spike rather than the trend across the rest.
+        ax.set_title(f"{m}  (n={len(g)})", fontsize=9)
+        ax.set_xlabel("Root: % identity to training", fontsize=9)
+        ax.set_xlim(-3, 103)
+        ax.set_ylim(0, 100)
+        ax.grid(alpha=0.25, linewidth=0.4)
+        ax.set_axisbelow(True)
+        sns.despine(ax=ax)
+    axes[0].set_ylabel("OmegaFold pLDDT", fontsize=9)
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out_dir / f"root_identity_vs_quality.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  wrote {out_dir}/root_identity_vs_quality.{{pdf,png}}")
+
+
 def stage_report(args) -> None:
     out_dir = Path(cfg.SIMILARITY_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
