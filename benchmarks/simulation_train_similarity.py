@@ -182,60 +182,10 @@ def build_table(force: bool = False) -> pd.DataFrame:
     return d
 
 
-SOURCE_COLORS = {"simroot": "#333333", "realleaf": "#7b68a6",
-                 "simleaf_esm2": "#55a868", "simleaf_esmc": "#8bc34a"}
-
-
-def plot_similarity(d: pd.DataFrame, out_dir: Path) -> None:
-    """Closest-match-to-training CDFs for the root and for each model's generated leaves.
-
-    The root is one sequence per family and the leaves are many, so the two curves answer
-    different questions and are drawn together on purpose: the root curve is the only route by
-    which the held-out set's overlap with training can reach a simulation at all, and the leaf
-    curves say how much of it survives generation.
-    """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from paper.plot_style import _set_publication_style
-
-    _set_publication_style()
-    # Derive the scored column here rather than relying on the caller having added it: a no-hit
-    # sequence belongs at 0% identity, and a function that silently needs its caller to have done
-    # that is one that breaks the moment the figure is regenerated on its own.
-    d = d.assign(pident0=d["pident"].fillna(0.0))
-    fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.6))
-    order = ["simroot", "realleaf", "simleaf_esmc", "simleaf_esm2"]
-
-    for ax, (unit, per_family) in zip(axes, [("sequences", False), ("families (median)", True)]):
-        for name in order:
-            v = d[d["source"] == name]
-            if v.empty:
-                continue
-            x = (v.groupby("family")["pident0"].median().to_numpy() if per_family
-                 else v["pident0"].to_numpy())
-            x = np.sort(x)
-            ax.step(np.concatenate([[0], x]),
-                    np.concatenate([[0], 100 * np.arange(1, x.size + 1) / x.size]),
-                    where="post", lw=1.6, color=SOURCE_COLORS[name],
-                    label=f"{LABELS[name]} (n={x.size:,})")
-        ax.axvline(95, color="0.5", ls=":", lw=0.8)
-        ax.set_xlim(0, 100)
-        ax.set_ylim(0, 100)
-        ax.set_xlabel("% identity to closest training sequence", fontsize=9)
-        ax.set_ylabel(f"Cumulative % of {unit}", fontsize=9)
-        ax.legend(fontsize=7, loc="lower right", frameon=True, framealpha=0.92,
-                  edgecolor="0.8")
-        sns.despine(ax=ax)
-    fig.suptitle("What the simulation actually inherits from training", fontsize=10, y=1.02)
-    fig.tight_layout()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for ext in ("pdf", "png"):
-        fig.savefig(out_dir / f"simulation_train_similarity.{ext}", bbox_inches="tight", dpi=300)
-    plt.close(fig)
-    print(f"  wrote {out_dir}/simulation_train_similarity.{{pdf,png}}")
-
+SOURCE_ORDER = ["simroot", "realleaf", "simleaf_esmc", "simleaf_esm2"]
+# Short forms for axis ticks; the full LABELS collide once four sit side by side.
+SHORT_LABELS = {"simroot": "Root", "realleaf": "Real",
+                "simleaf_esmc": "PEINT\n(ESM-C)", "simleaf_esm2": "PEINT\n(ESM2)"}
 
 ROOT_GRADES = [
     ("no homolog", lambda v: v <= 0),
@@ -245,55 +195,108 @@ ROOT_GRADES = [
 ]
 
 
-def plot_max_identity(d: pd.DataFrame, out_dir: Path) -> None:
-    """Per family, the single closest any of its sequences gets to the training set.
+def _source_colors():
+    """Paper palette, so these arms read the same here as in every other panel."""
+    from paper.model_style import model_colors
+    mc = model_colors()
+    return {"simroot": "#4d4d4d", "realleaf": mc["Real"],
+            "simleaf_esmc": mc["PEINT (ESM-C)"], "simleaf_esm2": mc["PEINT (ESM2)"]}
 
-    The max, not the median, is the statistic a leakage argument turns on: one leaf that is
-    near-identical to a training sequence matters even if the other five hundred are not. Taking
-    it over ~60 leaves per family makes it the most favourable reading available to the objection.
 
-    The right panel grades families by how close their ROOT sat to training, which is the only
-    route by which the held-out set's overlap can reach a simulation at all. If the leaf boxes
-    stay flat as the root grade rises, the root's similarity is not being passed on.
+def _box(ax, data, positions, facecolors, width=0.7):
+    bp = ax.boxplot(data, positions=positions, patch_artist=True, widths=width,
+                    showfliers=False, boxprops=dict(linewidth=0.5),
+                    whiskerprops=dict(linewidth=0.5), capprops=dict(linewidth=0.5),
+                    medianprops=dict(color="black", linewidth=1.0))
+    for patch, c in zip(bp["boxes"], facecolors):
+        patch.set_facecolor(c)
+    return bp
+
+
+def plot_similarity(d: pd.DataFrame, out_dir: Path) -> None:
+    """Closest-match-to-training identity for the root and for each model's generated leaves.
+
+    The root is one sequence per family and the leaves are many, so the two are shown together on
+    purpose: the root is the only route by which the held-out set's overlap with training can
+    reach a simulation at all, and the leaf boxes say how much of it survives generation.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import seaborn as sns
     from paper.plot_style import _set_publication_style
-    from paper.model_style import model_colors
 
     _set_publication_style()
-    mc = model_colors()
-    # Paper palette, so these arms read the same here as in every other panel.
-    colors = {"simroot": "#4d4d4d", "realleaf": mc["Real"],
-              "simleaf_esmc": mc["PEINT (ESM-C)"], "simleaf_esm2": mc["PEINT (ESM2)"]}
-    order = ["simroot", "realleaf", "simleaf_esmc", "simleaf_esm2"]
+    # Derived here rather than relying on the caller having added it: a no-hit sequence belongs at
+    # 0% identity, and a function that silently needs its caller to have done that breaks the
+    # moment the figure is regenerated on its own.
+    d = d.assign(pident0=d["pident"].fillna(0.0))
+    colors = _source_colors()
+    present = [n for n in SOURCE_ORDER if n in set(d["source"])]
 
+    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.8))
+    for ax, per_family in zip(axes, (False, True)):
+        data, ticks = [], []
+        for name in present:
+            v = d[d["source"] == name]
+            x = (v.groupby("family")["pident0"].median().to_numpy() if per_family
+                 else v["pident0"].to_numpy())
+            data.append(x)
+            ticks.append(f"{SHORT_LABELS[name]}\nn={x.size:,}")
+        _box(ax, data, list(range(1, len(data) + 1)), [colors[n] for n in present])
+        ax.set_xticks(range(1, len(data) + 1))
+        ax.set_xticklabels(ticks, fontsize=7.5)
+        ax.set_ylim(0, 100)
+        ax.set_ylabel("% identity to closest training sequence", fontsize=9)
+        ax.set_title("per sequence" if not per_family else "per family (median)", fontsize=9)
+        sns.despine(ax=ax)
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out_dir / f"simulation_train_similarity.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  wrote {out_dir}/simulation_train_similarity.{{pdf,png}}")
+
+
+def plot_max_identity(d: pd.DataFrame, out_dir: Path) -> None:
+    """Per family, the single closest any of its sequences gets to the training set.
+
+    The max, not the median, is the statistic a leakage argument turns on: one leaf that is
+    near-identical to a training sequence matters even if the other five hundred are not. Taken
+    over ~60 leaves per family it is the most favourable reading available to the objection.
+
+    The right panel grades families by how close their ROOT sat to training, which is the only
+    route by which the held-out set's overlap can reach a simulation. If the leaf boxes stay flat
+    as the root grade rises, the root's similarity is not being passed on.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from paper.plot_style import _set_publication_style
+
+    _set_publication_style()
+    colors = _source_colors()
     d = d.assign(p=d["pident"].fillna(0.0))
     mx = d.groupby(["source", "family"])["p"].max().unstack("source")
+    present = [n for n in SOURCE_ORDER if n in mx.columns]
 
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.9))
+    fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.9),
+                             gridspec_kw={"width_ratios": [1, 1.7]})
 
     ax = axes[0]
-    for name in order:
-        if name not in mx.columns:
-            continue
-        x = np.sort(mx[name].dropna().to_numpy())
-        ax.step(np.concatenate([[0], x]),
-                np.concatenate([[0], 100 * np.arange(1, x.size + 1) / x.size]),
-                where="post", lw=1.7, color=colors[name], label=f"{LABELS[name]} (n={x.size})")
-    ax.axvline(95, color="0.5", ls=":", lw=0.8)
-    ax.set_xlim(0, 100)
+    data = [mx[n].dropna().to_numpy() for n in present]
+    _box(ax, data, list(range(1, len(data) + 1)), [colors[n] for n in present])
+    ax.set_xticks(range(1, len(data) + 1))
+    ax.set_xticklabels([f"{SHORT_LABELS[n]}\nn={len(mx[n].dropna())}" for n in present],
+                       fontsize=8)
     ax.set_ylim(0, 100)
-    ax.set_xlabel("Max % identity to training, over the family's sequences", fontsize=9)
-    ax.set_ylabel("Cumulative % of families", fontsize=9)
-    ax.legend(fontsize=7.5, loc="upper left", frameon=True, framealpha=0.92, edgecolor="0.8")
+    ax.set_ylabel("Max % identity to training\n(over the family's sequences)", fontsize=9)
     sns.despine(ax=ax)
 
     ax = axes[1]
     leaf_sources = [n for n in ("realleaf", "simleaf_esmc", "simleaf_esm2") if n in mx.columns]
-    grades, ticks, data, facecolors, positions = [], [], [], [], []
+    centres, ticks, data, facecolors, positions = [], [], [], [], []
     pos = 1.0
     for gname, rule in ROOT_GRADES:
         fams = mx.index[rule(mx["simroot"])] if "simroot" in mx.columns else []
@@ -307,24 +310,19 @@ def plot_max_identity(d: pd.DataFrame, out_dir: Path) -> None:
             data.append(vals)
             facecolors.append(colors[name])
             pos += 1
-        grades.append(pos - (len(leaf_sources) + 1) / 2)
+        centres.append(pos - (len(leaf_sources) + 1) / 2)
         ticks.append(f"{gname}\n{len(fams)} families")
         pos += 1
     if data:
-        bp = ax.boxplot(data, positions=positions, patch_artist=True, widths=0.78,
-                        showfliers=False, boxprops=dict(linewidth=0.5),
-                        whiskerprops=dict(linewidth=0.5), capprops=dict(linewidth=0.5),
-                        medianprops=dict(color="black", linewidth=1.0))
-        for patch, c in zip(bp["boxes"], facecolors):
-            patch.set_facecolor(c)
-        ax.set_xticks(grades)
+        _box(ax, data, positions, facecolors, width=0.78)
+        ax.set_xticks(centres)
         ax.set_xticklabels(ticks, fontsize=8)
     ax.set_ylim(0, 100)
-    ax.set_xlabel("Identity of the simulation ROOT to training", fontsize=9)
+    ax.set_xlabel("Identity of the simulation root to training", fontsize=9)
     ax.set_ylabel("Max % identity to training\n(over the family's leaves)", fontsize=9)
     handles = [plt.Rectangle((0, 0), 1, 1, fc=colors[n]) for n in leaf_sources]
     ax.legend(handles, [LABELS[n] for n in leaf_sources], fontsize=7.5, frameon=False,
-              loc="upper left")
+              loc="lower right")
     sns.despine(ax=ax)
 
     fig.tight_layout()
@@ -335,9 +333,7 @@ def plot_max_identity(d: pd.DataFrame, out_dir: Path) -> None:
     mx.to_csv(out_dir / "simulation_max_identity_per_family.csv")
     print(f"  wrote {out_dir}/simulation_max_identity.{{pdf,png}}")
     print("\n  per-family MAX % identity to training:")
-    for name in order:
-        if name not in mx.columns:
-            continue
+    for name in present:
         v = mx[name].dropna()
         print(f"    {LABELS[name]:<22} median={v.median():5.1f}  "
               + "  ".join(f">={t}%: {100 * (v >= t).mean():4.1f}%" for t in (80, 90, 95)))
