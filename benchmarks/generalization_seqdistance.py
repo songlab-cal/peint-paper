@@ -560,7 +560,7 @@ def plot_similarity_cdf(out_dir: Path, levels=("full", "domain")) -> None:
             ax.axvline(95, color="0.5", ls=":", lw=0.8)
             ax.set_xlabel("% identity to closest training sequence", fontsize=9)
             ax.set_ylabel(f"Cumulative % of {unit}", fontsize=9)
-            ax.set_title(f"{level}-length queries, by {unit.split(' ')[0]}", fontsize=9)
+            ax.set_title(f"{level.capitalize()}-length queries, by {unit.split(' ')[0]}", fontsize=9)
             # Opaque frame, not frameon=False: the novel-group curves jump to ~95% at x=0 and run
             # straight through the upper-left corner, so an unframed legend is read over the top of
             # them and its swatches take on the colour of whatever line is behind them.

@@ -248,7 +248,7 @@ def plot_similarity(d: pd.DataFrame, out_dir: Path) -> None:
         ax.set_xticklabels(ticks, fontsize=7.5)
         ax.set_ylim(0, 100)
         ax.set_ylabel("% identity to closest training sequence", fontsize=9)
-        ax.set_title("per sequence" if not per_family else "per family (median)", fontsize=9)
+        ax.set_title("Per sequence" if not per_family else "Per family (median)", fontsize=9)
         sns.despine(ax=ax)
     fig.tight_layout()
     out_dir.mkdir(parents=True, exist_ok=True)
