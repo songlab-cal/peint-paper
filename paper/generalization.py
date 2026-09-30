@@ -387,13 +387,16 @@ def scan_pfam_domains(
     hmmsearch (HMMs as queries over the seq1 database) — the efficient direction — so the whole
     held-out set scans in one pass.
     """
-    import pyhmmer
-
     cache = Path(cfg.ANNOTATION_DIR) / "pfam_domains_seq1.json"
     if cache.exists() and not force:
         cached = json.loads(cache.read_text())
         if all(f in cached for f in families):
             return {f: cached[f] for f in families}
+
+    # Imported here, not above the cache check: pyhmmer and the 2 GB of Pfam HMMs are only
+    # needed to *build* the scan. Serving it from cache should not require either, so that a
+    # plotting-only environment can still reach every downstream analysis.
+    import pyhmmer
 
     hmm_path = ensure_pfam_hmm()
     alphabet = pyhmmer.easel.Alphabet.amino()

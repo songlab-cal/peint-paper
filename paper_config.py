@@ -334,6 +334,25 @@ GENERALIZATION_DIR = Path(os.environ.get(
     "PEINT_PAPER_GENERALIZATION_DIR", str(FIGURES_DIR / "generalization")
 ))
 
+# --- Held-out vs training sequence similarity (DIAMOND) ---
+# Aligned (x, y, t) transitions, one <family>.txt per family under train_transitions_dir/ and
+# test_transitions_dir/. Rows are in the family's a3m match-column frame, so column i is seq1
+# residue i; paper.transition_similarity.check_frame re-asserts that before slicing domains.
+ALIGNED_TRANSITIONS_DIR = _first_existing(
+    "/scratch/users/spa-evolution-yss/peint_paper_data/peint/local_data/aligned",
+    LOCAL_DATA / "peint" / "local_data" / "aligned",
+    env="PEINT_PAPER_ALIGNED_TRANSITIONS_DIR",
+)
+# Fastas, DIAMOND databases and raw hit tables run to several GB, so they go under DERIVED_DIR
+# with the other build products rather than next to the figures.
+SIMILARITY_WORK_DIR = Path(os.environ.get(
+    "PEINT_PAPER_SIMILARITY_WORK_DIR", str(DERIVED_DIR / "heldout_similarity")
+))
+# The small per-sequence/per-family tables and panels that come out the other end.
+SIMILARITY_DIR = Path(os.environ.get(
+    "PEINT_PAPER_SIMILARITY_DIR", str(FIGURES_DIR / "heldout_similarity")
+))
+
 
 # --- lm-design energy (ESM-MCMC proposer experiment) ---
 # The literal lm-design accept/reject energy needs the linear distogram-projection weights and
