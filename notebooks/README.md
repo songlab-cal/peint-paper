@@ -182,14 +182,14 @@ python scripts/check_local_data.py     # lists roles present and missing
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
 | `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are diagrams; 8e is not scripted |
-| `ExtendedData9.ipynb` | 9a, 9b | 1 | plots from the shipped label cache; a fresh run may still contact the public annotation sources |
+| `ExtendedData9.ipynb` | 9a, 9b | 1 | ESM-IF self-consistency by identity to training, from the shipped DIAMOND distance table; rebuilding that table is a 64-core, ~460 GB DIAMOND job (`benchmarks/run_heldout_train_similarity.sbatch`) |
 
 Where the manuscript prints a number, the notebook prints the computed value beside it and
 marks `MATCH` or `CHECK`.
 
 ## Reproduction gaps
 
-These notebooks ship **57 panels with their outputs embedded**. Four entries in the figure list
+These notebooks ship **55 panels with their outputs embedded**. Four entries in the figure list
 are not reproduced by a notebook cell. In each case what is missing is a script or an input, not
 a result we have reason to doubt; where we are recovering the missing piece, that is said.
 
