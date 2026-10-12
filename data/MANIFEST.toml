@@ -136,7 +136,7 @@ blocks_mb = 27
 apparent_mb = 27
 files = 42
 panels = ["all"]
-note = "Per-panel tables. The whole replot tier, ~20 MB packed. Every per-site likelihood table averages over the alignment columns where both the aligned source x and target y hold a residue, as in Fig. 2a (version 2)."
+note = "Per-panel tables. The whole replot tier, ~20 MB packed."
 
 [[role]]
 name = "vep"

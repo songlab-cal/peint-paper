@@ -8,29 +8,6 @@ Model library: https://github.com/songlab-cal/peint (tag `zenodo-23315010`)
 
 Both repositories carry the same tag name for this record, each at its `main`.
 
-## Changes in this version
-
-Only `figure_data.tar.zst` changes; every other archive is identical to the previous version.
-
-- **Per-site likelihood averaging.** Every per-site likelihood table now reports
-  `exp(mean per-site log-likelihood)` over the alignment columns where **both** the aligned
-  source x and the aligned target y hold a residue, as in the published Fig. 2a. The previous
-  tables averaged over all alignment columns, counting gap columns as likelihood 1, which
-  produced a rising random-guess line and bumps at t > 3 when replotted. Under the corrected
-  rule random guess is exactly 1/20. Affected tables: `figure2_likelihood_eval_test_esmc.csv`,
-  `figure2_likelihood_eval_train_held_out_esmc.csv` (Fig. 2a, Extended Data Fig. 2a) and
-  `ed1/master_sweep_553fam.csv` (Extended Data Fig. 1b, 1c), which now holds exactly the seven
-  variants shown. The per-site values themselves are unchanged.
-- **New:** `decoder_depth/decoder_depth_553fam.csv`, the decoder-depth sweep behind
-  Supplementary Fig. 1, with its `MANIFEST.md`.
-- **Documentation.** Corrected archive tier sizes and the trRosetta size and unpack layout in
-  this README. `MANIFEST.toml`: corrected stale notes (`figure_data/esmif/` does ship; the
-  192-leaf transitions are the default recompute input for Fig. 2b).
-- **New:** `heldout_similarity/family_distance_full.csv`: for each held-out family, the closest
-  training match of its sequences by DIAMOND. With `esmif/esmif_selfconsistency.csv` it redraws
-  the revised Extended Data Fig. 9 (ESM-IF self-consistency by identity to the training set)
-  without the DIAMOND search.
-
 ## What this is
 
 The paper evaluates PEINT, a learned protein-evolution simulator, against classical

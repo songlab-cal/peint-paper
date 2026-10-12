@@ -41,7 +41,7 @@ no GPU. A few need the larger archives; `notebooks/README.md` maps panels to arc
 `zenodo-23315010` release, byte-identical to the deposited copy:
 
     https://github.com/songlab-cal/peint-paper/releases/download/zenodo-23315010/figure_data.tar.zst
-    sha256  3e2057d864278ff927a2f06c168530aaf98c6fdfb1dc8ab34ec13554ac63faf1
+    sha256  3b6cc0c0892d0b7da6fd56237022db76b68f811d4b28bdfcc0d02d9225463894
 
 That checksum is the one in the deposit's own `CHECKSUMS.sha256`, so either copy verifies against
 it. Use whichever is faster to reach — but cite the Zenodo DOI, which is the record of origin. The
