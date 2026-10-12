@@ -81,7 +81,7 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
 | `aux.tar.zst` | 0.1 GB | 30,117 | Pfam/SCOPe/ECOD labels, per-site rates, split lists |
 | `peint_checkpoints.tar.zst` | 6.9 GB | 5 | the PEINT / VEP model checkpoints |
-| `peint_transitions_aligned.tar.zst` | 13 GB | 90,312 | held-out transitions, alignment frame |
+| `peint_transitions_aligned.tar.zst` | 13 GB | 90,312 | alignment frame: held-out transitions, plus the training transitions and site rates the WAG / LG baselines are fit on |
 | `peint_transitions_unaligned.tar.zst` | 13 GB | 60,208 | held-out transitions, unaligned + alignment masks |
 | `r1_af2.tar.zst` | 52 GB | 481,316 | raw rev1 AF2Rank structures (unpacks into `local_data/r1/`) |
 | `r1_omegafold.tar.zst` | 46 GB | 607,696 | raw rev1 OmegaFold structures (unpacks into `local_data/r1/`) |
@@ -134,9 +134,9 @@ These are third-party or too large to redistribute; the code fetches them:
   *derived* labels are in `aux.tar.zst` and in the figure_data tier, and those are what the
   generalization panels plot; a fresh run may still contact these public sources.
 - **AlphaFold weights, TM-align, ProstT5, ProteinGym** — see the repo's `scripts/fetch_*.sh`.
-- **The held-out transition trees and the `peint` evaluation cache** — declared in
-  `MANIFEST.toml` as `tier = "on_request"`. The cache is keyed on absolute paths, so a copy is
-  only valid where it was built; see the repo's `REPRODUCING.md`.
+- **The held-out transition trees and the `peint` evaluation cache.** The cache is declared in
+  `MANIFEST.toml` as `tier = "on_request"`. It is keyed on absolute paths, so a copy is only
+  valid where it was built; see the repo's `REPRODUCING.md`.
 
 Model checkpoints and the raw revision-1 structure trees **are** included — see the archive
 table above. No panel reads the structure trees (the two per-family pLDDT summaries they
@@ -168,10 +168,10 @@ compute, not missing data.
 | ESM-C indel arm | no model needed — a 64-process MAFFT + Historian job over the shipped sequences |
 
 One dependency is genuinely outside this record, which is worth saying outright: **the
-variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ~13 external
+variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ten external
 models. Those are third-party and not ours to redistribute. The per-assay Spearman tables
-derived from them are here, and the public ProteinGym release they come from is the original
-source.
+derived from them ship with the code repository (`local_data/vep/`), and the public ProteinGym
+release they come from is the original source.
 
 The only other thing left out is the model repo's evaluation cache (`_cache_peint`), and that
 is a warm-start rather than an input: peint keys a cached computation on a hash of its

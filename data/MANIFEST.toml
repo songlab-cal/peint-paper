@@ -99,7 +99,7 @@ note = "the five model checkpoints; ships in the full tier. Five big files -- pl
 [[archive]]
 name = "peint_transitions_aligned"
 file = "peint_transitions_aligned.tar.zst"
-note = "held-out transitions, alignment frame. 90,312 files; feeds figure2_likelihood_eval."
+note = "alignment frame: held-out transitions, plus the training transitions and site rates the WAG / LG baselines are fit on. 90,312 files; feeds figure2_likelihood_eval."
 
 [[archive]]
 name = "peint_transitions_unaligned"
@@ -412,8 +412,10 @@ peint checkout's -- unlike its two neighbours, which mirror {peint_repo}/local_d
 
 
 # =====================================================================================
-#  Tier: on_request -- real data, deliberately not transferred or deposited.
-#  Declared so `check_local_data.py` can say "absent by design" instead of "missing".
+#  Tier: on_request -- real data, deliberately not transferred or deposited -- interleaved with
+#  the remaining full-tier roles, which are deposited. Each role's `tier` field is what counts.
+#  on_request roles are declared so `check_local_data.py` can say "absent by design" instead
+#  of "missing".
 # =====================================================================================
 
 [[role]]
@@ -577,7 +579,7 @@ the alignments are absent, so the 16 GB is not on any panel's path."""
 
 [[role]]
 name = "peint_transitions_aligned"
-producer = "upstream of this repo: the (x, y, t) transition extraction that PEINT was trained and evaluated on"
+producer = "upstream of this repo: the (x, y, t) transitions in the alignment frame, where WAG and LG are fit and scored. PEINT reads the unaligned frame instead."
 path = "peint/local_data/aligned"
 source = "{peint_repo}/local_data/aligned"
 tier = "full"
@@ -587,12 +589,16 @@ blocks_mb = 6102
 apparent_mb = 13665
 files = 90312
 panels = ["figure2_likelihood_eval"]
-note = """Held-out transitions in the empirical alignment frame. With the shipped per-site
-tables the likelihood panel replots without these; they are what a recompute needs."""
+note = """Transitions in the empirical alignment frame: the held-out ones, the frame in which
+every model's per-site likelihood is compared (test_transitions_dir), and the training ones with their 4-category site rates
+(train_transitions_dir, train_site_rates_4cat_dir), which serve only to fit WAG and LG. PEINT
+was trained on the unaligned, full-length form of its training transitions, which is not
+deposited (see the README). With the shipped per-site tables the likelihood panel replots
+without these; they are what a recompute needs."""
 
 [[role]]
 name = "peint_transitions_unaligned"
-producer = "upstream of this repo: the same extraction, before projection into the alignment frame"
+producer = "upstream of this repo: the same held-out transitions in the unaligned frame PEINT reads (gaps removed, insertions kept), with the alignment masks that map its per-site scores into the alignment frame"
 path = "peint/local_data/unaligned"
 source = "{peint_repo}/local_data/unaligned"
 tier = "full"
@@ -632,7 +638,8 @@ files = 0
 panels = ["figure2_likelihood_eval"]
 note = """Cached per-site likelihood evaluations in the peint repo. peint cache keys are a
 sha512 over absolute argument paths, so this is only valid in place -- it cannot be relocated
-or shared, which is why figure2_likelihood_eval is replot-only for everyone else."""
+or shared. Without it, figure2_likelihood_eval recomputes from the deposited transitions (GPU)
+or replots from figure_data."""
 
 [[role]]
 name = "peint_checkpoints"
@@ -652,7 +659,7 @@ plus peint_esmc.ckpt and vep_esmc.ckpt (Biohub ESM-C). Copied in as-is, optimize
 -- the loader detects which backbone a checkpoint carries and pulls ESM2 from pretrained when
 the encoder weights are absent, so there is nothing to strip and nothing to get wrong.
 
-The fifth is vep_650.ckpt (3.5 GB), the ESM2-650M VEP model behind Figure 5's 650M arm:
+The fifth is vep_650.ckpt (3.5 GB), the ESM2-650M VEP model behind Extended Data Fig. 7's 650M arm:
 embed_dim 1280, 2+2 layers, 20 heads, epoch 12 / step 10000 -- i.e. the checkpoint named by the
 run "20251110_103831-ft_217fams-esm2_650M-hhfilter90-epoch=12-step=10000-t_1_0" in
 figures/figure5_vep.py. No panel loads it directly (the VEP panels read that run's scored CSVs
