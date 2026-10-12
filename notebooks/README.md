@@ -172,7 +172,7 @@ python scripts/check_local_data.py     # lists roles present and missing
 |---|---|---|---|
 | `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2a, 2b redraw at level 1; **2c** is level 3 — a checkpoint, a GPU and Historian, with no replot path |
 | `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | 3c, 3d, 3f, 3g redraw at level 1; **3b** needs `sim/` (a per-site logo, so no table can redraw it) and **3e** needs `r2` (per-event lengths are not in the shipped per-family table) |
-| `Figure4.ipynb` | 4a, 4c, 4d, 4e, 4f · Supp. Fig. 3d–f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env; the 4e cell also draws the per-replicate stopped-flow traces of Supp. Fig. 3d–f |
+| `Figure4.ipynb` | 4a, 4b, 4c, 4d, 4e, 4f · Supp. Fig. 3d–f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env; the 4e cell also draws the per-replicate stopped-flow traces of Supp. Fig. 3d–f |
 | `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
 | `ExtendedData1.ipynb` | 1b, 1c · Supp. Fig. 1a–c | 1 | Supp. Fig. 1 (decoder depth) is the same sweep for one to five decoder layers, drawn by the same script |
 | `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
@@ -189,8 +189,7 @@ marks `MATCH` or `CHECK`.
 
 ## Reproduction gaps
 
-These notebooks ship **55 figure images with their outputs embedded** (some images hold several
-panels). Six entries in the figure list
+These notebooks ship **55 panels with their outputs embedded**. Four entries in the figure list
 are not reproduced by a notebook cell. In each case what is missing is a script or an input, not
 a result we have reason to doubt; where we are recovering the missing piece, that is said.
 
@@ -198,12 +197,10 @@ a result we have reason to doubt; where we are recovering the missing piece, tha
 |---|---|---|
 | **ED Fig. 5b, 5c** | the AlphaFold2-with-MSA prediction table these two panels compare against | produced for the original analysis, not yet recovered from the run that made it |
 | **ED Fig. 8e** | a script for the single worked alignment example; its inputs are the same categorical-Jacobian tensors as 8b | not scripted |
-| **Fig. 4b** | a script for the structure renders | the predicted structures are in the repository, `figures/carbonic_anhydrase_figure/input_data/predicted_structures/` |
-| **ED Fig. 4a** | a script for the 3Di schematic and the per-site 3Di-frequency matrices of the example family | the per-model 3Di states ship in `r1.tar.zst` (`r1/3di`) |
 | **Supp. Fig. 2** | a plotting script | the dataset and splits it summarises are both in the release |
 | **Supp. Fig. 3a–c** | the size-exclusion chromatograms and SDS-PAGE gel are instrument and gel images, with no table behind them | 3d–f are drawn in `Figure4.ipynb` |
 
-Figure 1 and ED Figure 5a, 6a, 8a, 8d are diagrams rather than plots, so there is nothing to reproduce
+Figure 1 and ED Figure 8a, 8d are diagrams rather than plots, so there is nothing to reproduce
 for them.
 
 `../REPRODUCING.md` has the level-2 and level-3 commands per panel with measured
