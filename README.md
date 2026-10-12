@@ -27,21 +27,21 @@ novel-vs-seen OmegaFold panel runs the pLDDT ECDF that writes its input.
 
 The archive of record is this paper's Zenodo deposit:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22151902.svg)](https://doi.org/10.5281/zenodo.22151902)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23315010.svg)](https://doi.org/10.5281/zenodo.23315010)
 
-Cite [`10.5281/zenodo.22151902`](https://doi.org/10.5281/zenodo.22151902) — record `22151902`,
+Cite [`10.5281/zenodo.23315010`](https://doi.org/10.5281/zenodo.23315010) — record `23315010`,
 the exact version the figures were reproduced from; pass it to the fetch script as
-`PEINT_PAPER_ZENODO_RECORD=22151902`. This repository and
-[`peint`](https://github.com/songlab-cal/peint) both carry the matching tag `zenodo-22151902`.
+`PEINT_PAPER_ZENODO_RECORD=23315010`. This repository and
+[`peint`](https://github.com/songlab-cal/peint) both carry the matching tag `zenodo-23315010`.
 
 Most published panels can be redrawn from one 20 MB file in it, `figure_data.tar.zst` — no models,
 no GPU. A few need the larger archives; `notebooks/README.md` maps panels to archives.
 
 **Second source for that archive.** The same 20 MB file is also attached to this repository's
-`zenodo-22151902` release, byte-identical to the deposited copy:
+`zenodo-23315010` release, byte-identical to the deposited copy:
 
-    https://github.com/songlab-cal/peint-paper/releases/download/zenodo-22151902/figure_data.tar.zst
-    sha256  32d6a21c7f484eb7102a0f47127502421f009c24cf421538a0f830a0fed670d6
+    https://github.com/songlab-cal/peint-paper/releases/download/zenodo-23315010/figure_data.tar.zst
+    sha256  3e2057d864278ff927a2f06c168530aaf98c6fdfb1dc8ab34ec13554ac63faf1
 
 That checksum is the one in the deposit's own `CHECKSUMS.sha256`, so either copy verifies against
 it. Use whichever is faster to reach — but cite the Zenodo DOI, which is the record of origin. The

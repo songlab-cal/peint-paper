@@ -3,8 +3,8 @@
 Everything needed to reproduce the figures in *Deep models of protein evolution in time
 generate realistic evolutionary trajectories and functional proteins*.
 
-Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-22151902`)
-Model library: https://github.com/songlab-cal/peint (tag `zenodo-22151902`)
+Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-23315010`)
+Model library: https://github.com/songlab-cal/peint (tag `zenodo-23315010`)
 
 ## What this is
 
@@ -32,7 +32,7 @@ cd peint-paper
 Then fetch the data. From this record, each archive unpacks relative to `local_data/`:
 
 ```bash
-RECORD=22151902       # zenodo.org/records/<RECORD>
+RECORD=23315010       # zenodo.org/records/<RECORD>
 ZENODO=https://zenodo.org/records/$RECORD/files
 mkdir -p local_data
 curl -L -O "$ZENODO/figure_data.tar.zst?download=1"

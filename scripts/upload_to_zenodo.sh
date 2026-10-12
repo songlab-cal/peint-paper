@@ -7,8 +7,8 @@
 # so an interrupted run can simply be repeated.
 #
 #   export ZENODO_TOKEN=...            # never passed as an argument: see below
-#   scripts/upload_to_zenodo.sh --deposition 22151902            # dry run
-#   scripts/upload_to_zenodo.sh --deposition 22151902 --apply
+#   scripts/upload_to_zenodo.sh --deposition 23315010            # dry run
+#   scripts/upload_to_zenodo.sh --deposition 23315010 --apply
 #
 # The token is read from the environment on purpose. Passing a credential as a command-line
 # flag puts it in `ps` output and your shell history; an env var does neither. Create one at

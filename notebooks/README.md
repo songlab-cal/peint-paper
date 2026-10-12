@@ -118,12 +118,12 @@ Everything downloads into `local_data/`. Paths in the notebooks are relative to 
 must be on `PATH`**:
 
 ```bash
-export PEINT_PAPER_ZENODO_RECORD=22151902                # doi.org/10.5281/zenodo.22151902
+export PEINT_PAPER_ZENODO_RECORD=23315010                # doi.org/10.5281/zenodo.23315010
 python scripts/fetch_local_data.py --list                # archives, sizes, contents
 python scripts/fetch_local_data.py --tier figure_data    # 20 MB, the level-1 tables
 ```
 
-That 20 MB archive is also mirrored on this repository's `zenodo-22151902` release — see the
+That 20 MB archive is also mirrored on this repository's `zenodo-23315010` release — see the
 top-level README for the URL and its checksum. Unpack a hand-downloaded copy with:
 
 ```bash
