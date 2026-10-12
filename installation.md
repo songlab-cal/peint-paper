@@ -190,8 +190,10 @@ conservation JSD panels.
 using the dataset machinery in the peint repository**
 
 ```bash
-curl -O https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz
-tar -xzf training_set.tar.gz -C <root>/input_data/    # gives a3m/, npy/, pdb/
+curl -O https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz   # 30.8 GB
+# members are ./training_set/..., i.e. two path components ("." and "training_set") before
+# a3m/ npy/ pdb/; --strip-components=2 puts those directly under input_data/
+tar -xzf training_set.tar.gz --strip-components=2 -C <root>/input_data/
 export PEINT_PAPER_DATA_ROOT=<root>
 ```
 
