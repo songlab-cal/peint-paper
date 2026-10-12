@@ -120,7 +120,7 @@ role's `producer` field — including the checkpoint path and the shard list.
   files), so a step that simulates or scores is covered by the deposit alone. What is still
   not regenerable is the training that produced them.
 - **Ground-truth structures and a3m alignments** come from the trRosetta training set
-  (~20 GB, third party). Only steps that fold or thread against experimental structures
+  (30.8 GB, third party). Only steps that fold or thread against experimental structures
   need them; every panel reads shipped output instead.
 - **The rev1 structure trees** (`r1/af2`, `r1/omegafold`) are 1,089,012 files and ~99 GB.
   They now **ship**, as `r1_af2.tar.zst` and `r1_omegafold.tar.zst` (5.6 and 5.3 GB packed),

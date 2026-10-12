@@ -118,7 +118,7 @@ thousands of small per-family text files. A Zenodo record is also a flat list of
 These are third-party or too large to redistribute; the code fetches them:
 
 - **trRosetta training set** — the input a3m alignments and ground-truth PDBs
-  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, ~20 GB).
+  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, 30.8 GB; unpack with `--strip-components=2`).
 - **Pfam-A HMMs, ECOD, CATH, SCOPe** — fetched on demand by `paper.generalization`. The
   *derived* labels are in `aux.tar.zst` and in the figure_data tier, and those are what the
   generalization panels plot; a fresh run may still contact these public sources.

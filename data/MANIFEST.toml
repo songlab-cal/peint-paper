@@ -28,7 +28,7 @@
 # archives that most readers can omit.
 #
 # Tiers:
-#   figure_data  every table needed to re-render all panels; one small archive
+#   figure_data  the tables that re-render most panels with no model or GPU; one small archive
 #   full         the inputs behind those tables, so metrics recompute rather than replot
 #   on_request   real data, deliberately NOT transferred or deposited (see each note)
 
@@ -94,7 +94,7 @@ note = "raw rev1 AF2Rank output, 481,316 files. Prebuilt; unpacks into local_dat
 [[archive]]
 name = "peint_checkpoints"
 file = "peint_checkpoints.tar.zst"
-note = "the four model checkpoints; ships in the full tier. Four big files -- plain rsync, not --as-archive."
+note = "the five model checkpoints; ships in the full tier. Five big files -- plain rsync, not --as-archive."
 
 [[archive]]
 name = "peint_transitions_aligned"
@@ -121,7 +121,7 @@ note = "raw rev1 OmegaFold structures, 607,696 files. Prebuilt; unpacks into loc
 
 
 # =====================================================================================
-#  Tier: figure_data -- ~22 MB, replots every panel with no models and no GPU
+#  Tier: figure_data -- ~20 MB packed, ~28 MB unpacked; replots most panels with no models and no GPU
 # =====================================================================================
 
 [[role]]
@@ -134,9 +134,9 @@ tier = "figure_data"
 probe = "figure3_conservation_jsd.csv"
 blocks_mb = 27
 apparent_mb = 27
-files = 39
+files = 42
 panels = ["all"]
-note = "Per-panel tables. The whole replot tier, ~5 MB packed."
+note = "Per-panel tables. The whole replot tier, ~20 MB packed. Every per-site likelihood table averages over the alignment columns where both the aligned source x and target y hold a residue, as in Fig. 2a (version 2)."
 
 [[role]]
 name = "vep"
@@ -429,8 +429,8 @@ apparent_mb = 53581
 files = 481316
 panels = []
 note = """Raw rev1 AF2Rank output. Needed only to regenerate af2rank_comparisons.csv, which
-is shipped. Excluded for file count as much as size: with this and r1_omegafold the deposit
-would be ~1.28 M files against Zenodo's 100-file-per-record limit."""
+is shipped. Deposited as one archive rather than loose files: with r1_omegafold it is ~1.09 M
+files, against Zenodo's 100-file-per-record limit."""
 
 [[role]]
 name = "r1_omegafold"
@@ -446,14 +446,9 @@ files = 607696
 panels = ["esmif_validation"]
 note = """Raw rev1 OmegaFold structures. Needed to regenerate omegafold_plddt.csv (shipped),
 and REQUIRED by esmif_validation's Approach 2 (ED5e), which globs
-r1/omegafold/<family>/<model>/structures/ for the seven rev1 model arms.
-
-This role previously carried `panels = []` on the grounds that esmif_validation's result CSVs
-"are shipped complete". They are not shipped at all: there is no figure_data/esmif/ in the
-deposit and no role here creates one, though benchmarks/esmif_validation.py::_load_prior looks
-for exactly that directory. Absent this role, Approach 2 scores ONE of eight arms -- see
-Ship figure_data/esmif/{esmif_gt_likelihood,esmif_gt_likelihood_perleaf,
-esmif_selfconsistency}.csv and this can go back to `panels = []`."""
+r1/omegafold/<family>/<model>/structures/ for the seven rev1 model arms. figure_data/esmif/
+ships the scored tables (esmif_gt_likelihood.csv, esmif_selfconsistency.csv) but not
+esmif_gt_likelihood_perleaf.csv, so a rerun of esmif_validation still needs these structures."""
 
 [[role]]
 name = "r1_results_af2"
@@ -559,12 +554,10 @@ apparent_mb = 4500
 files = 15049
 panels = ["esmif_validation"]
 note = """Experimental structures from the trRosetta training set
-(https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz). Not ours to redistribute, and
-on this cluster they live in a third user's scratch. esmif_validation needs them for a cold
-run -- which is currently the ONLY run available, because its result CSVs do not ship (no
-figure_data/esmif/ exists; see the r1_omegafold note). Only pdb/ is needed,
-and the archive members are prefixed ./training_set/, so extraction needs
---strip-components=2."""
+(https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz, 30.8 GB). Not ours to
+redistribute. esmif_validation needs them to rescore against the experimental structures (ED Fig.
+5d); the scored tables ship in figure_data/esmif/. Only pdb/ is needed, and the archive members
+are prefixed ./training_set/, so extraction needs --strip-components=2."""
 
 [[role]]
 name = "a3m"
@@ -623,10 +616,9 @@ apparent_mb = 1289
 files = 30104
 panels = []
 note = """Transitions (x, y, t) from a 192-leaf-per-family run -- the reduced set, against the
-512-leaf simulation behind the main figures. Behind figure2_time_estimation, which is not one of
-the released panels, but small enough (319 MB packed) to be useful for exercising the
-transition/time machinery cheaply. Kept
-declared because it is the only copy and it is easy to lose track of."""
+512-leaf simulation behind the main figures. It is the default input when
+figures.figure2_time_estimation recomputes Fig. 2b (paper_config.TRANSITIONS_DIR); the panel
+itself replots from figure_data/figure2_time_estimation.csv. 333 MB packed."""
 
 [[role]]
 name = "peint_cache"
