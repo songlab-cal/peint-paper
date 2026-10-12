@@ -1,7 +1,8 @@
 """Figure 2 likelihood eval with ESM-C PEINT folded in — held-out AND in-family, one plot each.
 
 Companion to the peint repo's ``figure2_ll_eval.py``. Per-site log-likelihoods of held-out
-transitions in bins of evolutionary time, mean per-site likelihood per model:
+transitions in bins of evolutionary time, mean per-site likelihood per model, averaged over the
+alignment columns where both the aligned source and the aligned target hold a residue:
 
     Random guess, WAG, LG (4 rate categories), PEINT (ESM2), PEINT (ESM-C)
 
@@ -62,6 +63,7 @@ from peint.io import (
     read_transitions_log_likelihood_per_site,
 )
 from peint.utils import (
+    gap_character,
     get_quantile_idx,
     get_quantization_points_from_geometric_grid,
 )
@@ -299,13 +301,16 @@ def accumulate_by_time_bin(families, per_site_dirs, quantization_points):
             for name, d in per_site_dirs.items()
         }
         scored = ~np.isnan(np.stack(list(per_site.values()))).any(axis=(0, 2))
-        for i, (_, _, t) in enumerate(transitions):
+        for i, (x, y, t) in enumerate(transitions):
             if not scored[i]:
                 continue
             bin_idx = get_quantile_idx(quantization_points, t)
+            # Average over the columns where both the aligned source and target hold a residue,
+            # as in main Fig 2a: gap columns (scored 0) and insertions in y are left out.
+            both = np.array([a != gap_character and c != gap_character for a, c in zip(x, y)])
             for name, ll in per_site.items():
-                totals[name][bin_idx] += ll[i].sum()
-                counts[name][bin_idx] += ll.shape[1]
+                totals[name][bin_idx] += ll[i][both].sum()
+                counts[name][bin_idx] += int(both.sum())
     return totals, counts
 
 

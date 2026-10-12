@@ -111,7 +111,8 @@ PANELS = [
           argv=["--panels", "omegafold"],
           from_csv_argv=["--panels", "omegafold", "--from-csv"],
           outputs=["output/figure3_omegafold_plddt_ecdf.pdf"], cost="~10 min",
-          note="Walks ~16k OmegaFold PDBs. Its CSV is the input to generalization_omegafold."),
+          note="Walks ~16k OmegaFold PDBs. Its CSV is also read by "
+               "benchmarks.generalization_omegafold."),
     Panel("figure3_jsd_boxplot", "main", "figures.figure3_conservation",
           argv=["--panels", "boxplot"],
           from_csv_argv=["--panels", "boxplot", "--from-csv"],
@@ -152,14 +153,14 @@ PANELS = [
           outputs=["output/esmc_summary/conservation_jsd_3di_boxplot.pdf"],
           cost="~30-60 min",
           note="Without --skip-3di-generation this runs ProstT5 on a GPU."),
-    Panel("generalization_jsd_domain", "extended", "benchmarks.generalization_jsd_domain",
-          outputs=["output/generalization/generalization_jsd_domain.pdf",
-                   "output/generalization/generalization_jsd_domain_paired.pdf"],
+    Panel("generalization_esmif_identity", "extended", "benchmarks.generalization_seqdistance",
+          argv=["--esmif-panel"],
+          outputs=["output/heldout_similarity/esmif_by_identity_full.pdf"],
           cost="seconds",
-          note="Cached in figures/output/generalization/domain_jsd_heldout.csv."),
-    Panel("generalization_omegafold", "extended", "benchmarks.generalization_omegafold",
-          outputs=["output/generalization/generalization_omegafold_plddt.pdf"],
-          depends_on=["figure3_omegafold_ecdf"], cost="seconds"),
+          note="Extended Data Fig. 9. Reads figure_data/esmif/esmif_selfconsistency.csv and the "
+               "shipped DIAMOND distance table figure_data/heldout_similarity/"
+               "family_distance_full.csv; benchmarks.heldout_train_similarity rebuilds the "
+               "latter (a 64-core, ~460 GB DIAMOND search)."),
     Panel("blast_similarity", "extended", "benchmarks.blast_similarity",
           outputs=["output/blast_similarity.pdf",
                    "output/blast_similarity_with_nohit.pdf"],

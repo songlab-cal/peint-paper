@@ -3,8 +3,10 @@
 Everything needed to reproduce the figures in *Deep models of protein evolution in time
 generate realistic evolutionary trajectories and functional proteins*.
 
-Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-22151902`)
-Model library: https://github.com/songlab-cal/peint (tag `zenodo-22151902`)
+Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-23315010`)
+Model library: https://github.com/songlab-cal/peint (tag `zenodo-23315010`)
+
+Both repositories carry the same tag name for this record, each at its `main`.
 
 ## What this is
 
@@ -19,8 +21,8 @@ It is organised in two tiers, because most people want the first one.
 |---|---|---|---|
 | `figure_data.tar.zst` | 20 MB | 28 MB | re-render **most** panels exactly. No models, no GPU, no other archive. |
 | \+ `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` | ~11 GB | ~52 GB | recompute the metrics from the simulated alignments themselves. |
-| \+ `peint_transitions_aligned`, `..._unaligned` | ~14 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
-| \+ `r1_af2`, `r1_omegafold` | ~24 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
+| \+ `peint_transitions_aligned`, `..._unaligned` | ~16 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
+| \+ `r1_af2`, `r1_omegafold` | ~27 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
 
 ## Quick start
 
@@ -32,7 +34,7 @@ cd peint-paper
 Then fetch the data. From this record, each archive unpacks relative to `local_data/`:
 
 ```bash
-RECORD=22151902       # zenodo.org/records/<RECORD>
+RECORD=23315010       # zenodo.org/records/<RECORD>
 ZENODO=https://zenodo.org/records/$RECORD/files
 mkdir -p local_data
 curl -L -O "$ZENODO/figure_data.tar.zst?download=1"
@@ -62,6 +64,10 @@ python scripts/render_panels.py --list
 python scripts/render_panels.py --group main
 ```
 
+`render_panels.py` covers the panels produced by standalone scripts. The notebooks under
+`notebooks/`, one per figure, cover every reproduced panel, with their outputs embedded, and
+`notebooks/README.md` lists the few that are not reproduced.
+
 Installing the code is its own job — two conda environments, because the folding stack and the
 ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
@@ -69,13 +75,13 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
 | file | unpacked | files | what it is |
 |---|---|---|---|
-| `figure_data.tar.zst` | 28 MB | 39 | per-panel tables — the values actually plotted |
+| `figure_data.tar.zst` | 28 MB | 42 | per-panel tables — the values actually plotted |
 | `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
 | `aux.tar.zst` | 0.1 GB | 30,117 | Pfam/SCOPe/ECOD labels, per-site rates, split lists |
 | `peint_checkpoints.tar.zst` | 6.9 GB | 5 | the PEINT / VEP model checkpoints |
-| `peint_transitions_aligned.tar.zst` | 13 GB | 90,312 | held-out transitions, alignment frame |
+| `peint_transitions_aligned.tar.zst` | 13 GB | 90,312 | alignment frame: held-out transitions, plus the training transitions and site rates the WAG / LG baselines are fit on |
 | `peint_transitions_unaligned.tar.zst` | 13 GB | 60,208 | held-out transitions, unaligned + alignment masks |
 | `r1_af2.tar.zst` | 52 GB | 481,316 | raw rev1 AF2Rank structures (unpacks into `local_data/r1/`) |
 | `r1_omegafold.tar.zst` | 46 GB | 607,696 | raw rev1 OmegaFold structures (unpacks into `local_data/r1/`) |
@@ -118,14 +124,19 @@ thousands of small per-family text files. A Zenodo record is also a flat list of
 These are third-party or too large to redistribute; the code fetches them:
 
 - **trRosetta training set** — the input a3m alignments and ground-truth PDBs
-  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, ~20 GB).
+  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, 30.8 GB). Its members are
+  prefixed `./training_set/`, so unpack with `--strip-components=2` to get `a3m/`, `pdb/`.
+- **The PEINT training transitions.** They are rebuilt from those a3m files with the model
+  repository's dataset-creation recipe (its README, "Dataset Creation"): gapless transitions
+  (`include_gaps=False`, `return_full_length_unaligned_sequences=True`),
+  `num_sequences_per_family=2048`, with the tree-wise train/test split.
 - **Pfam-A HMMs, ECOD, CATH, SCOPe** — fetched on demand by `paper.generalization`. The
   *derived* labels are in `aux.tar.zst` and in the figure_data tier, and those are what the
   generalization panels plot; a fresh run may still contact these public sources.
 - **AlphaFold weights, TM-align, ProstT5, ProteinGym** — see the repo's `scripts/fetch_*.sh`.
-- **The held-out transition trees and the `peint` evaluation cache** — declared in
-  `MANIFEST.toml` as `tier = "on_request"`. The cache is keyed on absolute paths, so a copy is
-  only valid where it was built; see the repo's `REPRODUCING.md`.
+- **The held-out transition trees and the `peint` evaluation cache.** The cache is declared in
+  `MANIFEST.toml` as `tier = "on_request"`. It is keyed on absolute paths, so a copy is only
+  valid where it was built; see the repo's `REPRODUCING.md`.
 
 Model checkpoints and the raw revision-1 structure trees **are** included — see the archive
 table above. No panel reads the structure trees (the two per-family pLDDT summaries they
@@ -136,7 +147,8 @@ download and 99 GB on disk, and leaves every figure reproducible.
 ## What recomputes, and what needs a full rerun
 
 **Most panels re-render** from `figure_data.tar.zst` alone — no models, no GPU, no other
-archive. A few read the simulation archives instead; `notebooks/README.md` says which.
+archive. A few read the simulation archives instead; the code repository's
+`notebooks/README.md` says which.
 
 **Most panels also recompute** their statistic from the archives here rather than replotting a
 stored number: the conservation JSD panels, the 3Di panel, both pLDDT ECDFs, the generalization
@@ -156,10 +168,10 @@ compute, not missing data.
 | ESM-C indel arm | no model needed — a 64-process MAFFT + Historian job over the shipped sequences |
 
 One dependency is genuinely outside this record, which is worth saying outright: **the
-variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ~13 external
+variant-effect panels** compare PEINT against ProteinGym zero-shot scores for ten external
 models. Those are third-party and not ours to redistribute. The per-assay Spearman tables
-derived from them are here, and the public ProteinGym release they come from is the original
-source.
+derived from them ship with the code repository (`local_data/vep/`), and the public ProteinGym
+release they come from is the original source.
 
 The only other thing left out is the model repo's evaluation cache (`_cache_peint`), and that
 is a warm-start rather than an input: peint keys a cached computation on a hash of its

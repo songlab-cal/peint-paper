@@ -24,7 +24,7 @@ full recomputation.
 These notebooks are shipped **with their outputs embedded**: the panels and printed values you
 see are from an actual run, not typed in. Re-running any cell regenerates them.
 
-Level 1 is the default because of size. The data release is already ~26 GB compressed. Some
+Level 1 is the default because of size. The data release is already ~28 GB compressed. Some
 panels are backed by intermediates far larger than the panel needs — Extended Data Fig. 8b, for
 one, reduces a 32 MB Jacobian tensor per structure (25 GB across the set) to a 67 KB matrix.
 Depositing the raw intermediates for every panel would multiply the record's size for no gain,
@@ -32,7 +32,7 @@ so what ships is the reduced quantity each panel actually plots.
 
 Every cell that redraws also documents how to recompute what it redraws from, and the producers
 take the flags to do it. Where a reduction step exists, it is the released implementation:
-Fig. 8b's, for instance, was checked against the original and is bitwise identical.
+ED Fig. 8b's, for instance, was checked against the original and is bitwise identical.
 
 So: level 1 shows the released figures follow from the released numbers, and the recompute path
 is there for anyone who wants to go further back.
@@ -118,12 +118,12 @@ Everything downloads into `local_data/`. Paths in the notebooks are relative to 
 must be on `PATH`**:
 
 ```bash
-export PEINT_PAPER_ZENODO_RECORD=22151902                # doi.org/10.5281/zenodo.22151902
+export PEINT_PAPER_ZENODO_RECORD=23315010                # doi.org/10.5281/zenodo.23315010
 python scripts/fetch_local_data.py --list                # archives, sizes, contents
 python scripts/fetch_local_data.py --tier figure_data    # 20 MB, the level-1 tables
 ```
 
-That 20 MB archive is also mirrored on this repository's `zenodo-22151902` release — see the
+That 20 MB archive is also mirrored on this repository's `zenodo-23315010` release — see the
 top-level README for the URL and its checksum. Unpack a hand-downloaded copy with:
 
 ```bash
@@ -138,15 +138,15 @@ python scripts/fetch_local_data.py --tier full --archives r1 r2 sim aux
 
 | panel | archives | unpacked |
 |---|---|---|
-| Fig. 3b, 3c, 3f, 3g · ED Fig. 3a–d, 4b, 9 | `r1` `r2` `sim` `aux` | 46 GB |
+| Fig. 3b, 3c, 3f, 3g · ED Fig. 3a–d, 4b | `r1` `r2` `sim` `aux` | 46 GB |
 | Fig. 3d, 3e | `r2` | 25 GB |
 | Fig. 2a | `peint_transitions_aligned` `peint_transitions_unaligned` | 26 GB |
 | ED Fig. 5d, 5e | `r1_omegafold` `r2` | 71 GB |
 
-`--tier full` fetches all of them: ~22 GB compressed, ~151 GB unpacked. Archives are
+`--tier full` fetches every archive: ~28 GB compressed, ~183 GB unpacked. Archives are
 checksummed on download; `--verify-only` re-checks an existing copy.
 
-Level 3 also needs `peint_checkpoints` (6.7 GB).
+Level 3 also needs `peint_checkpoints` (5.4 GB to download, 6.9 GB unpacked; part of `--tier full`).
 
 Resulting layout:
 
@@ -172,9 +172,9 @@ python scripts/check_local_data.py     # lists roles present and missing
 |---|---|---|---|
 | `Figure2.ipynb` | 2a, 2b, 2c | 1 | 2a, 2b redraw at level 1; **2c** is level 3 — a checkpoint, a GPU and Historian, with no replot path |
 | `Figure3.ipynb` | 3b, 3c, 3d, 3e, 3f, 3g | 1–2 | 3c, 3d, 3f, 3g redraw at level 1; **3b** needs `sim/` (a per-site logo, so no table can redraw it) and **3e** needs `r2` (per-event lengths are not in the shipped per-family table) |
-| `Figure4.ipynb` | 4a, 4b, 4c, 4d, 4e, 4f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env |
+| `Figure4.ipynb` | 4a, 4b, 4c, 4d, 4e, 4f · Supp. Fig. 3d–f | 1 | inputs are in the repository; 4d needs a tecantaloupe clone and its own small env; the 4e cell also draws the per-replicate stopped-flow traces of Supp. Fig. 3d–f |
 | `Figure5.ipynb` | 5a, 5b, 5c, 5d | 1 | |
-| `ExtendedData1.ipynb` | 1b, 1c | 1 | |
+| `ExtendedData1.ipynb` | 1b, 1c · Supp. Fig. 1a–c | 1 | Supp. Fig. 1 (decoder depth) is the same sweep for one to five decoder layers, drawn by the same script |
 | `ExtendedData2.ipynb` | 2a–2g | — | ESM-C arm of Figures 2 and 3; produced by those commands |
 | `ExtendedData3.ipynb` | 3a, 3b, 3c, 3d | 1–2 | 3a–3c redraw at level 1; **3d** recomputes from `r1`/`r2` — its producer has no replot path |
 | `ExtendedData4.ipynb` | 4b, 4c | 1 | both redraw from shipped tables |
@@ -182,14 +182,14 @@ python scripts/check_local_data.py     # lists roles present and missing
 | `ExtendedData6.ipynb` | 6b–6e | 1 | |
 | `ExtendedData7.ipynb` | 7a, 7b, 7c | 1 | |
 | `ExtendedData8.ipynb` | 8b, 8c, 8f | 1 | 8a, 8d are diagrams; 8e is not scripted |
-| `ExtendedData9.ipynb` | 9a, 9b | 1 | plots from the shipped label cache; a fresh run may still contact the public annotation sources |
+| `ExtendedData9.ipynb` | 9a, 9b | 1 | ESM-IF self-consistency by identity to training, from the shipped DIAMOND distance table; rebuilding that table is a 64-core, ~460 GB DIAMOND job (`benchmarks/run_heldout_train_similarity.sbatch`) |
 
 Where the manuscript prints a number, the notebook prints the computed value beside it and
 marks `MATCH` or `CHECK`.
 
 ## Reproduction gaps
 
-These notebooks ship **55 panels with their outputs embedded**. Three entries in the figure list
+These notebooks ship **55 panels with their outputs embedded**. Four entries in the figure list
 are not reproduced by a notebook cell. In each case what is missing is a script or an input, not
 a result we have reason to doubt; where we are recovering the missing piece, that is said.
 
@@ -197,7 +197,8 @@ a result we have reason to doubt; where we are recovering the missing piece, tha
 |---|---|---|
 | **ED Fig. 5b, 5c** | the AlphaFold2-with-MSA prediction table these two panels compare against | produced for the original analysis, not yet recovered from the run that made it |
 | **ED Fig. 8e** | a script for the single worked alignment example; its inputs are the same categorical-Jacobian tensors as 8b | not scripted |
-| **Supp. Fig. 1** | a plotting script | the dataset and splits it summarises are both in the release |
+| **Supp. Fig. 2** | a plotting script | the dataset and splits it summarises are both in the release |
+| **Supp. Fig. 3a–c** | the size-exclusion chromatograms and SDS-PAGE gel are instrument and gel images, with no table behind them | 3d–f are drawn in `Figure4.ipynb` |
 
 Figure 1 and ED Figure 8a, 8d are diagrams rather than plots, so there is nothing to reproduce
 for them.

@@ -5,6 +5,12 @@ were, using the DIAMOND search in ``benchmarks.heldout_train_similarity``, and r
 novel-vs-seen comparisons on the answer. Run that benchmark's ``blastp`` stage first::
 
     python -m benchmarks.generalization_seqdistance
+
+Extended Data Fig. 9 (ESM-IF self-consistency by identity to the closest training sequence) also
+redraws at the figure_data tier, from the shipped per-family distance table
+``figure_data/heldout_similarity/family_distance_full.csv`` and ``figure_data/esmif/``::
+
+    python -m benchmarks.generalization_seqdistance --esmif-panel
 """
 
 import argparse
@@ -121,6 +127,14 @@ def load_family_jsd_esmc() -> pd.DataFrame:
         raise FileNotFoundError(f"{p} -- see the module docstring for how it is produced")
     return (pd.read_csv(p, index_col=0).reset_index(names="family")
             .melt(id_vars="family", var_name="model", value_name="jsd").dropna(subset=["jsd"]))
+
+
+def family_distances(level: str) -> pd.DataFrame:
+    """Per-family distance to training: the shipped figure_data copy, else the DIAMOND build."""
+    p = Path(cfg.FIGURE_DATA_DIR) / "heldout_similarity" / f"family_distance_{level}.csv"
+    if p.exists():
+        return pd.read_csv(p)
+    return family_distance_table(level)
 
 
 def _load_esmif(name: str) -> pd.DataFrame:
@@ -338,10 +352,12 @@ ESMIF_GRADES = [
 # The identity grading, which is the one to prefer. Grading on hit count is badly non-linear in
 # similarity -- its 0 -> 1-10 step crosses 73 points of identity and its 1-10 -> >10 step only 19 --
 # so evenly drawn boxes are nowhere near evenly spaced in the thing being varied. These bins are
-# in identity directly and come out close to balanced (99/126/144/183 families).
+# in identity directly and come out close to balanced (98/122/142/181 of the 543 families with an
+# ESM-IF score). Labels as printed in Extended Data Fig. 9; "<50%" is the bin (0, 50), since a
+# median identity of 0 is "No Homolog".
 IDENTITY_GRADES = [
-    ("no homolog", lambda v: v <= 0),
-    (">0-50%", lambda v: (v > 0) & (v < 50)),
+    ("No Homolog", lambda v: v <= 0),
+    ("<50%", lambda v: (v > 0) & (v < 50)),
     ("50-80%", lambda v: (v >= 50) & (v < 80)),
     (">=80%", lambda v: v >= 80),
 ]
@@ -375,7 +391,7 @@ def plot_esmif_by_hit_count(out_dir: Path, level: str = "full",
 
     _set_publication_style()
     grades, grade_col, axis_label, annot_fmt, annot_col = GRADINGS[grade_by]
-    t = family_distance_table(level).set_index("family")
+    t = family_distances(level).set_index("family")
     grade = {}
     for name, rule in grades:
         for f in t[rule(t[grade_col])].index:
@@ -629,9 +645,15 @@ def main() -> None:
     ap.add_argument("--cdf", action="store_true", help="Also draw the similarity-to-training CDFs.")
     ap.add_argument("--hit-bins", action="store_true",
                     help="Also tabulate metrics against the number of training families reached.")
+    ap.add_argument("--esmif-panel", action="store_true",
+                    help="Only draw Extended Data Fig. 9 (ESM-IF by identity to training); "
+                         "needs no DIAMOND run when figure_data/heldout_similarity/ is present.")
     args = ap.parse_args()
 
     out_dir = Path(cfg.SIMILARITY_DIR)
+    if args.esmif_panel:
+        plot_esmif_by_hit_count(out_dir, args.level, "identity")
+        return
     t = strata(args.level)
     print(f"Held-out families ({args.level}-length queries): {len(t)}")
     for name in SCHEMES:

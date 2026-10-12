@@ -115,7 +115,7 @@ def _plot_proteingym_spearman_comparision(
         present = [a for a in ASSAY_TYPE_ORDER if a in set(df_plot["assay_type"])]
         present += [a for a in dict.fromkeys(df_plot["assay_type"]) if a not in present]
         df_plot["assay_type"] = pd.Categorical(df_plot["assay_type"], categories=present, ordered=True)
-        df_plot = df_plot.sort_values("assay_type")
+        df_plot = df_plot.sort_values("assay_type", kind="stable")
     hue_order = None
     if model_names is not None:
         df_plot = df_plot[df_plot["model"].isin(model_names.keys())]
@@ -237,9 +237,12 @@ def _make_spearman_plot(
     df_plot = df_plot[df_plot["model"].isin(model_names.keys())].copy()
     df_plot.loc[:, "model"] = df_plot["model"].map(avg_map)
 
-    # Now call the plotting function on the modified labels
+    # Now call the plotting function on the modified labels. Pass them in the caller's model
+    # order: left to itself the plot takes hues in row order, which the sort by assay type does
+    # not preserve, and group_size pairing (base pLM, PEINT) depends on that order.
+    ordered = {avg_map[k]: avg_map[k] for k in model_names if k in avg_map}
     ax = _plot_proteingym_spearman_comparision(
-        df_plot, model_names=None, palette=palette, figsize=figsize, alpha=alpha,
+        df_plot, model_names=ordered, palette=palette, figsize=figsize, alpha=alpha,
         group_size=group_size,
     )
 
