@@ -6,6 +6,31 @@ generate realistic evolutionary trajectories and functional proteins*.
 Code: https://github.com/songlab-cal/peint-paper (tag `zenodo-23315010`)
 Model library: https://github.com/songlab-cal/peint (tag `zenodo-23315010`)
 
+Both repositories carry the same tag name for this record, each at its `main`.
+
+## Changes in this version
+
+Only `figure_data.tar.zst` changes; every other archive is identical to the previous version.
+
+- **Per-site likelihood averaging.** Every per-site likelihood table now reports
+  `exp(mean per-site log-likelihood)` over the alignment columns where **both** the aligned
+  source x and the aligned target y hold a residue, as in the published Fig. 2a. The previous
+  tables averaged over all alignment columns, counting gap columns as likelihood 1, which
+  produced a rising random-guess line and bumps at t > 3 when replotted. Under the corrected
+  rule random guess is exactly 1/20. Affected tables: `figure2_likelihood_eval_test_esmc.csv`,
+  `figure2_likelihood_eval_train_held_out_esmc.csv` (Fig. 2a, Extended Data Fig. 2a) and
+  `ed1/master_sweep_553fam.csv` (Extended Data Fig. 1b, 1c), which now holds exactly the seven
+  variants shown. The per-site values themselves are unchanged.
+- **New:** `decoder_depth/decoder_depth_553fam.csv`, the decoder-depth sweep behind
+  Supplementary Fig. 1, with its `MANIFEST.md`.
+- **Documentation.** Corrected archive tier sizes and the trRosetta size and unpack layout in
+  this README. `MANIFEST.toml`: corrected stale notes (`figure_data/esmif/` does ship; the
+  192-leaf transitions are the default recompute input for Fig. 2b).
+- **New:** `heldout_similarity/family_distance_full.csv`: for each held-out family, the closest
+  training match of its sequences by DIAMOND. With `esmif/esmif_selfconsistency.csv` it redraws
+  the revised Extended Data Fig. 9 (ESM-IF self-consistency by identity to the training set)
+  without the DIAMOND search.
+
 ## What this is
 
 The paper evaluates PEINT, a learned protein-evolution simulator, against classical
@@ -19,8 +44,8 @@ It is organised in two tiers, because most people want the first one.
 |---|---|---|---|
 | `figure_data.tar.zst` | 20 MB | 28 MB | re-render **most** panels exactly. No models, no GPU, no other archive. |
 | \+ `aux`, `sim`, `r1`, `r2`, `peint_checkpoints` | ~11 GB | ~52 GB | recompute the metrics from the simulated alignments themselves. |
-| \+ `peint_transitions_aligned`, `..._unaligned` | ~14 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
-| \+ `r1_af2`, `r1_omegafold` | ~24 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
+| \+ `peint_transitions_aligned`, `..._unaligned` | ~16 GB | ~78 GB | rerun the per-site likelihood evaluation (needs a GPU). |
+| \+ `r1_af2`, `r1_omegafold` | ~27 GB | ~177 GB | inspect the raw revision-1 structure predictions. No panel reads them. |
 
 ## Quick start
 
@@ -62,6 +87,10 @@ python scripts/render_panels.py --list
 python scripts/render_panels.py --group main
 ```
 
+`render_panels.py` covers the panels produced by standalone scripts. The notebooks under
+`notebooks/`, one per figure, cover every reproduced panel, with their outputs embedded, and
+`notebooks/README.md` lists the few that are not reproduced.
+
 Installing the code is its own job — two conda environments, because the folding stack and the
 ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
@@ -69,7 +98,7 @@ ESM-C stack do not coexist. The repo's `installation.md` is the tested recipe.
 
 | file | unpacked | files | what it is |
 |---|---|---|---|
-| `figure_data.tar.zst` | 28 MB | 39 | per-panel tables — the values actually plotted |
+| `figure_data.tar.zst` | 28 MB | 42 | per-panel tables — the values actually plotted |
 | `r1.tar.zst` | 19.9 GB | 74,440 | revision 1: classical baselines, PEINT-ESM2, real |
 | `r2.tar.zst` | 25.2 GB | 75,904 | revision 2: the ESM-C rerun, its own mafft frame |
 | `sim.tar.zst` | 0.5 GB | 6,010 | trees, root sequences, empirical + simulated MSAs |
@@ -118,7 +147,12 @@ thousands of small per-family text files. A Zenodo record is also a flat list of
 These are third-party or too large to redistribute; the code fetches them:
 
 - **trRosetta training set** — the input a3m alignments and ground-truth PDBs
-  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, 30.8 GB; unpack with `--strip-components=2`).
+  (`https://files.ipd.uw.edu/pub/trRosetta/training_set.tar.gz`, 30.8 GB). Its members are
+  prefixed `./training_set/`, so unpack with `--strip-components=2` to get `a3m/`, `pdb/`.
+- **The PEINT training transitions.** They are rebuilt from those a3m files with the model
+  repository's dataset-creation recipe (its README, "Dataset Creation"): gapless transitions
+  (`include_gaps=False`, `return_full_length_unaligned_sequences=True`),
+  `num_sequences_per_family=2048`, with the tree-wise train/test split.
 - **Pfam-A HMMs, ECOD, CATH, SCOPe** — fetched on demand by `paper.generalization`. The
   *derived* labels are in `aux.tar.zst` and in the figure_data tier, and those are what the
   generalization panels plot; a fresh run may still contact these public sources.
@@ -136,7 +170,8 @@ download and 99 GB on disk, and leaves every figure reproducible.
 ## What recomputes, and what needs a full rerun
 
 **Most panels re-render** from `figure_data.tar.zst` alone — no models, no GPU, no other
-archive. A few read the simulation archives instead; `notebooks/README.md` says which.
+archive. A few read the simulation archives instead; the code repository's
+`notebooks/README.md` says which.
 
 **Most panels also recompute** their statistic from the archives here rather than replotting a
 stored number: the conservation JSD panels, the 3Di panel, both pLDDT ECDFs, the generalization
